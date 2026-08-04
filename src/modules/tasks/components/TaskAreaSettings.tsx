@@ -99,7 +99,7 @@ const TaskAreaActionsTrigger = forwardRef<HTMLButtonElement, TaskAreaActionsTrig
       <Button
         ref={ref}
         type="button"
-        variant="outline"
+        variant="ghost"
         size="icon"
         className={`float-right mr-[5px] h-7 w-7 ${GRID_CONTROL_FOCUS_CLASS}`}
         aria-label={ariaLabel}

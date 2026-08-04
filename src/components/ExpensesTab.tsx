@@ -465,7 +465,7 @@ function ExpenseActionsCell({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon"
             type="button"
             disabled={disabled}

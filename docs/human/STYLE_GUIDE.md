@@ -95,6 +95,12 @@ A system-authored accessible name or tooltip title that labels a button or input
 - Max content width: `max-w-5xl` for data views, `max-w-lg` for forms
 - Cards use standard `Card` component with minimal padding
 
+## Buttons
+
+- Use the shared `ghost` variant as the canonical Borderless button treatment for low-noise actions that should inherit the surface behind them.
+- Borderless buttons rest with a transparent border and background while retaining the shared keyboard-focus border and ring without changing size.
+- Use the user-facing label **Borderless** when presenting this variant in component showcases or design guidance.
+
 ## Select Controls
 
 - Use the shared BathOS `Select` component from `src/components/ui/select.tsx` for every new ordinary single-selection dropdown.
@@ -115,7 +121,7 @@ A system-authored accessible name or tooltip title that labels a button or input
   - Column width preferences must persist via the shared `useGridColumnWidths` flow:
     - cached in `localStorage` for immediate application on load
     - synced to `bathos_user_settings.grid_column_widths` for cross-browser persistence
-  - Use a trailing `actions` column with an ellipsis trigger (`MoreHorizontal`) and row actions in a dropdown menu.
+  - Use a trailing `actions` column with a Borderless ellipsis trigger (`MoreHorizontal`, shared `ghost` button variant) and row actions in a dropdown menu.
   - Actions triggers participate in grid keyboard navigation: arrow/tab can focus the ellipsis button, Space/Enter opens its menu, and menu items remain keyboard-focusable/selectable via standard dropdown keyboard behavior.
   - The trailing `actions` column uses the shared fixed width (`40px`) and the same right-edge button spacing used on Expenses/Incomes (`mr-[5px]` on the icon button).
   - If the grid is narrower than its container, assign all leftover width to the trailing `actions` column (do not distribute it across data columns).

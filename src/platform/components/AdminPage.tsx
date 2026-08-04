@@ -321,6 +321,9 @@ export default function AdminPage() {
                 <Button variant="outline-admin">Admin Outline</Button>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="ghost">Borderless</Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
                 <Button variant="default" disabled>Normal Filled Disabled</Button>
                 <Button variant="success" disabled>Success Filled Disabled</Button>
                 <Button variant="destructive" disabled>Danger Filled Disabled</Button>
@@ -335,6 +338,9 @@ export default function AdminPage() {
                 <Button variant="outline-warning" disabled>Warning Outline Disabled</Button>
                 <Button variant="outline-info" disabled>Info Outline Disabled</Button>
                 <Button variant="outline-admin" disabled>Admin Outline Disabled</Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" disabled>Borderless Disabled</Button>
               </div>
             </div>
           </CardContent>

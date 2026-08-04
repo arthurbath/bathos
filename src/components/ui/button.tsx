@@ -25,7 +25,7 @@ const buttonVariants = cva(
         "outline-admin": "border border-admin bg-background text-admin ",
         secondary: "bg-secondary text-secondary-foreground ",
         clear: "border border-transparent bg-transparent text-white  ",
-        ghost: "",
+        ghost: "bg-transparent text-foreground",
         "ghost-destructive": "",
         link: "text-primary underline-offset-4 ",
       },

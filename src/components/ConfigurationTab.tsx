@@ -347,7 +347,7 @@ const PaymentMethodActionsTrigger = forwardRef<HTMLButtonElement, PaymentMethodA
   return (
     <Button
       ref={ref}
-      variant="outline"
+      variant="ghost"
       size="icon"
       type="button"
       className={`float-right mr-[5px] h-7 w-7 ${GRID_CONTROL_FOCUS_CLASS}`}
