@@ -450,6 +450,7 @@ describe('task sync connector', () => {
   it('rebases a stale field-level patch and drains it only after recovery', async () => {
     const { complete, connector, database, remoteStore } = createHarness(taskPatchEntry({
       deadline: '2026-08-05',
+      last_actor_type: 'user',
     }), [
       { status: 'conflict', remoteRevision: 3 },
       { status: 'applied' },
@@ -493,6 +494,113 @@ describe('task sync connector', () => {
         detectedAt,
         'revision_conflict_recovered',
       ],
+    );
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('uploads current system maintenance normally', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(taskPatchEntry({
+      last_actor_type: 'system',
+      start_date: null,
+      today_section: 'inbox',
+    }));
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).toHaveBeenCalledWith(
+      'task-a',
+      1,
+      expect.objectContaining({
+        last_actor_type: 'system',
+        start_date: null,
+        today_section: 'inbox',
+      }),
+    );
+    expect(database.execute).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('supersedes stale system maintenance without rebasing authoritative state', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(taskPatchEntry({
+      last_actor_type: 'system',
+      start_date: null,
+      today_section: 'inbox',
+    }), {
+      status: 'conflict',
+      remoteRevision: 42,
+    });
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).toHaveBeenCalledTimes(1);
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
+      [
+        'crud-2',
+        'task-a',
+        'conflict',
+        'PATCH',
+        2,
+        42,
+        detectedAt,
+        'system_mutation_superseded',
+      ],
+    );
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('supersedes system maintenance for a missing authoritative task', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(taskPatchEntry({
+      last_actor_type: 'system',
+      today_section: 'inbox',
+    }), {
+      status: 'conflict',
+      remoteRevision: null,
+    });
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).toHaveBeenCalledTimes(1);
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
+      expect.arrayContaining(['system_mutation_superseded']),
+    );
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('continues a system maintenance transaction after a superseded row', async () => {
+    const secondEntry = new CrudEntry(3, UpdateType.PATCH, 'tasks_todos', 'task-b', 2, {
+      today_section: 'inbox',
+      last_actor_type: 'system',
+      revision: 3,
+      client_mutation_id: 'mutation-c',
+      updated_at: '2026-07-20T04:31:00.000Z',
+    });
+    const { complete, connector, database, remoteStore } = createHarness([
+      taskPatchEntry({ last_actor_type: 'system', today_section: 'inbox' }),
+      secondEntry,
+    ], [
+      { status: 'conflict', remoteRevision: null },
+      { status: 'applied' },
+    ]);
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).toHaveBeenNthCalledWith(
+      1,
+      'task-a',
+      1,
+      expect.objectContaining({ last_actor_type: 'system' }),
+    );
+    expect(remoteStore.updateTask).toHaveBeenNthCalledWith(
+      2,
+      'task-b',
+      2,
+      expect.objectContaining({
+        last_actor_type: 'system',
+        revision: 3,
+        client_mutation_id: 'mutation-c',
+      }),
     );
     expect(complete).toHaveBeenCalledOnce();
   });

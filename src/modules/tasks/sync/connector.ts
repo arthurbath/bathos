@@ -38,6 +38,9 @@ export type TasksRemoteWriteOutcome =
   | { status: 'conflict'; remoteRevision: number | null; code?: string }
   | { status: 'rejected'; code: string };
 
+type TasksUploadOutcome = TasksRemoteWriteOutcome
+  | { status: 'superseded'; remoteRevision: number | null; code: string };
+
 export interface TasksRemoteStore {
   insertTask(task: TaskInsert): Promise<TasksRemoteWriteOutcome>;
   updateTask(
@@ -139,7 +142,7 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
       return;
     }
 
-    let outcome: TasksRemoteWriteOutcome;
+    let outcome: TasksUploadOutcome;
     try {
       if (entry.table === 'tasks_todos') {
         if (entry.op === UpdateType.PUT) {
@@ -214,6 +217,12 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
         code: outcome.code ?? 'revision_conflict',
         remoteRevision: outcome.remoteRevision,
       }, this.now());
+    } else if (outcome.status === 'superseded') {
+      await recordSyncIssue(database, entry, {
+        kind: 'conflict',
+        code: outcome.code,
+        remoteRevision: outcome.remoteRevision,
+      }, this.now());
     } else if (outcome.status === 'rejected') {
       await recordSyncIssue(database, entry, {
         kind: 'remote_rejection',
@@ -226,8 +235,9 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
     database: AbstractPowerSyncDatabase,
     entry: CrudEntry,
     originalPatch: TaskUpdate,
-  ): Promise<TasksRemoteWriteOutcome> {
+  ): Promise<TasksUploadOutcome> {
     const originalRevision = requirePositiveInteger(originalPatch.revision, 'revision');
+    const isSystemMaintenance = originalPatch.last_actor_type === 'system';
     let baseRevision = originalRevision - 1;
     let patch = originalPatch;
     let encounteredConflict = false;
@@ -248,6 +258,14 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
           }
         }
         return outcome;
+      }
+
+      if (isSystemMaintenance) {
+        return {
+          status: 'superseded',
+          remoteRevision: outcome.remoteRevision,
+          code: 'system_mutation_superseded',
+        };
       }
 
       encounteredConflict = true;
