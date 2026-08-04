@@ -104,6 +104,7 @@ export class TaskHierarchyRepository {
       const metadata = this.createMetadata(input);
       const item: TaskChecklistItem = {
         ...metadata,
+        last_operation_id: input.operationId ?? metadata.client_mutation_id,
         task_id: input.taskId,
         title: normalizeTitle(input.title),
         completed: false,
@@ -179,7 +180,6 @@ export class TaskHierarchyRepository {
       entry_channel: entryChannel,
       last_mutation_channel: entryChannel,
       last_actor_type: input.actorType ?? 'user' as const,
-      last_operation_id: input.operationId ?? clientMutationId,
       revision: 1,
       client_mutation_id: clientMutationId,
       created_at: timestamp,
@@ -214,7 +214,9 @@ export class TaskHierarchyRepository {
         ...patch,
         last_mutation_channel: mutationContext.channel,
         last_actor_type: mutationContext.actorType,
-        last_operation_id: mutationContext.operationId || clientMutationId,
+        ...(table === 'tasks_checklist_items'
+          ? { last_operation_id: mutationContext.operationId || clientMutationId }
+          : {}),
         revision: current.revision + 1,
         client_mutation_id: clientMutationId,
         updated_at: context?.occurredAt ?? this.now(),
@@ -224,7 +226,7 @@ export class TaskHierarchyRepository {
         ...Object.keys(patch),
         'last_mutation_channel',
         'last_actor_type',
-        'last_operation_id',
+        ...(table === 'tasks_checklist_items' ? ['last_operation_id'] : []),
         'revision',
         'client_mutation_id',
         'updated_at',

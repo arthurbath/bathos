@@ -68,7 +68,7 @@ function settingsInsertEntry() {
   });
 }
 
-function areaInsertEntry() {
+function areaInsertEntry(data: Record<string, unknown> = {}) {
   return new CrudEntry(4, UpdateType.PUT, 'tasks_areas', 'area-a', 4, {
     owner_id: 'owner-a',
     title: 'Work',
@@ -81,6 +81,7 @@ function areaInsertEntry() {
     client_mutation_id: 'mutation-area',
     created_at: '2026-07-20T04:00:00.000Z',
     updated_at: '2026-07-20T04:00:00.000Z',
+    ...data,
   });
 }
 
@@ -188,6 +189,20 @@ describe('task sync connector', () => {
       revision: 1,
       client_mutation_id: 'mutation-area',
     }));
+  });
+
+  it('rejects unsupported Area operation metadata before remote upload', async () => {
+    const { connector, database, remoteStore } = createHarness(areaInsertEntry({
+      last_operation_id: 'operation-area',
+    }));
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.insertArea).not.toHaveBeenCalled();
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
+      expect.arrayContaining(['invalid_local_mutation']),
+    );
   });
 
   it('normalizes checklist booleans and uses the prior hierarchy revision', async () => {

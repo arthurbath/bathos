@@ -768,11 +768,15 @@ function parseSettingsUpdate(entry: CrudEntry): TaskSettingsUpdate {
 }
 
 function parseAreaInsert(entry: CrudEntry): TaskAreaInsert {
-  return parseHierarchyInsert(entry, ['title', 'order_key']) as TaskAreaInsert;
+  return parseHierarchyInsert(entry, ['title', 'order_key'], []) as TaskAreaInsert;
 }
 
 function parseChecklistItemInsert(entry: CrudEntry): TaskChecklistItemInsert {
-  const parsed = parseHierarchyInsert(entry, ['task_id', 'title', 'order_key']);
+  const parsed = parseHierarchyInsert(
+    entry,
+    ['task_id', 'title', 'order_key'],
+    ['completed', 'completed_at', 'last_operation_id'],
+  );
   return {
     ...parsed,
     completed: booleanOrDefault(parsed.completed, false),
@@ -780,11 +784,19 @@ function parseChecklistItemInsert(entry: CrudEntry): TaskChecklistItemInsert {
 }
 
 function parseAreaUpdate(entry: CrudEntry): TaskAreaUpdate {
-  return parseHierarchyUpdate(entry, hierarchyMutableColumns.area) as TaskAreaUpdate;
+  return parseHierarchyUpdate(
+    entry,
+    hierarchyMutableColumns.area,
+    hierarchyMetadataColumns,
+  ) as TaskAreaUpdate;
 }
 
 function parseChecklistItemUpdate(entry: CrudEntry): TaskChecklistItemUpdate {
-  const parsed = parseHierarchyUpdate(entry, hierarchyMutableColumns.checklist);
+  const parsed = parseHierarchyUpdate(
+    entry,
+    hierarchyMutableColumns.checklist,
+    [...hierarchyMetadataColumns, 'last_operation_id'],
+  );
   return {
     ...parsed,
     ...(parsed.completed === undefined
@@ -820,7 +832,6 @@ const hierarchyMutableColumns = {
 const hierarchyMetadataColumns = [
   'last_mutation_channel',
   'last_actor_type',
-  'last_operation_id',
   'revision',
   'client_mutation_id',
   'updated_at',
@@ -829,8 +840,29 @@ const hierarchyMetadataColumns = [
 function parseHierarchyInsert(
   entry: CrudEntry,
   requiredColumns: readonly string[],
+  tableSpecificColumns: readonly string[],
 ): Record<string, unknown> {
   const data = entry.opData ?? {};
+  const allowedColumns = new Set([
+    'owner_id',
+    ...requiredColumns,
+    ...tableSpecificColumns,
+    'disposition',
+    'deleted_at',
+    'deletion_root_id',
+    'entry_channel',
+    'last_mutation_channel',
+    'last_actor_type',
+    'revision',
+    'client_mutation_id',
+    'created_at',
+    'updated_at',
+  ]);
+  if (Object.keys(data).some((columnName) => !allowedColumns.has(columnName))) {
+    throw new InvalidTasksCrudEntryError(
+      'The task hierarchy insert contains an immutable or unknown field',
+    );
+  }
   const entryChannel = optionalText(data.entry_channel) ?? 'web';
   const parsed: Record<string, unknown> = {
     id: entry.id,
@@ -853,9 +885,10 @@ function parseHierarchyInsert(
 function parseHierarchyUpdate(
   entry: CrudEntry,
   mutableColumns: readonly string[],
+  metadataColumns: readonly string[],
 ): Record<string, unknown> {
   const data = entry.opData ?? {};
-  const allowedColumns = new Set([...mutableColumns, ...hierarchyMetadataColumns]);
+  const allowedColumns = new Set([...mutableColumns, ...metadataColumns]);
   if (Object.keys(data).some((columnName) => !allowedColumns.has(columnName))) {
     throw new InvalidTasksCrudEntryError(
       'The task hierarchy update contains an immutable or unknown field',

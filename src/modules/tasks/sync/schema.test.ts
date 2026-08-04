@@ -86,6 +86,9 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_checklist_items.columns.map(({ name }) => name)).toContain(
       'last_operation_id',
     );
+    expect(tables.tasks_areas.columns.map(({ name }) => name)).not.toContain(
+      'last_operation_id',
+    );
     expect(tables.tasks_hierarchy_operations.columns.map(({ name }) => name)).toContain(
       'expected_revisions',
     );

@@ -44,6 +44,7 @@ describe('task hierarchy repository', () => {
       revision: 1,
     });
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('INSERT INTO tasks_areas');
+    expect(vi.mocked(transaction.execute).mock.calls[0][0]).not.toContain('last_operation_id');
   });
 
   it('creates checklist items beneath one explicit task', async () => {
@@ -55,6 +56,7 @@ describe('task hierarchy repository', () => {
     })).resolves.toMatchObject({ task_id: 'task-a', completed: false });
     expect(vi.mocked(transaction.execute).mock.calls[0][0])
       .toContain('INSERT INTO tasks_checklist_items');
+    expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('last_operation_id');
   });
 
   it('completes a checklist item with one revision-safe mutation', async () => {

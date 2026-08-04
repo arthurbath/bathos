@@ -123,6 +123,16 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
       todaySection: 'later',
     });
     await waitForUploadQueue(activeDatabase, 0, 60_000);
+    expect(await activeDatabase.getAll<{
+      task_id: string;
+      kind: string;
+      operation: string;
+      code: string;
+    }>(
+      `SELECT task_id, kind, operation, code
+       FROM tasks_sync_issues
+       ORDER BY detected_at, id`,
+    )).toEqual([]);
 
     const edited = await repository.updateTask(source.id, primary.id, {
       title: 'Temporary Edited Title',
