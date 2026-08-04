@@ -14,7 +14,7 @@ export type TaskDeparture = {
 };
 
 export type TaskDepartureToast = {
-  title: string;
+  title?: string;
   description: string;
 };
 
@@ -56,10 +56,14 @@ export function getTaskDepartureToast(
     ),
   );
 
-  if (moved.length === 1 && filtered.length === 0) {
+  if (moved.length > 0 && filtered.length === 0) {
+    const destinations = new Set(moved.map(({ destination }) => destination));
     return {
-      title: 'Task Moved',
-      description: `The task now appears in ${taskPlanningRouteLabel(moved[0].destination)}.`,
+      description: moved.length === 1
+        ? `The task now appears in ${taskPlanningRouteLabel(moved[0].destination)}.`
+        : destinations.size === 1
+          ? `${moved.length} tasks now appear in ${taskPlanningRouteLabel(moved[0].destination)}.`
+          : `${moved.length} tasks moved out of ${taskListViewLabel(currentView)}.`,
     };
   }
   if (moved.length === 0 && filtered.length === 1) {

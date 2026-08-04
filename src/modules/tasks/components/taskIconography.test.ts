@@ -18,6 +18,7 @@ import {
   SquareCheckBig,
   SquareDashed,
   SquareX,
+  Sparkles,
   Star,
   Zap,
 } from 'lucide-react';
@@ -58,6 +59,7 @@ describe('Tasks iconography', () => {
     expect(TASK_ICONS.AddTask).toBe(Plus);
     expect(TASK_ICONS.AddArea).toBe(Plus);
     expect(TASK_ICONS.MultiSelect).toBe(Lasso);
+    expect(TASK_ICONS.EmptyState).toBe(Sparkles);
     expect(TASK_ICONS.JiraLink).toBe(Zap);
     expect(TASK_ICONS.ObsidianLink).toBe(FileText);
     expect(TASK_ICONS.PrimaryLink).toBe(Link2);

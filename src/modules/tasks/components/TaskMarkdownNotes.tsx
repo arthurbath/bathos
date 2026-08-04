@@ -291,16 +291,49 @@ export function TaskMarkdownNotes({
 
   const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
     const anchor = closestTaskNoteAnchor(event.target, event.currentTarget);
-    if (anchor !== null && taskNoteAnchorShouldActivate(event.target, anchor)) {
+    if (
+      !event.shiftKey
+      && anchor !== null
+      && taskNoteAnchorShouldActivate(event.target, anchor)
+    ) {
       event.preventDefault();
       return;
     }
-    if (event.button === 0) pointerSelectingRef.current = true;
+    if (event.button !== 0) return;
+    pointerSelectingRef.current = true;
+    if (!event.shiftKey) return;
+
+    const selection = captureSelectionOffsets(event.currentTarget);
+    const clickedPosition = taskNotePositionFromPoint(
+      event.currentTarget,
+      event.clientX,
+      event.clientY,
+    );
+    if (selection === null || clickedPosition === null) return;
+
+    event.preventDefault();
+    const anchorOffset = selection.direction === 'backward'
+      ? selection.end
+      : selection.start;
+    const focusOffset = endpointOffset(
+      event.currentTarget,
+      clickedPosition.node,
+      clickedPosition.offset,
+    );
+    restoreSelectionOffsets(event.currentTarget, {
+      start: Math.min(anchorOffset, focusOffset),
+      end: Math.max(anchorOffset, focusOffset),
+      direction: anchorOffset > focusOffset ? 'backward' : 'forward',
+    });
   };
 
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     const anchor = closestTaskNoteAnchor(event.target, event.currentTarget);
     if (anchor === null) return;
+    if (event.shiftKey) {
+      event.preventDefault();
+      return;
+    }
     if (!taskNoteAnchorShouldActivate(event.target, anchor)) return;
     event.preventDefault();
     const href = anchor.getAttribute('href');
@@ -811,6 +844,41 @@ function endpointOffset(editor: HTMLElement, node: Node, offset: number): number
   range.selectNodeContents(line);
   range.setEnd(node, offset);
   return prior + range.toString().length;
+}
+
+function taskNotePositionFromPoint(
+  editor: HTMLElement,
+  clientX: number,
+  clientY: number,
+): { node: Node; offset: number } | null {
+  const documentWithCaretApis = editor.ownerDocument as Document & {
+    caretPositionFromPoint?: (
+      x: number,
+      y: number,
+    ) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const caretPosition = documentWithCaretApis.caretPositionFromPoint?.(
+    clientX,
+    clientY,
+  );
+  const caretRange = caretPosition === null || caretPosition === undefined
+    ? documentWithCaretApis.caretRangeFromPoint?.(clientX, clientY) ?? null
+    : null;
+  const node = caretPosition?.offsetNode
+    ?? caretRange?.startContainer
+    ?? null;
+  const offset = caretPosition?.offset
+    ?? caretRange?.startOffset
+    ?? null;
+  if (
+    node === null
+    || offset === null
+    || (node !== editor && !editor.contains(node))
+  ) {
+    return null;
+  }
+  return { node, offset };
 }
 
 function restoreSelectionOffsets(

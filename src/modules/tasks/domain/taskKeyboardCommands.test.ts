@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { getTaskKeyboardCommand } from './taskKeyboardCommands';
+import {
+  getTaskKeyboardCommand,
+  isTaskNativeQuickEntryMetadataCommand,
+  type TaskKeyboardCommand,
+} from './taskKeyboardCommands';
 
 const gesture = (overrides: Partial<KeyboardEvent> = {}) => ({
   key: '',
@@ -175,5 +179,43 @@ describe('getTaskKeyboardCommand', () => {
       gesture({ key: '1', ctrlKey: true, altKey: true }),
       false,
     )).toBeNull();
+  });
+});
+
+describe('isTaskNativeQuickEntryMetadataCommand', () => {
+  it('allows only commands that directly edit quick-entry metadata', () => {
+    const allowed: TaskKeyboardCommand[] = [
+      'open-start-date',
+      'clear-start',
+      'cycle-horizon',
+      'focus-reminder',
+      'open-deadline',
+      'cycle-actionability',
+      'set-someday',
+      'open-checklist',
+      'cycle-area',
+    ];
+    const excluded: TaskKeyboardCommand[] = [
+      'close-task',
+      'open-previous',
+      'open-next',
+      'capture',
+      'undo',
+      'toggle-completion',
+      'start-selection',
+      'view-today',
+      'view-upcoming',
+      'view-anytime',
+      'view-someday',
+      'view-done',
+      'view-config',
+    ];
+
+    for (const command of allowed) {
+      expect(isTaskNativeQuickEntryMetadataCommand(command)).toBe(true);
+    }
+    for (const command of excluded) {
+      expect(isTaskNativeQuickEntryMetadataCommand(command)).toBe(false);
+    }
   });
 });

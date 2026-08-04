@@ -7,10 +7,18 @@ export function Toaster() {
 
   return (
     <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, ...props }) {
+      {toasts.map(function ({ id, title, description, action, duration, ...props }) {
+        const hasTitleAndDescription = Boolean(title) && Boolean(description);
         return (
-          <Toast key={id} {...props} duration={getToastDurationMs(title, description)}>
-            <div className="grid gap-1">
+          <Toast
+            key={id}
+            {...props}
+            duration={duration ?? getToastDurationMs(title, description)}
+          >
+            <div
+              className={hasTitleAndDescription ? "grid gap-1" : "grid"}
+              data-toast-content=""
+            >
               {title && <ToastTitle>{title}</ToastTitle>}
               {description && <ToastDescription>{description}</ToastDescription>}
             </div>

@@ -103,4 +103,17 @@ describe('TaskAreaDetailView', () => {
       cleanup(root, container);
     }
   });
+
+  it('uses the celebratory empty state when an Area has no loose tasks', () => {
+    mockUseTaskAreaDetail.mockReturnValue({ tasks: [], loading: false, error: null });
+    const { container, root } = renderView(hierarchy());
+
+    try {
+      const emptyState = container.querySelector<HTMLElement>('[data-task-empty-state]');
+      expect(emptyState).toHaveTextContent('No loose tasks');
+      expect(emptyState?.querySelector('svg.lucide-sparkles')).toBeTruthy();
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });

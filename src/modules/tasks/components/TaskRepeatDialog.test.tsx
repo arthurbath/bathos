@@ -29,6 +29,7 @@ function renderDialog(
     definition: ReturnType<typeof taskRecurrenceDefinitionFixture>;
     revision: ReturnType<typeof taskRecurrenceRevisionFixture>;
   },
+  planningDate = '2026-07-27',
 ) {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -36,7 +37,7 @@ function renderDialog(
   act(() => root.render(
     <TaskRepeatDialog
       task={task}
-      planningDate="2026-07-27"
+      planningDate={planningDate}
       open
       onOpenChange={onOpenChange}
       definition={recurrence?.definition}
@@ -369,6 +370,41 @@ describe('TaskRepeatDialog', () => {
         scheduleDate: '2026-08-03',
         deadlineOffsetDays: 7,
       }));
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('excludes an already-realized start date from an existing prototype preview', () => {
+    const task = taskTodoFixture({
+      id: 'task-existing-weekly-repeat',
+      title: 'Exercise',
+      start_date: null,
+      deadline: null,
+    });
+    const recurrence = {
+      definition: taskRecurrenceDefinitionFixture({
+        name: 'Exercise',
+        next_occurrence_date: '2026-08-16',
+      }),
+      revision: taskRecurrenceRevisionFixture({
+        name: 'Exercise',
+        rule_mode: 'calendar',
+        frequency: 'weekly',
+        interval_count: 1,
+        start_date: '2026-08-09',
+        rule_config: { weekdays: [7] },
+        deadline_offset_days: 6,
+      }),
+    };
+    const { container, root } = renderDialog(task, recurrence, '2026-08-03');
+    try {
+      const preview = document.querySelector('[aria-label="Next Three Occurrences"]')!;
+      expect(preview.querySelectorAll('li')).toHaveLength(3);
+      expect(preview).not.toHaveTextContent('Start Today');
+      expect(preview).toHaveTextContent('Start Aug 10, 2026');
+      expect(preview).toHaveTextContent('Start Aug 17, 2026');
+      expect(preview).toHaveTextContent('Start Aug 24, 2026');
     } finally {
       cleanup(root, container);
     }

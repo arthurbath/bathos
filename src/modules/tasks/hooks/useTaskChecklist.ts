@@ -1,14 +1,14 @@
 import { useQuery } from '@powersync/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TaskChecklistItemPatch } from '@/modules/tasks/data/taskHierarchyRepository';
 import type { TaskMutationContext } from '@/modules/tasks/data/taskRepository';
 import {
   compareTaskOrder,
-  generateTaskMoveOrderKey,
-  generateTaskOrderKey,
 } from '@/modules/tasks/domain/taskOrder';
 import {
+  generateChecklistMoveOrderKey,
+  generateChecklistOrderKey,
   planChecklistBatchInsertionOrderKeys,
   planChecklistGroupMove,
 } from '@/modules/tasks/domain/taskChecklistOrder';
@@ -27,6 +27,21 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     [ownerId, taskId],
   );
   const [optimistic, setOptimistic] = useState<Record<string, TaskChecklistItem | null>>({});
+  const mutationEpochs = useRef(new Map<string, number>());
+
+  const beginItemMutation = useCallback((itemIds: readonly string[]) => {
+    const epochs = new Map<string, number>();
+    for (const itemId of itemIds) {
+      const epoch = (mutationEpochs.current.get(itemId) ?? 0) + 1;
+      mutationEpochs.current.set(itemId, epoch);
+      epochs.set(itemId, epoch);
+    }
+    return epochs;
+  }, []);
+
+  const isCurrentItemMutation = useCallback((itemId: string, epoch: number) => (
+    mutationEpochs.current.get(itemId) === epoch
+  ), []);
 
   useEffect(() => {
     setOptimistic((current) => clearCaughtUpRows(current, query.data));
@@ -121,6 +136,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     patch: TaskChecklistItemPatch,
     context?: TaskMutationContext,
   ) => {
+    const mutationEpoch = beginItemMutation([itemId]).get(itemId)!;
     const mutationContext = {
       ...context,
       operationId: context?.operationId ?? globalThis.crypto.randomUUID(),
@@ -131,16 +147,21 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       patch,
       mutationContext,
     );
-    setOptimistic((current) => ({ ...current, [item.id]: item }));
+    setOptimistic((current) => (
+      isCurrentItemMutation(item.id, mutationEpoch)
+        ? { ...current, [item.id]: item }
+        : current
+    ));
     notifyTaskChecklistForwardMutation();
     return item;
-  }, [hierarchyRepository, ownerId]);
+  }, [beginItemMutation, hierarchyRepository, isCurrentItemMutation, ownerId]);
 
   const setCompleted = useCallback(async (
     item: TaskChecklistItem,
     completed: boolean,
     context?: TaskMutationContext,
   ) => {
+    const mutationEpoch = beginItemMutation([item.id]).get(item.id)!;
     const occurredAt = context?.occurredAt ?? new Date().toISOString();
     const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
     const lastKey = items.filter(({ id }) => id !== item.id).at(-1)?.order_key ?? null;
@@ -148,7 +169,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       ? {
           completed: true,
           completed_at: occurredAt,
-          order_key: generateTaskOrderKey(lastKey, null),
+          order_key: generateChecklistOrderKey(lastKey, null),
         }
       : { completed: false, completed_at: null };
     const optimisticMutationId = `optimistic-checklist-completion-${globalThis.crypto.randomUUID()}`;
@@ -171,7 +192,8 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
         { ...context, occurredAt, operationId },
       );
       setOptimistic((current) => (
-        current[item.id]?.client_mutation_id === optimisticMutationId
+        isCurrentItemMutation(item.id, mutationEpoch)
+          && current[item.id]?.client_mutation_id === optimisticMutationId
           ? { ...current, [item.id]: saved }
           : current
       ));
@@ -179,14 +201,17 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       return saved;
     } catch (error) {
       setOptimistic((current) => {
-        if (current[item.id]?.client_mutation_id !== optimisticMutationId) return current;
+        if (
+          !isCurrentItemMutation(item.id, mutationEpoch)
+          || current[item.id]?.client_mutation_id !== optimisticMutationId
+        ) return current;
         const next = { ...current };
         delete next[item.id];
         return next;
       });
       throw error;
     }
-  }, [hierarchyRepository, items, ownerId]);
+  }, [beginItemMutation, hierarchyRepository, isCurrentItemMutation, items, ownerId]);
 
   const deleteItem = useCallback(async (itemId: string, context?: TaskMutationContext) => {
     const mutationContext = {
@@ -253,7 +278,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     destinationIndex: number,
     context?: TaskMutationContext,
   ) => {
-    const orderKey = generateTaskMoveOrderKey(
+    const orderKey = generateChecklistMoveOrderKey(
       items.map((item) => ({ id: item.id, orderKey: item.order_key })),
       itemId,
       destinationIndex,
@@ -298,6 +323,8 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       return movingItems;
     }
 
+    const mutationEpochById = beginItemMutation(projections.map(({ id }) => id));
+
     setOptimistic((current) => ({
       ...current,
       ...Object.fromEntries(projections.map((item) => [item.id, item])),
@@ -316,22 +343,32 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
           mutationContext,
         ));
       }
-      setOptimistic((current) => ({
-        ...current,
-        ...Object.fromEntries(savedItems.map((item) => [item.id, item])),
-      }));
+      setOptimistic((current) => {
+        const next = { ...current };
+        for (const item of savedItems) {
+          const epoch = mutationEpochById.get(item.id)!;
+          if (isCurrentItemMutation(item.id, epoch)) next[item.id] = item;
+        }
+        return next;
+      });
       notifyTaskChecklistForwardMutation();
       return savedItems;
     } catch (error) {
       setOptimistic((current) => {
         const next = { ...current };
-        for (const projection of projections) delete next[projection.id];
-        for (const item of savedItems) next[item.id] = item;
+        for (const projection of projections) {
+          const epoch = mutationEpochById.get(projection.id)!;
+          if (isCurrentItemMutation(projection.id, epoch)) delete next[projection.id];
+        }
+        for (const item of savedItems) {
+          const epoch = mutationEpochById.get(item.id)!;
+          if (isCurrentItemMutation(item.id, epoch)) next[item.id] = item;
+        }
         return next;
       });
       throw error;
     }
-  }, [hierarchyRepository, items, ownerId]);
+  }, [beginItemMutation, hierarchyRepository, isCurrentItemMutation, items, ownerId]);
 
   return {
     items,
@@ -366,14 +403,14 @@ function checklistInsertionOrderKey(
   const previousKey = items[destinationIndex - 1]?.order_key ?? null;
   const nextKey = items[destinationIndex]?.order_key ?? null;
   if (previousKey === null || nextKey === null || previousKey !== nextKey) {
-    return generateTaskOrderKey(previousKey, nextKey);
+    return generateChecklistOrderKey(previousKey, nextKey);
   }
 
   let firstTiedIndex = destinationIndex - 1;
   while (firstTiedIndex > 0 && items[firstTiedIndex - 1].order_key === nextKey) {
     firstTiedIndex -= 1;
   }
-  return generateTaskOrderKey(
+  return generateChecklistOrderKey(
     items[firstTiedIndex - 1]?.order_key ?? null,
     nextKey,
   );

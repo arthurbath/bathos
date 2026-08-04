@@ -14,6 +14,7 @@ describe("toast duration", () => {
 
   it("shows one short text block for one second", () => {
     expect(getToastDurationMs("Saved")).toBe(1_000);
+    expect(getToastDurationMs(undefined, "The task now appears in Upcoming.")).toBe(1_000);
   });
 
   it("counts a title and description as separate visible lines", () => {

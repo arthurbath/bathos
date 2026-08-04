@@ -72,6 +72,7 @@ A system-authored accessible name or tooltip title that labels a button or input
 - Each estimated line contributes 1,000 ms to the display duration. Every toast remains visible for at least 1,000 ms.
 - Modules should provide the toast content and rely on the shared timing policy. Do not add local duration overrides for routine notifications.
 - Preserve manual dismissal and the toast renderer's normal pause and interaction behavior.
+- Layer toast notifications above fixed in-content action surfaces, including the Tasks selection-mode bar, while keeping shared mobile navigation above the toast stack.
 
 ## Icons
 

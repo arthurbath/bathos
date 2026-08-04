@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser, handleClientSideLinkNavigation } from '@/lib/navigation';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
+import { TaskEmptyState } from '@/modules/tasks/components/TaskEmptyState';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
@@ -78,7 +79,7 @@ export function TaskAreaDetailView({
         icon={TASK_ICONS.Task}
       >
         {detail.tasks.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-muted-foreground">No loose tasks</p>
+          <TaskEmptyState message="No loose tasks" compact />
         ) : detail.tasks.map((task) => {
           const route = getTaskPlanningRoute(task, planningDate);
           const href = `${basePath}/${route}`;

@@ -38,6 +38,7 @@ import {
   RotateCcw,
   Search,
   Settings,
+  Sparkles,
   Square,
   SquareCheck,
   SquareCheckBig,
@@ -105,6 +106,7 @@ export const TASK_ICONS = {
   Redo: Redo2,
   Search: Search,
   QuickFilters: Filter,
+  EmptyState: Sparkles,
   Delete: Trash2,
   Reopen: RotateCcw,
 
@@ -174,6 +176,7 @@ export const TASK_ICON_NAMES = {
   Redo: 'Redo2',
   Search: 'Search',
   QuickFilters: 'Filter',
+  EmptyState: 'Sparkles',
   Delete: 'Trash2',
   Reopen: 'RotateCcw',
 

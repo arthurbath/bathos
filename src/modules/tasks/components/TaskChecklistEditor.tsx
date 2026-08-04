@@ -20,6 +20,13 @@ import {
   serializeTaskChecklistClipboard,
   type TaskChecklistClipboardItem,
 } from '@/modules/tasks/domain/taskChecklistClipboard';
+import {
+  createTaskClipboardRepresentations,
+  readTaskClipboardStructuredText,
+  TASK_CHECKLIST_CLIPBOARD_MIME_TYPE,
+  TASK_CHECKLIST_CLIPBOARD_WEB_MIME_TYPE,
+  type TaskClipboardRepresentations,
+} from '@/modules/tasks/domain/taskClipboardRepresentations';
 import { applyTaskSelectionGesture } from '@/modules/tasks/domain/taskSelection';
 import { planChecklistMultilinePaste } from '@/modules/tasks/domain/taskMultilinePaste';
 import { useTaskChecklist } from '@/modules/tasks/hooks/useTaskChecklist';
@@ -251,7 +258,10 @@ export function TaskChecklistEditorSurface({
     if (!title.trim()) return;
     const timer = window.setTimeout(() => {
       saveTimers.current.delete(item.id);
-      void checklist.updateItem(item.id, { title: title.trim() });
+      consumeChecklistMutation(
+        checklist.updateItem(item.id, { title: title.trim() }),
+        'Checklist Item Could Not Be Saved',
+      );
     }, AUTOSAVE_DELAY_MS);
     saveTimers.current.set(item.id, timer);
   }, [cancelScheduledSave, checklist]);
@@ -324,7 +334,12 @@ export function TaskChecklistEditorSurface({
     for (const timer of saveTimers.current.values()) window.clearTimeout(timer);
     for (const item of itemsRef.current) {
       const value = editingTitlesRef.current[item.id]?.trim() ?? item.title.trim();
-      if (value === '') void deleteItemRef.current(item.id);
+      if (value === '') {
+        consumeChecklistMutation(
+          deleteItemRef.current(item.id),
+          'Checklist Item Could Not Be Deleted',
+        );
+      }
     }
   }, []);
 
@@ -380,17 +395,22 @@ export function TaskChecklistEditorSurface({
     pendingFocusRef.current = null;
   }, [checklist.items, draftIndex, focusRevision]);
 
-  const commitDraft = async ({
+  const commitDraft = useCallback(async ({
     keepFollowingDraft,
   }: {
     keepFollowingDraft: boolean;
   }) => {
-    const title = draftTitle.trim();
-    if (!title || draftIndex === null || pendingInsertRef.current) return null;
+    const title = draftTitleRef.current.trim();
+    const insertionIndex = draftIndexRef.current;
+    if (!title || insertionIndex === null || pendingInsertRef.current) return null;
     pendingInsertRef.current = true;
-    const insertionIndex = draftIndex;
     try {
       const item = await checklist.createItem(title, insertionIndex);
+      if (
+        draftTitleRef.current.trim() !== title
+        || draftIndexRef.current !== insertionIndex
+      ) return item;
+
       updateDraftTitle('');
       if (keepFollowingDraft) {
         updateDraftIndex(insertionIndex + 1);
@@ -402,7 +422,7 @@ export function TaskChecklistEditorSurface({
     } finally {
       pendingInsertRef.current = false;
     }
-  };
+  }, [checklist, requestInputFocus, updateDraftIndex, updateDraftTitle]);
 
   const splitPersistedItem = (
     item: TaskChecklistEditorItem,
@@ -418,7 +438,12 @@ export function TaskChecklistEditorSurface({
     updateDraftTitle(after);
     updateDraftIndex(index + 1);
     requestInputFocus(DRAFT_ID, 'start');
-    if (before.trim()) void saveTitle(item, before);
+    if (before.trim()) {
+      consumeChecklistMutation(
+        saveTitle(item, before),
+        'Checklist Item Could Not Be Saved',
+      );
+    }
   };
 
   const splitDraft = async (
@@ -603,24 +628,13 @@ export function TaskChecklistEditorSurface({
       await pendingMutation.catch(() => undefined);
     }
 
-    const title = draftTitleRef.current.trim();
-    const insertionIndex = draftIndexRef.current;
-    if (!title || insertionIndex === null) return;
-
     try {
-      await checklist.createItem(title, insertionIndex);
-      if (
-        draftTitleRef.current.trim() === title
-        && draftIndexRef.current === insertionIndex
-      ) {
-        updateDraftTitle('');
-        updateDraftIndex(null);
-      }
+      await commitDraft({ keepFollowingDraft: false });
     } catch (error) {
       showChecklistError('Checklist Item Could Not Be Saved', error);
       throw error;
     }
-  }, [checklist, updateDraftIndex, updateDraftTitle]);
+  }, [commitDraft]);
 
   useLayoutEffect(() => {
     onRegisterFlush?.(flushDraft);
@@ -847,8 +861,12 @@ export function TaskChecklistEditorSurface({
       event.preventDefault();
       event.stopImmediatePropagation();
       try {
-        await writeChecklistClipboardText(
-          Promise.resolve(serializeTaskChecklistClipboard(operation, selected)),
+        await writeChecklistClipboardRepresentations(
+          Promise.resolve(createTaskClipboardRepresentations(
+            'checklist-items',
+            serializeTaskChecklistClipboard(operation, selected),
+            selected.map(({ title }) => title),
+          )),
           event,
         );
         if (operation === 'cut') await deleteSelectedItems();
@@ -954,7 +972,10 @@ export function TaskChecklistEditorSurface({
       }
       event.preventDefault();
       event.stopPropagation();
-      void deleteSelectedItems();
+      consumeChecklistMutation(
+        deleteSelectedItems(),
+        'Checklist Items Could Not Be Deleted',
+      );
     };
     document.addEventListener('mousedown', handleMouseDown, true);
     document.addEventListener('mousemove', handleMouseMove, true);
@@ -979,6 +1000,8 @@ export function TaskChecklistEditorSurface({
       } else {
         await checklist.reorderItems(activeDraggedIds, destinationIndex);
       }
+    } catch (error) {
+      showChecklistError('Checklist Items Could Not Be Reordered', error);
     } finally {
       dropCommitInFlightRef.current = false;
     }
@@ -1144,7 +1167,12 @@ export function TaskChecklistEditorSurface({
               setEditingTitle(item.id, title);
               scheduleTitleSave(item, title);
             }}
-            onBlur={(title) => void saveTitle(item, title)}
+            onBlur={(title) => {
+              consumeChecklistMutation(
+                saveTitle(item, title),
+                'Checklist Item Could Not Be Saved',
+              );
+            }}
             onFocus={() => {
               focusedItemIdRef.current = item.id;
             }}
@@ -1202,14 +1230,14 @@ export function TaskChecklistEditorSurface({
               splitPersistedItem(item, title, index, selectionStart, selectionEnd);
             }}
             onMultilinePaste={(title, selectionStart, selectionEnd, text) => {
-              void pasteIntoPersistedItem(
+              consumeChecklistMutation(pasteIntoPersistedItem(
                 item,
                 title,
                 index,
                 selectionStart,
                 selectionEnd,
                 text,
-              );
+              ), 'Checklist Items Could Not Be Pasted');
             }}
             onChecklistPaste={(items) => {
               void pasteChecklistItemsAfterPersisted(index, items);
@@ -1401,10 +1429,16 @@ function ChecklistRow({
     ) {
       if (canJoinPrevious) {
         event.preventDefault();
-        void onJoinPrevious(title);
+        consumeChecklistMutation(
+          onJoinPrevious(title),
+          'Checklist Items Could Not Be Joined',
+        );
       } else if (title === '') {
         event.preventDefault();
-        void onDeleteEmpty();
+        consumeChecklistMutation(
+          onDeleteEmpty(),
+          'Checklist Item Could Not Be Deleted',
+        );
       }
       return;
     }
@@ -1415,13 +1449,19 @@ function ChecklistRow({
       && selectionEnd === title.length
     ) {
       event.preventDefault();
-      void onJoinNext(title);
+      consumeChecklistMutation(
+        onJoinNext(title),
+        'Checklist Items Could Not Be Joined',
+      );
     }
   };
 
   const handlePaste = (event: ReactClipboardEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
-    const text = event.clipboardData.getData('text/plain');
+    const text = readTaskClipboardStructuredText(
+      event.clipboardData,
+      'checklist-items',
+    ) ?? event.clipboardData.getData('text/plain');
     const parsed = parseTaskChecklistClipboard(text);
     if (parsed.kind === 'invalid-checklist-payload') {
       event.preventDefault();
@@ -1510,7 +1550,12 @@ function ChecklistRow({
           aria-checked={item.completed}
           aria-label={`${item.completed ? 'Reopen' : 'Complete'} ${item.title}`}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => void onComplete(!item.completed)}
+          onClick={() => {
+            consumeChecklistMutation(
+              onComplete(!item.completed),
+              'Checklist Item Could Not Be Updated',
+            );
+          }}
         >
           {item.completed ? (
             <TASK_ICONS.CompletedTask className="h-4 w-4" aria-hidden="true" />
@@ -1647,7 +1692,10 @@ function DraftChecklistRow({
     ) {
       if (canJoinPrevious) {
         event.preventDefault();
-        void onJoinPrevious();
+        consumeChecklistMutation(
+          onJoinPrevious(),
+          'Checklist Items Could Not Be Joined',
+        );
       } else if (title === '') {
         event.preventDefault();
         onDeleteEmpty();
@@ -1661,13 +1709,19 @@ function DraftChecklistRow({
       && selectionEnd === title.length
     ) {
       event.preventDefault();
-      void onJoinNext();
+      consumeChecklistMutation(
+        onJoinNext(),
+        'Checklist Items Could Not Be Joined',
+      );
     }
   };
 
   const handlePaste = (event: ReactClipboardEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
-    const text = event.clipboardData.getData('text/plain');
+    const text = readTaskClipboardStructuredText(
+      event.clipboardData,
+      'checklist-items',
+    ) ?? event.clipboardData.getData('text/plain');
     const parsed = parseTaskChecklistClipboard(text);
     if (parsed.kind === 'invalid-checklist-payload') {
       event.preventDefault();
@@ -1750,29 +1804,48 @@ function DraftChecklistRow({
   );
 }
 
-async function writeChecklistClipboardText(
-  textPromise: Promise<string>,
+async function writeChecklistClipboardRepresentations(
+  representationsPromise: Promise<TaskClipboardRepresentations>,
   event: ClipboardEvent,
 ): Promise<void> {
   if (
     typeof ClipboardItem !== 'undefined'
     && globalThis.navigator?.clipboard?.write
   ) {
-    const item = new ClipboardItem({
-      'text/plain': textPromise.then((text) => (
-        new Blob([text], { type: 'text/plain' })
+    const clipboardItemData: Record<string, Promise<Blob>> = {
+      'text/plain': representationsPromise.then(({ plainText }) => (
+        new Blob([plainText], { type: 'text/plain' })
       )),
-    });
+      'text/html': representationsPromise.then(({ html }) => (
+        new Blob([html], { type: 'text/html' })
+      )),
+    };
+    if (
+      typeof ClipboardItem.supports === 'function'
+      && ClipboardItem.supports(TASK_CHECKLIST_CLIPBOARD_WEB_MIME_TYPE)
+    ) {
+      clipboardItemData[TASK_CHECKLIST_CLIPBOARD_WEB_MIME_TYPE] =
+        representationsPromise.then(({ structuredText }) => new Blob(
+          [structuredText],
+          { type: TASK_CHECKLIST_CLIPBOARD_MIME_TYPE },
+        ));
+    }
+    const item = new ClipboardItem(clipboardItemData);
     await globalThis.navigator.clipboard.write([item]);
     return;
   }
-  const text = await textPromise;
+  const representations = await representationsPromise;
   if (event.clipboardData) {
-    event.clipboardData.setData('text/plain', text);
+    event.clipboardData.setData('text/plain', representations.plainText);
+    event.clipboardData.setData('text/html', representations.html);
+    event.clipboardData.setData(
+      TASK_CHECKLIST_CLIPBOARD_MIME_TYPE,
+      representations.structuredText,
+    );
     return;
   }
   if (globalThis.navigator?.clipboard?.writeText) {
-    await globalThis.navigator.clipboard.writeText(text);
+    await globalThis.navigator.clipboard.writeText(representations.structuredText);
     return;
   }
   throw new Error('The browser clipboard is unavailable');
@@ -1783,6 +1856,15 @@ function showChecklistError(title: string, error: unknown): void {
     title,
     description: error instanceof Error ? error.message : 'Unknown error',
     variant: 'destructive',
+  });
+}
+
+function consumeChecklistMutation(
+  mutation: Promise<unknown>,
+  failureTitle: string,
+): void {
+  void mutation.catch((error) => {
+    showChecklistError(failureTitle, error);
   });
 }
 

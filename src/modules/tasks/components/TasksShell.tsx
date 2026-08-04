@@ -20,11 +20,11 @@ import {
   ExternalLink,
   MoreHorizontal,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DatePickerField,
   DatePickerPanel,
@@ -62,7 +62,6 @@ import { handleClientSideLinkNavigation, shouldHandleWithBrowser } from '@/lib/n
 import { cn } from '@/lib/utils';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import type { TaskRecurrenceEditInput } from '@/modules/tasks/data/taskRecurrenceService';
-import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { TaskClipboardService } from '@/modules/tasks/data/taskClipboardService';
 import {
   TASK_PERMANENT_DELETION_CONFIRMATION,
@@ -73,6 +72,7 @@ import {
   TASK_PRIMARY_LINK_ICONS,
   TASK_PRIMARY_LINK_LABELS,
 } from '@/modules/tasks/components/taskIconography';
+import { TaskEmptyState } from '@/modules/tasks/components/TaskEmptyState';
 import {
   formatTaskCompactCalendarDayOffset,
   formatTaskDateControlLabel,
@@ -153,6 +153,7 @@ import {
   publishTaskNativeQuickEntryReady,
   requestTaskNativeQuickEntryDismissal,
   requestTaskNativeNewTaskSummaryFocus,
+  clearTaskNativeQuickEntryShortcut,
   configureTaskNativeQuickEntryShortcut,
   finishTaskNativeQuickEntry,
   type TaskNativeQuickEntryShortcut,
@@ -176,13 +177,12 @@ import {
 } from '@/modules/tasks/domain/taskRecurrencePrototypeEdit';
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
 import { TaskAreaSettings } from '@/modules/tasks/components/TaskAreaSettings';
-import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
 import {
   TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS,
   TASK_PLANNING_LIST_CLASS,
 } from '@/modules/tasks/components/taskPlanningStyles';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
-import { TaskSyncDiagnosticsDialog } from '@/modules/tasks/components/TaskSyncDiagnosticsDialog';
+import { TaskSyncStatusCard } from '@/modules/tasks/components/TaskSyncStatusCard';
 import { TaskChecklistEditor } from '@/modules/tasks/components/TaskChecklistEditor';
 import { TaskMetadataDrawerFields } from '@/modules/tasks/components/TaskMetadataDrawerFields';
 import { TaskRepeatDialog } from '@/modules/tasks/components/TaskRepeatDialog';
@@ -202,6 +202,7 @@ import {
   getDeclaredNativePlatform,
   getDeclaredNativeQuickEntryShortcut,
 } from '@/platform/installedApp';
+import { getTasksNativeNotificationsEnabled } from '@/platform/native/tasksNativeCompanion';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import {
   deriveTaskAreaSections,
@@ -230,6 +231,7 @@ import {
 } from '@/modules/tasks/domain/taskTouchSelection';
 import {
   getTaskKeyboardCommand,
+  isTaskNativeQuickEntryMetadataCommand,
   type TaskKeyboardCommand,
 } from '@/modules/tasks/domain/taskKeyboardCommands';
 import {
@@ -238,6 +240,13 @@ import {
   type TaskClipboardDestination,
   type TaskClipboardSnapshot,
 } from '@/modules/tasks/domain/taskClipboard';
+import {
+  createTaskClipboardRepresentations,
+  readTaskClipboardStructuredText,
+  TASK_CLIPBOARD_MIME_TYPE,
+  TASK_CLIPBOARD_WEB_MIME_TYPE,
+  type TaskClipboardRepresentations,
+} from '@/modules/tasks/domain/taskClipboardRepresentations';
 import { splitPlainTextTaskTitles } from '@/modules/tasks/domain/taskMultilinePaste';
 import {
   getBulkTaskTodayShortcutHorizon,
@@ -254,6 +263,7 @@ import {
 import { getNextTaskActionability } from '@/modules/tasks/domain/taskActionability';
 import { getNextTaskAreaId } from '@/modules/tasks/domain/taskAreaCycle';
 import { formatTaskReminderTimeDisplay } from '@/modules/tasks/domain/taskReminderTimeInput';
+import { getTaskReminderPresentationMode } from '@/modules/tasks/domain/taskReminderPresentation';
 import {
   sanitizeTaskQuickFilter,
   taskMatchesQuickFilter,
@@ -617,10 +627,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     recurrenceService,
     permanentDeletionService,
     mode,
-    syncState,
     startupRefreshPending,
-    pendingUploadCount,
-    portabilityService,
     planningTimeZone,
     prepareForSignOut,
   } = useTasksRuntime();
@@ -919,6 +926,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, []);
   const taskSearch = useTaskSearch(userId, quickFindOpen || view === 'search');
   const reminders = useTaskReminders(userId);
+  const reminderPresentationMode = getTaskReminderPresentationMode({
+    webPushStatus: reminders.webPush?.status,
+    nativeNotificationsEnabled: getTasksNativeNotificationsEnabled(),
+  });
   const waitingRecurrences = useMemo(() => recurrences.definitions.filter(
     (definition) => {
       const occurrence = recurrences.openOccurrenceByDefinitionId.get(definition.id);
@@ -948,7 +959,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   );
   const acknowledgeReminderDelivery = reminders.acknowledge;
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
-  const [touchQuickFindEnabled, setTouchQuickFindEnabled] = useState(false);
+  const [touchQuickFindEnabled, setTouchQuickFindEnabled] = useState(() => (
+    navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches
+  ));
   const [touchQuickFindPull, setTouchQuickFindPull] = useState(0);
   const [touchListElasticity, setTouchListElasticity] = useState(0);
   const [touchListElasticActive, setTouchListElasticActive] = useState(false);
@@ -1035,6 +1048,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     input?.setSelectionRange(input.value.length, input.value.length);
   }, [resetTouchQuickFindPull]);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
+  const activeReminderToastsRef = useRef(new Map<string, ReturnType<typeof toast>>());
+  const reminderAcknowledgementsInFlightRef = useRef(new Set<string>());
+  const suppressingReminderDeliveriesRef = useRef(new Set<string>());
+  const reminderToastCleanupRef = useRef(false);
+  const [reminderToastRetrySequence, setReminderToastRetrySequence] = useState(0);
   const previousViewRef = useRef(view);
   const openTaskSequenceRef = useRef(0);
   const focusedTaskIdRef = useRef<string | null>(null);
@@ -1047,7 +1065,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     flush: () => Promise<void>;
   } | null>(null);
   const macLikePlatform = useMemo(
-    () => isMacLikeTaskPlatform(globalThis.navigator?.platform ?? ''),
+    () => getDeclaredNativePlatform() === 'macos'
+      || isMacLikeTaskPlatform(globalThis.navigator?.platform ?? ''),
     [],
   );
   const doneRoots = useMemo(
@@ -1082,14 +1101,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         && waitingRecurrences.length === 0
         && recurrences.datedPrototypes.length === 0
     : filteredTasks.length === 0);
-  const serverReplacementAvailable = mode === 'connected'
-    && syncState === 'connected'
-    && pendingUploadCount === 0;
-  const serverReplacementUnavailableReason = pendingUploadCount > 0
-    ? 'Wait for pending task changes to synchronize'
-    : syncState !== 'connected'
-      ? 'Reconnect to preview the current server deletion scope'
-      : undefined;
   const floatingTaskCreationPlacement = useMemo<TaskCreationPlacement | undefined>(() => {
     if (view === 'today') {
       const visibleSections = todayTaskSectionDefinitions
@@ -2046,6 +2057,95 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [focusedTaskId, quickFindOpen, renderedPlanningTasks]);
 
   useEffect(() => {
+    if (nativeQuickEntry || reminderPresentationMode === 'checking') return;
+
+    const dueDeliveryIds = new Set(reminders.dueItems.map(({ delivery_id }) => delivery_id));
+    for (const [deliveryId, controller] of activeReminderToastsRef.current) {
+      if (dueDeliveryIds.has(deliveryId)) continue;
+      activeReminderToastsRef.current.delete(deliveryId);
+      controller.dismiss();
+    }
+
+    const acknowledge = (
+      deliveryId: string,
+      retryToastOnFailure: boolean,
+    ) => {
+      if (reminderAcknowledgementsInFlightRef.current.has(deliveryId)) return;
+      reminderAcknowledgementsInFlightRef.current.add(deliveryId);
+      void acknowledgeReminderDelivery(deliveryId).catch(() => {
+        showReminderDeliveryError('Reminder Could Not Be Acknowledged');
+        if (retryToastOnFailure && !reminderToastCleanupRef.current) {
+          setReminderToastRetrySequence((current) => current + 1);
+        }
+      }).finally(() => {
+        reminderAcknowledgementsInFlightRef.current.delete(deliveryId);
+        suppressingReminderDeliveriesRef.current.delete(deliveryId);
+      });
+    };
+
+    if (reminderPresentationMode !== 'in-app-toast') {
+      for (const item of reminders.dueItems) {
+        const controller = activeReminderToastsRef.current.get(item.delivery_id);
+        if (controller) {
+          suppressingReminderDeliveriesRef.current.add(item.delivery_id);
+          activeReminderToastsRef.current.delete(item.delivery_id);
+          controller.dismiss();
+          queueMicrotask(() => {
+            suppressingReminderDeliveriesRef.current.delete(item.delivery_id);
+          });
+        }
+      }
+      return;
+    }
+
+    for (const item of reminders.dueItems) {
+      if (
+        activeReminderToastsRef.current.has(item.delivery_id)
+        || reminderAcknowledgementsInFlightRef.current.has(item.delivery_id)
+      ) continue;
+
+      suppressingReminderDeliveriesRef.current.delete(item.delivery_id);
+
+      const controller = toast({
+        title: (
+          <span className="flex items-center gap-2">
+            <TASK_ICONS.Reminder className="h-4 w-4" aria-hidden="true" />
+            Reminder
+          </span>
+        ),
+        description: item.title,
+        variant: 'info',
+        duration: Number.POSITIVE_INFINITY,
+        onOpenChange: (open) => {
+          if (open || reminderToastCleanupRef.current) return;
+          activeReminderToastsRef.current.delete(item.delivery_id);
+          if (suppressingReminderDeliveriesRef.current.has(item.delivery_id)) return;
+          acknowledge(item.delivery_id, true);
+        },
+      });
+      activeReminderToastsRef.current.set(item.delivery_id, controller);
+    }
+  }, [
+    acknowledgeReminderDelivery,
+    nativeQuickEntry,
+    reminderPresentationMode,
+    reminderToastRetrySequence,
+    reminders.dueItems,
+  ]);
+
+  useEffect(() => {
+    const activeReminderToasts = activeReminderToastsRef.current;
+    reminderToastCleanupRef.current = false;
+    return () => {
+      reminderToastCleanupRef.current = true;
+      for (const controller of activeReminderToasts.values()) {
+        controller.dismiss();
+      }
+      activeReminderToasts.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     const parameters = new URLSearchParams(location.search);
     const deliveryId = parameters.get('reminder_delivery');
     if (!deliveryId || acknowledgedPushDeliveriesRef.current.has(deliveryId)) return;
@@ -2088,6 +2188,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
 
   const getTaskCommandTargets = useCallback((): TaskTodo[] => {
+    if (nativeQuickEntry && creationDraftRef.current !== null) {
+      return [creationDraftRef.current.task];
+    }
     if (bulkMode && bulkSelection.size >= 1) {
       if (Array.from(bulkSelection).some(isRecurrenceSelectionId)) return [];
       return selectableTasks.filter((task) => bulkSelection.has(task.id));
@@ -2099,7 +2202,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     const task = selectableTasks.find((candidate) => candidate.id === taskId);
     return task ? [task] : [];
-  }, [bulkMode, bulkSelection, selectableTasks]);
+  }, [bulkMode, bulkSelection, nativeQuickEntry, selectableTasks]);
 
   const cancelTaskReminders = useCallback(async (targets: readonly TaskTodo[]) => {
     for (const task of targets) {
@@ -2280,9 +2383,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       return;
     }
     try {
-      const serialized = taskClipboardService.snapshot(targets)
-        .then((snapshots) => serializeTaskClipboard(operation, snapshots));
-      await writeTaskClipboardText(serialized, event);
+      const representations = taskClipboardService.snapshot(targets)
+        .then((snapshots) => createTaskClipboardRepresentations(
+          'tasks',
+          serializeTaskClipboard(operation, snapshots),
+          snapshots.map(({ title }) => title),
+        ));
+      await writeTaskClipboardRepresentations(representations, event);
       if (operation === 'cut') {
         setBulkPending(true);
         try {
@@ -2469,6 +2576,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const control = document.getElementById(controlId);
       if (!(control instanceof HTMLElement)) return;
       if (mode === 'start' || mode === 'reminder') {
+        if (nativeQuickEntry) {
+          control.click();
+          if (mode === 'reminder') {
+            requestTaskStartPickerOpen(control, mode);
+          }
+          return;
+        }
         requestTaskStartPickerOpen(
           control,
           mode satisfies TaskStartPickerFocusTarget,
@@ -2489,7 +2603,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }
       }
     }, 0);
-  }, [bulkMode, bulkSelection.size, getTaskCommandTargets, setOpenTask]);
+  }, [bulkMode, bulkSelection.size, getTaskCommandTargets, nativeQuickEntry, setOpenTask]);
 
   const runToggleCompletionShortcut = useCallback(async () => {
     if (bulkMode && bulkSelection.size >= 1) {
@@ -2689,7 +2803,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     };
     const handlePaste = (event: ClipboardEvent) => {
       if (isTaskEditableTarget(event.target)) return;
-      const text = event.clipboardData?.getData('text/plain') ?? '';
+      const text = readTaskClipboardStructuredText(event.clipboardData, 'tasks')
+        ?? event.clipboardData?.getData('text/plain')
+        ?? '';
       if (!text) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -2855,6 +2971,20 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const command = getTaskKeyboardCommand(event, macLikePlatform);
       if (command === null) return;
       if (view === 'search') return;
+      const nativeQuickEntryControlCommand = nativeQuickEntry
+        && macLikePlatform
+        && event.ctrlKey
+        && !event.metaKey
+        && !event.altKey
+        && !event.shiftKey;
+      if (
+        nativeQuickEntryControlCommand
+        && !isTaskNativeQuickEntryMetadataCommand(command)
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
       if (command === 'keyboard-help' && event.isComposing) return;
       if (
         (command === 'copy' || command === 'cut' || command === 'paste')
@@ -3043,6 +3173,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     getTaskCommandTargets,
     keyboardHelpOpen,
     macLikePlatform,
+    nativeQuickEntry,
     navigate,
     openTaskCommandField,
     openRelativeTask,
@@ -3061,6 +3192,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     selectableTasks,
     quickFindOpen,
     updateTaskDropIndicator,
+    view,
   ]);
 
   const openCommandSurface = (open: (value: boolean) => void) => {
@@ -4284,18 +4416,28 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           <div
             className={nativeQuickEntry
               ? 'hidden'
-              : 'flex flex-wrap items-center justify-between gap-4'}
+              : 'flex flex-wrap items-start justify-between gap-4'}
             data-task-list-toolbar
           >
-            <h2
-              tabIndex={-1}
-              data-task-view-heading
-              className="text-3xl font-semibold leading-none tracking-tight"
-            >
-              {getTaskViewLabel(view)}
-            </h2>
+            <div className="flex min-w-0 flex-col gap-1">
+              <h2
+                tabIndex={-1}
+                data-task-view-heading
+                className="text-3xl font-semibold leading-none tracking-tight"
+              >
+                {getTaskViewLabel(view)}
+              </h2>
+              {bulkEligible && taskQuickFilter !== 'all' ? (
+                <p
+                  className="text-sm font-medium text-muted-foreground"
+                  data-task-active-quick-filter
+                >
+                  {taskQuickFilterLabels[taskQuickFilter]}
+                </p>
+              ) : null}
+            </div>
             {quickFindListEligible ? (
-              <div className="flex items-center gap-1">
+              <div className="flex shrink-0 items-center gap-1" data-task-list-actions>
                 <Button
                   type="button"
                   variant="clear"
@@ -4360,19 +4502,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             ) : null}
           </div>
 
-          {!nativeQuickEntry && reminders.dueItems.length > 0 ? (
-            <TaskDueReminders
-              items={reminders.dueItems}
-              onAcknowledge={async (deliveryId) => {
-                try {
-                  await reminders.acknowledge(deliveryId);
-                } catch {
-                  showReminderDeliveryError('Reminder Could Not Be Acknowledged');
-                }
-              }}
-            />
-          ) : null}
-
           {!nativeQuickEntry && reminders.projectionError
             ? <TaskReminderProjectionFailure />
             : null}
@@ -4436,6 +4565,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           ) : view === 'config' ? (
                 <TaskConfigView
                   keyboardHelpShortcut={macLikePlatform ? '⌘/' : '⌃/'}
+                  showKeyboardShortcuts={!touchQuickFindEnabled}
+                  onShowKeyboardShortcuts={() => setKeyboardHelpOpen(true)}
                   userId={userId}
                   displayName={displayName}
                   onSignOut={handleSignOut}
@@ -4460,9 +4591,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       showBrowserReminderError('Browser Reminders Could Not Be Disabled');
                     }
                   }}
-                  portabilityService={portabilityService}
-                  replaceAvailable={serverReplacementAvailable}
-                  replaceUnavailableReason={serverReplacementUnavailableReason}
                 />
               )
               : <section aria-label={getTaskSectionLabel(taskListView)}>
@@ -4481,11 +4609,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 Tasks Could Not Be Loaded
               </p>
             ) : taskViewIsEmpty ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                {quickFilterHasNoMatches
-                  ? 'No Tasks Match This Filter'
-                  : view === 'done' ? 'Done Is Empty' : 'No Tasks'}
-              </p>
+              <TaskEmptyState
+                message={quickFilterHasNoMatches
+                  ? 'No tasks match this filter'
+                  : view === 'done' ? 'Done is empty' : 'No tasks'}
+              />
             ) : view === 'done' ? (
               <div className="space-y-7">
                 {doneRoots.length > 0 ? (
@@ -4966,16 +5094,17 @@ function TaskQuickFilterControl({
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant={active ? 'outline' : 'clear'}
-          size={active ? 'sm' : 'icon'}
+          variant="clear"
+          size="icon"
           aria-label={active ? `Quick Filters: ${activeLabel}` : 'Quick Filters'}
-          className={active
-            ? 'h-9 gap-1.5 px-2.5 text-foreground'
-            : 'h-9 w-9 text-muted-foreground'}
+          aria-pressed={active}
+          className={cn(
+            'h-9 w-9 text-muted-foreground',
+            active && 'rounded-md bg-info/10 text-info',
+          )}
           data-task-quick-filter-trigger
         >
           <TASK_ICONS.QuickFilters className="h-4 w-4" aria-hidden="true" />
-          {active ? <span>{activeLabel}</span> : null}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -5004,12 +5133,9 @@ function TaskQuickFilterControl({
 
 function TaskQuickFilterEmptyState() {
   return (
-    <p
-      className="py-8 text-center text-sm text-muted-foreground"
-      data-task-quick-filter-empty
-    >
-      No tasks match this filter
-    </p>
+    <div data-task-quick-filter-empty>
+      <TaskEmptyState message="No tasks match this filter" compact />
+    </div>
   );
 }
 
@@ -5056,7 +5182,7 @@ function TaskBulkToolbar({
     <section
       aria-label="Task Selection"
       data-task-bulk-selection-surface
-      className="fixed bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.25rem)] left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-wrap items-center gap-2 rounded-md border border-info/40 bg-background p-3 md:bottom-6"
+      className="fixed bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.25rem)] left-1/2 z-[34] flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-wrap items-center gap-2 rounded-md border border-info/40 bg-background p-3 md:bottom-6"
     >
       <p className="mr-auto text-sm font-medium text-foreground" aria-live="polite">
         {selectedCount} {selectedCount === 1 ? 'Task' : 'Tasks'}
@@ -5165,53 +5291,6 @@ function TaskBulkToolbar({
   );
 }
 
-function TaskDueReminders({
-  items,
-  onAcknowledge,
-}: {
-  items: Array<{
-    delivery_id: string;
-    title: string;
-    resolved_at: string;
-  }>;
-  onAcknowledge: (deliveryId: string) => Promise<void>;
-}) {
-  return (
-    <section
-      aria-label="Due Reminders"
-      className="rounded-md border border-info/40 bg-info/5 p-4"
-    >
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-info">
-        <TASK_ICONS.DueReminder className="h-4 w-4" aria-hidden="true" />
-        Due Reminders
-      </h3>
-      <div className="mt-3 divide-y divide-info/20">
-        {items.map((item) => (
-          <div key={item.delivery_id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
-              <time className="text-xs text-muted-foreground" dateTime={item.resolved_at}>
-                {new Intl.DateTimeFormat(undefined, {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                }).format(new Date(item.resolved_at))}
-              </time>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void onAcknowledge(item.delivery_id)}
-            >
-              Acknowledge
-            </Button>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function TaskReminderProjectionFailure() {
   return (
     <section
@@ -5311,6 +5390,8 @@ function TaskDesktopNavigation({
 
 function TaskConfigView({
   keyboardHelpShortcut,
+  showKeyboardShortcuts,
+  onShowKeyboardShortcuts,
   userId,
   displayName,
   onSignOut,
@@ -5321,11 +5402,10 @@ function TaskConfigView({
   inAppReminderStatus,
   onEnableBrowserReminders,
   onDisableBrowserReminders,
-  portabilityService,
-  replaceAvailable,
-  replaceUnavailableReason,
 }: {
   keyboardHelpShortcut: string;
+  showKeyboardShortcuts: boolean;
+  onShowKeyboardShortcuts: () => void;
   userId: string;
   displayName: string;
   onSignOut: () => Promise<void> | void;
@@ -5336,81 +5416,114 @@ function TaskConfigView({
   inAppReminderStatus: 'available' | 'delayed';
   onEnableBrowserReminders: () => Promise<void>;
   onDisableBrowserReminders: () => Promise<void>;
-  portabilityService: TaskPortabilityService;
-  replaceAvailable: boolean;
-  replaceUnavailableReason?: string;
 }) {
-  const macNative = getDeclaredNativePlatform() === 'macos';
+  const nativePlatform = getDeclaredNativePlatform();
+  const macNative = nativePlatform === 'macos';
   return (
     <div className="space-y-4">
-      <p
-        data-task-keyboard-help-cue
-        className="text-xs text-muted-foreground"
-      >
-        Press{' '}
-        <kbd className="font-mono text-foreground">{keyboardHelpShortcut}</kbd>
-        {' '}to view all keyboard commands.
-      </p>
+      <Card aria-labelledby="task-config-features">
+        <CardHeader>
+          <CardTitle id="task-config-features">Features</CardTitle>
+        </CardHeader>
+        <CardContent className="divide-y divide-border p-0">
+          <TaskFeatureRow
+            title="Notifications"
+            description={nativePlatform
+              ? 'Receive native task reminders on this device when support becomes available.'
+              : inAppReminderStatus === 'delayed'
+                ? 'Receive scheduled task reminders in this browser. Reminder delivery is delayed and will retry automatically.'
+                : 'Receive scheduled task reminders in this browser, including while Tasks is closed.'}
+            dataStatus={inAppReminderStatus}
+          >
+            {nativePlatform ? (
+              <span className="max-w-32 text-right text-xs text-muted-foreground">
+                Native Notifications Coming Later
+              </span>
+            ) : (
+              <TaskWebPushCapability
+                model={webPush}
+                connected={connected}
+                onEnable={onEnableBrowserReminders}
+                onDisable={onDisableBrowserReminders}
+              />
+            )}
+          </TaskFeatureRow>
+          <TaskFeatureRow
+            title="Automatically Sort Anytime and Someday"
+            description="Sorts within each Area by Deadline, Today horizon, and Actionability while preserving manual order among equal tasks."
+          >
+            <Switch
+              id="tasks-automatic-list-sorting"
+              aria-label="Automatically Sort Anytime and Someday"
+              checked={automaticListSorting.enabled}
+              disabled={automaticListSorting.loading || automaticListSorting.pending}
+              onCheckedChange={(enabled) => {
+                void automaticListSorting.setEnabled(enabled).catch((updateError) => {
+                  showTaskError('List Sorting Could Not Be Updated', updateError);
+                });
+              }}
+            />
+          </TaskFeatureRow>
+          {macNative ? (
+            <TaskFeatureRow
+              title="Global Quick Entry"
+              description="Opens the new-task editor from any Mac application."
+            >
+              <TaskMacQuickEntrySettings />
+            </TaskFeatureRow>
+          ) : null}
+          {showKeyboardShortcuts ? (
+            <TaskFeatureRow
+              title="Keyboard Shortcuts"
+              description={`Press ${keyboardHelpShortcut} to view all keyboard commands at any time.`}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onShowKeyboardShortcuts}
+              >
+                Show
+              </Button>
+            </TaskFeatureRow>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <TaskAreaSettings hierarchy={hierarchy} userId={userId} />
 
-      <TaskConfigSection title="List Sorting" icon={TASK_ICONS.Anytime}>
-        <div className="flex items-center gap-3">
-          <label
-            htmlFor="tasks-automatic-list-sorting"
-            className="text-sm text-foreground"
-          >
-            Automatically Sort Anytime and Someday
-          </label>
-          <Switch
-            id="tasks-automatic-list-sorting"
-            checked={automaticListSorting.enabled}
-            disabled={automaticListSorting.loading || automaticListSorting.pending}
-            onCheckedChange={(enabled) => {
-              void automaticListSorting.setEnabled(enabled).catch((updateError) => {
-                showTaskError('List Sorting Could Not Be Updated', updateError);
-              });
-            }}
-          />
-        </div>
-      </TaskConfigSection>
-
-      <TaskConfigSection title="Browser Reminders" icon={TASK_ICONS.Reminder}>
-        {webPush ? (
-          <TaskWebPushCapability
-            model={webPush}
-            connected={connected}
-            onEnable={onEnableBrowserReminders}
-            onDisable={onDisableBrowserReminders}
-          />
-        ) : (
-          <p className="text-sm text-muted-foreground">Unavailable for this installation</p>
-        )}
-      </TaskConfigSection>
-
-      <TaskConfigSection title="Synchronization" icon={TASK_ICONS.CloudSync}>
-        <TaskSyncDiagnosticsDialog
-          triggerVariant="config"
-          inAppReminderStatus={inAppReminderStatus}
-        />
-      </TaskConfigSection>
-
-      <TaskConfigSection title="Backup and Restore" icon={TASK_ICONS.DataPortability}>
-        <TaskDataPortabilityDialog
-          service={portabilityService}
-          replaceAvailable={replaceAvailable}
-          replaceUnavailableReason={replaceUnavailableReason}
-          triggerVariant="config"
-        />
-      </TaskConfigSection>
-
-      {macNative ? <TaskMacQuickEntrySettings /> : null}
+      <TaskSyncStatusCard />
 
       <InstalledAppAccountCard
         userId={userId}
         displayName={displayName}
         onSignOut={onSignOut}
       />
+    </div>
+  );
+}
+
+function TaskFeatureRow({
+  title,
+  description,
+  children,
+  dataStatus,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+  dataStatus?: 'available' | 'delayed';
+}) {
+  return (
+    <div
+      className="flex items-center justify-between gap-4 px-6 py-4"
+      data-in-app-reminder-status={dataStatus}
+    >
+      <div className="min-w-0">
+        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+      </div>
+      <div className="shrink-0">{children}</div>
     </div>
   );
 }
@@ -5422,18 +5535,21 @@ type TaskMacShortcutResult = {
 };
 
 function TaskMacQuickEntrySettings() {
-  const [shortcut, setShortcut] = useState(
-    () => getDeclaredNativeQuickEntryShortcut() ?? 'Not Set',
-  );
+  const [shortcut, setShortcut] = useState(() => getDeclaredNativeQuickEntryShortcut());
   const [recording, setRecording] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const handleResult = (event: Event) => {
       const detail = (event as CustomEvent<TaskMacShortcutResult>).detail;
-      if (detail?.success === true && typeof detail.display === 'string') {
-        setShortcut(detail.display);
-        setStatus('Global Quick Entry shortcut saved');
+      if (detail?.success === true) {
+        const nextShortcut = typeof detail.display === 'string' && detail.display.trim() !== ''
+          ? detail.display
+          : null;
+        setShortcut(nextShortcut);
+        setStatus(nextShortcut
+          ? 'Global Quick Entry shortcut saved'
+          : 'Global Quick Entry turned off');
       } else {
         setStatus(
           typeof detail?.message === 'string'
@@ -5480,54 +5596,48 @@ function TaskMacQuickEntrySettings() {
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [recording]);
 
+  const clearShortcut = () => {
+    setStatus(null);
+    setRecording(false);
+    if (!clearTaskNativeQuickEntryShortcut()) {
+      setStatus('The native shortcut recorder is unavailable');
+    }
+  };
+
   return (
-    <TaskConfigSection title="Global Quick Entry" icon={TASK_ICONS.AddTask}>
-      <div className="flex flex-col gap-2 sm:items-end">
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="relative w-28">
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className={cn(
+            'w-full justify-start overflow-hidden font-mono',
+            shortcut && !recording ? 'pr-8' : undefined,
+          )}
           aria-pressed={recording}
           onClick={() => {
             setStatus(null);
             setRecording(true);
           }}
         >
-          {recording ? 'Type Shortcut...' : shortcut}
+          <span className="truncate">{recording ? 'Type...' : shortcut ?? 'Not Set'}</span>
         </Button>
-        <p className="max-w-sm text-xs text-muted-foreground sm:text-right" aria-live="polite">
-          {status ?? (
-            recording
-              ? 'Press a modified key combination, or Escape to cancel'
-              : 'Opens the new-task editor from any Mac application'
-          )}
-        </p>
+        {shortcut && !recording ? (
+          <button
+            type="button"
+            aria-label="Clear Global Quick Entry Shortcut"
+            className="absolute inset-y-0 right-0 flex w-8 items-center justify-center rounded-r-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            onClick={clearShortcut}
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
-    </TaskConfigSection>
-  );
-}
-
-function TaskConfigSection({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: LucideIcon;
-  children: ReactNode;
-}) {
-  const headingId = `task-config-${title.toLowerCase().replaceAll(' ', '-')}`;
-  return (
-    <section
-      aria-labelledby={headingId}
-      className="flex flex-col gap-4 rounded-md border border-[hsl(var(--grid-sticky-line))] p-4 sm:flex-row sm:items-center"
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <h3 id={headingId} className="text-sm font-semibold text-foreground">{title}</h3>
-      </div>
-      <div className="sm:ml-auto">{children}</div>
-    </section>
+      <p className="max-w-40 text-right text-[11px] text-muted-foreground" aria-live="polite">
+        {status ?? (recording ? 'Press a modified key, or Escape to cancel' : '')}
+      </p>
+    </div>
   );
 }
 
@@ -5537,66 +5647,52 @@ function TaskWebPushCapability({
   onEnable,
   onDisable,
 }: {
-  model: TaskWebPushModel;
+  model: TaskWebPushModel | null;
   connected: boolean;
   onEnable: () => Promise<void>;
   onDisable: () => Promise<void>;
 }) {
-  if (model.status === 'checking') return null;
+  if (!model) {
+    return <span className="text-xs text-muted-foreground">Unavailable</span>;
+  }
+  if (model.status === 'checking') {
+    return <span className="text-xs text-muted-foreground">Checking...</span>;
+  }
 
   const active = model.status === 'active';
   const canEnable = connected && ['available', 'revoked', 'error'].includes(model.status);
-  const heading = (() => {
-    switch (model.status) {
-      case 'active': return 'Browser Reminders On';
-      case 'available': return 'Background Reminders Off';
-      case 'denied': return 'Notifications Blocked';
-      case 'unsupported': return 'Background Reminders Unavailable';
-      case 'revoked': return 'Reminder Subscription Expired';
-      case 'error': return 'Background Reminders Degraded';
-      default: return 'Background Reminders Unconfigured';
-    }
-  })();
-  const detail = (() => {
-    if (!connected) return 'Background reminders require connected task storage.';
-    switch (model.status) {
-      case 'active':
-      return 'This browser can receive reminders while Tasks is closed. Notifications show task summaries.';
-      case 'available':
-        return 'Enable notifications on this browser to receive reminders while Tasks is closed.';
-      case 'denied':
-        return 'Allow notifications in this browser or system settings. In-app reminders remain available.';
-      case 'unsupported':
-        return 'This browser cannot receive standards-based Web Push. In-app reminders remain available.';
-      case 'revoked':
-        return 'The notification provider expired this browser subscription. Enable it again to register a new one.';
-      case 'error':
-        return 'The browser reminder capability could not be verified. In-app reminders remain available.';
-      default:
-        return 'The Web Push provider keys have not been configured for this installation.';
-    }
-  })();
 
+  if (active) {
+    return (
+      <Switch
+        aria-label="Notifications"
+        checked
+        disabled={model.busy}
+        onCheckedChange={(enabled) => {
+          if (!enabled) void onDisable();
+        }}
+      />
+    );
+  }
+  if (canEnable) {
+    return (
+      <Button type="button" variant="outline" size="sm" disabled={model.busy} onClick={() => void onEnable()}>
+        Enable
+      </Button>
+    );
+  }
+
+  const status = !connected
+    ? 'Requires Sync'
+    : model.status === 'denied'
+      ? 'Blocked in Browser Settings'
+      : model.status === 'unsupported'
+        ? 'Unavailable'
+        : 'Not Configured';
   return (
-    <div
-      aria-label="Browser Reminder Capability"
-      aria-live="polite"
-      className="flex flex-col gap-3 sm:items-end"
-    >
-      <div className="min-w-0 sm:text-right">
-        <p className={`text-sm font-medium ${active ? 'text-success' : 'text-warning'}`}>{heading}</p>
-        <p className="mt-1 max-w-xl text-xs text-muted-foreground">{detail}</p>
-      </div>
-      {active ? (
-        <Button type="button" variant="outline" size="sm" disabled={model.busy} onClick={() => void onDisable()}>
-          Disable
-        </Button>
-      ) : canEnable ? (
-        <Button type="button" variant="outline" size="sm" disabled={model.busy} onClick={() => void onEnable()}>
-          Enable
-        </Button>
-      ) : null}
-    </div>
+    <span aria-live="polite" className="max-w-32 text-right text-xs text-muted-foreground">
+      {status}
+    </span>
   );
 }
 
@@ -7421,10 +7517,10 @@ function TaskRow({
             </span>
           ) : null}
         </TitleControl>
-        {!bulkSelection && !selected ? (
+        {!bulkSelection ? (
           <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
             <TaskSourceIndicator task={task} compact />
-            <DropdownMenu
+            {!selected ? <DropdownMenu
               open={actionMenuOpen}
               onOpenChange={(open) => {
                 setActionMenuOpen(open);
@@ -7545,7 +7641,7 @@ function TaskRow({
             )}
               </>
               </DropdownMenuContent>
-            </DropdownMenu>
+            </DropdownMenu> : null}
           </div>
         ) : null}
       </div>
@@ -8103,27 +8199,48 @@ function TaskEditor({
   );
 }
 
-async function writeTaskClipboardText(
-  textPromise: Promise<string>,
+async function writeTaskClipboardRepresentations(
+  representationsPromise: Promise<TaskClipboardRepresentations>,
   event: ClipboardEvent,
 ): Promise<void> {
   if (
     typeof ClipboardItem !== 'undefined'
     && globalThis.navigator?.clipboard?.write
   ) {
-    const item = new ClipboardItem({
-      'text/plain': textPromise.then((text) => new Blob([text], { type: 'text/plain' })),
-    });
+    const clipboardItemData: Record<string, Promise<Blob>> = {
+      'text/plain': representationsPromise.then(({ plainText }) => (
+        new Blob([plainText], { type: 'text/plain' })
+      )),
+      'text/html': representationsPromise.then(({ html }) => (
+        new Blob([html], { type: 'text/html' })
+      )),
+    };
+    if (
+      typeof ClipboardItem.supports === 'function'
+      && ClipboardItem.supports(TASK_CLIPBOARD_WEB_MIME_TYPE)
+    ) {
+      clipboardItemData[TASK_CLIPBOARD_WEB_MIME_TYPE] = representationsPromise
+        .then(({ structuredText }) => new Blob(
+          [structuredText],
+          { type: TASK_CLIPBOARD_MIME_TYPE },
+        ));
+    }
+    const item = new ClipboardItem(clipboardItemData);
     await globalThis.navigator.clipboard.write([item]);
     return;
   }
-  const text = await textPromise;
+  const representations = await representationsPromise;
   if (event.clipboardData) {
-    event.clipboardData.setData('text/plain', text);
+    event.clipboardData.setData('text/plain', representations.plainText);
+    event.clipboardData.setData('text/html', representations.html);
+    event.clipboardData.setData(
+      TASK_CLIPBOARD_MIME_TYPE,
+      representations.structuredText,
+    );
     return;
   }
   if (globalThis.navigator?.clipboard?.writeText) {
-    await globalThis.navigator.clipboard.writeText(text);
+    await globalThis.navigator.clipboard.writeText(representations.structuredText);
     return;
   }
   throw new Error('The browser clipboard is unavailable');

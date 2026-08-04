@@ -81,6 +81,24 @@ const viewNavigationCommands: Record<string, TaskKeyboardCommand> = {
   '6': 'view-config',
 };
 
+const nativeQuickEntryMetadataCommands = new Set<TaskKeyboardCommand>([
+  'open-start-date',
+  'clear-start',
+  'cycle-horizon',
+  'focus-reminder',
+  'open-deadline',
+  'cycle-actionability',
+  'set-someday',
+  'open-checklist',
+  'cycle-area',
+]);
+
+export function isTaskNativeQuickEntryMetadataCommand(
+  command: TaskKeyboardCommand,
+): boolean {
+  return nativeQuickEntryMetadataCommands.has(command);
+}
+
 export function getTaskKeyboardCommand(
   gesture: TaskKeyboardGesture,
   macLikePlatform: boolean,

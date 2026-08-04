@@ -39,4 +39,19 @@ describe("shared toast primitives", () => {
     expect(toast).toHaveClass("data-[state=closed]:slide-out-to-bottom-full");
     expect(toast).not.toHaveClass("data-[state=open]:slide-in-from-top-full");
   });
+
+  it("uses the semantic info surface for informational toasts", () => {
+    const { getByTestId } = render(
+      <ToastProvider>
+        <Toast data-testid="toast" open variant="info">
+          Reminder
+        </Toast>
+        <ToastViewport />
+      </ToastProvider>,
+    );
+
+    expect(getByTestId("toast")).toHaveClass("border-info");
+    expect(getByTestId("toast")).toHaveClass("bg-info");
+    expect(getByTestId("toast")).toHaveClass("text-info-foreground");
+  });
 });

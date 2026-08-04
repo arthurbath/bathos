@@ -16,7 +16,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
-import { isMacLikeTaskPlatform } from '@/modules/tasks/domain/taskSelection';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import {
@@ -170,11 +169,7 @@ export function TaskKeyboardHelpDialog({
   onCloseAutoFocus: () => void;
 }) {
   const platform = globalThis.navigator?.platform ?? '';
-  const currentPlatform = isMacLikeTaskPlatform(platform)
-    ? 'mac'
-    : /Win/i.test(platform)
-      ? 'windows'
-      : null;
+  const useWindowsShortcuts = /Win/i.test(platform);
   const groups = [
     {
       label: 'Standard Actions',
@@ -187,7 +182,7 @@ export function TaskKeyboardHelpDialog({
         ['Copy Focused or Selected Tasks', '⌘C', '⌃C'],
         ['Paste Tasks or Text', '⌘V', '⌃V'],
         ['Close Open Task', '⌘Return / ⌘Escape', '⌃Return'],
-        ['Show Keyboard Commands', '⌘/', '⌃/'],
+        ['Show Keyboard Shortcuts', '⌘/', '⌃/'],
       ],
     },
     {
@@ -202,7 +197,7 @@ export function TaskKeyboardHelpDialog({
       ],
     },
     {
-      label: 'Tasks-Specific Actions',
+      label: 'Tasks-specific Actions',
       commands: [
         ['Open/Close Task', '⌃Q', '⌥⇧Q'],
         ['Open Previous Task', '⌃W', '⌥⇧W'],
@@ -245,7 +240,7 @@ export function TaskKeyboardHelpDialog({
           onCloseAutoFocus();
         }}
       >
-        <DialogHeader><DialogTitle>Keyboard Commands</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Keyboard Shortcuts</DialogTitle></DialogHeader>
         <DialogBody className="space-y-5 pt-4">
           {groups.map((group) => {
             const headingId = `task-keyboard-${group.label.toLocaleLowerCase().replaceAll(' ', '-')}`;
@@ -257,30 +252,21 @@ export function TaskKeyboardHelpDialog({
                 >
                   {group.label}
                 </h3>
-                <div className="overflow-x-auto border-y border-[hsl(var(--grid-sticky-line))]">
-                  <table className="w-full min-w-[30rem] table-fixed text-left text-sm">
-                    <thead className="text-xs text-muted-foreground">
-                      <tr className="border-b border-[hsl(var(--grid-sticky-line))]">
-                        <th scope="col" className="w-[45%] py-2 pr-3 font-medium">Action</th>
-                        <th scope="col" className="w-[27.5%] px-2 py-2 font-medium">
-                          Mac{currentPlatform === 'mac' ? ' · Current' : ''}
-                        </th>
-                        <th scope="col" className="w-[27.5%] py-2 pl-2 font-medium">
-                          Windows{currentPlatform === 'windows' ? ' · Current' : ''}
-                        </th>
-                      </tr>
-                    </thead>
+                <div className="border-y border-[hsl(var(--grid-sticky-line))]">
+                  <table className="w-full table-fixed text-left text-sm">
                     <tbody className="divide-y divide-[hsl(var(--grid-sticky-line))]">
                       {group.commands.map(([description, macKeys, windowsKeys]) => (
                         <tr key={description}>
-                          <th scope="row" className="py-2 pr-3 font-normal text-foreground">
+                          <th
+                            scope="row"
+                            className="w-[65%] py-2 pr-3 font-normal text-foreground"
+                          >
                             {description}
                           </th>
-                          <td className="px-2 py-2">
-                            <kbd className="font-sans text-muted-foreground">{macKeys}</kbd>
-                          </td>
-                          <td className="py-2 pl-2">
-                            <kbd className="font-sans text-muted-foreground">{windowsKeys}</kbd>
+                          <td className="w-[35%] py-2 pl-3">
+                            <kbd className="font-sans text-muted-foreground">
+                              {useWindowsShortcuts ? windowsKeys : macKeys}
+                            </kbd>
                           </td>
                         </tr>
                       ))}

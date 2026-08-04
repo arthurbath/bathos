@@ -191,9 +191,9 @@ export function TaskMetadataDrawerFields({
               <Button
                 asChild={primaryLinkHref !== null}
                 type={primaryLinkHref === null ? 'button' : undefined}
-                variant="outline"
+                variant="outline-info"
                 size="icon"
-                className="h-10 w-10 shrink-0 border-input bg-background"
+                className="h-10 w-10 shrink-0"
                 aria-label={`Open ${primaryLinkLabel}`}
                 disabled={primaryLinkHref === null}
               >

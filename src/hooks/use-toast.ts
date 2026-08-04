@@ -2,8 +2,9 @@ import * as React from "react";
 
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
-const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
+// Keep a dismissed toast just long enough for its exit animation, then release it.
+// This matters now that the shared viewport can retain more than one live toast.
+const TOAST_REMOVE_DELAY = 1000;
 
 type ToasterToast = ToastProps & {
   id: string;
@@ -73,7 +74,7 @@ export const reducer = (state: State, action: Action): State => {
     case "ADD_TOAST":
       return {
         ...state,
-        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+        toasts: [action.toast, ...state.toasts],
       };
 
     case "UPDATE_TOAST":
@@ -134,7 +135,7 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">;
 
-function toast({ ...props }: Toast) {
+function toast({ onOpenChange, ...props }: Toast) {
   const id = genId();
 
   const update = (props: ToasterToast) =>
@@ -151,6 +152,7 @@ function toast({ ...props }: Toast) {
       id,
       open: true,
       onOpenChange: (open) => {
+        onOpenChange?.(open);
         if (!open) dismiss();
       },
     },
@@ -183,4 +185,11 @@ function useToast() {
   };
 }
 
-export { useToast, toast };
+function resetToastStateForTests() {
+  for (const timeout of toastTimeouts.values()) clearTimeout(timeout);
+  toastTimeouts.clear();
+  memoryState = { toasts: [] };
+  listeners.forEach((listener) => listener(memoryState));
+}
+
+export { useToast, toast, resetToastStateForTests };

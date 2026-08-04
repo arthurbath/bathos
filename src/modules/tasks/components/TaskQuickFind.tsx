@@ -524,15 +524,12 @@ export function TaskSearchResultsView({
         />
       </div>
       <section aria-label="Task Search Results">
-        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          Tasks
-        </h3>
         {loading ? (
           <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
         ) : error ? (
           <p role="alert" className="py-6 text-center text-sm text-destructive">Tasks Could Not Be Searched</p>
         ) : !deferredQuery ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Enter a Search Term</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">Enter a search term</p>
         ) : results.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No matching tasks</p>
         ) : (

@@ -203,6 +203,119 @@ describe('TaskMarkdownNotes', () => {
     expect(window.getSelection()?.focusOffset).toBe(1);
   });
 
+  it('extends a selection forward to a Shift-clicked Markdown source position', () => {
+    const notes = [
+      '# Heading',
+      '**bold words** and plain text',
+      '- final bullet words',
+    ].join('\n');
+    const { container } = render(
+      <TaskMarkdownNotes
+        id="notes-forward-shift-click"
+        notes={notes}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    editor.focus();
+    setCaret(findTextNode(editor, 'Heading'), 2);
+    fireSelectionChange();
+
+    const focusNode = findTextNode(editor, 'final bullet words');
+    const restoreCaretApi = mockCaretPositionFromPoint(focusNode, 5);
+    fireEvent.mouseDown(focusNode.parentElement ?? editor, {
+      button: 0,
+      shiftKey: true,
+      clientX: 120,
+      clientY: 80,
+    });
+    fireEvent.mouseUp(document, { button: 0, shiftKey: true });
+    restoreCaretApi();
+
+    const selection = window.getSelection();
+    expect(selection?.anchorNode?.textContent).toBe('Heading');
+    expect(selection?.anchorOffset).toBe(2);
+    expect(selection?.focusNode?.textContent).toBe('final bullet words');
+    expect(selection?.focusOffset).toBe(5);
+    expect(Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    ).every((line) => line.dataset.taskNotePresentation === 'source')).toBe(true);
+  });
+
+  it('extends a selection backward through the WebKit caret-range fallback', () => {
+    const notes = [
+      '# Heading',
+      '**bold words** and plain text',
+      '- final bullet words',
+    ].join('\n');
+    const { container } = render(
+      <TaskMarkdownNotes
+        id="notes-backward-shift-click"
+        notes={notes}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    editor.focus();
+    setCaret(findTextNode(editor, 'final bullet words'), 5);
+    fireSelectionChange();
+
+    const focusNode = findTextNode(editor, 'Heading');
+    const restoreCaretApi = mockCaretRangeFromPoint(focusNode, 2);
+    fireEvent.mouseDown(focusNode.parentElement ?? editor, {
+      button: 0,
+      shiftKey: true,
+      clientX: 40,
+      clientY: 10,
+    });
+    fireEvent.mouseUp(document, { button: 0, shiftKey: true });
+    restoreCaretApi();
+
+    const selection = window.getSelection();
+    expect(selection?.anchorNode?.textContent).toBe('final bullet words');
+    expect(selection?.anchorOffset).toBe(5);
+    expect(selection?.focusNode?.textContent).toBe('Heading');
+    expect(selection?.focusOffset).toBe(2);
+    expect(Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    ).every((line) => line.dataset.taskNotePresentation === 'source')).toBe(true);
+  });
+
+  it('uses Shift-clicked link text as a selection edge without opening the link', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <TaskMarkdownNotes
+        id="notes-link-shift-click"
+        notes={'Start here\n[Task link](https://example.test/task)'}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    editor.focus();
+    setCaret(findTextNode(editor, 'Start here'), 2);
+    fireSelectionChange();
+
+    const linkLabel = findTextNode(editor, 'Task link');
+    const restoreCaretApi = mockCaretPositionFromPoint(linkLabel, 4);
+    fireEvent.mouseDown(linkLabel.parentElement ?? editor, {
+      button: 0,
+      shiftKey: true,
+      clientX: 80,
+      clientY: 40,
+    });
+    fireEvent.mouseUp(document, { button: 0, shiftKey: true });
+    fireEvent.click(linkLabel.parentElement ?? editor, { shiftKey: true });
+    restoreCaretApi();
+
+    expect(open).not.toHaveBeenCalled();
+    expect(window.getSelection()?.anchorNode?.textContent).toBe('Start here');
+    expect(window.getSelection()?.focusNode?.textContent).toBe('Task link');
+    open.mockRestore();
+  });
+
   it('returns every line to semantic presentation when the editor loses focus', () => {
     const { container } = render(
       <TaskMarkdownNotes
@@ -593,4 +706,47 @@ function findTextNode(element: HTMLElement, text: string): Text {
     node = walker.nextNode();
   }
   throw new Error(`Could not find text node ${text}`);
+}
+
+function mockCaretPositionFromPoint(node: Node, offset: number): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint');
+  Object.defineProperty(document, 'caretPositionFromPoint', {
+    configurable: true,
+    value: vi.fn(() => ({ offsetNode: node, offset })),
+  });
+  return () => restoreDocumentProperty('caretPositionFromPoint', descriptor);
+}
+
+function mockCaretRangeFromPoint(node: Node, offset: number): () => void {
+  const positionDescriptor = Object.getOwnPropertyDescriptor(
+    document,
+    'caretPositionFromPoint',
+  );
+  const rangeDescriptor = Object.getOwnPropertyDescriptor(document, 'caretRangeFromPoint');
+  const range = document.createRange();
+  range.setStart(node, offset);
+  range.collapse(true);
+  Object.defineProperty(document, 'caretPositionFromPoint', {
+    configurable: true,
+    value: undefined,
+  });
+  Object.defineProperty(document, 'caretRangeFromPoint', {
+    configurable: true,
+    value: vi.fn(() => range),
+  });
+  return () => {
+    restoreDocumentProperty('caretPositionFromPoint', positionDescriptor);
+    restoreDocumentProperty('caretRangeFromPoint', rangeDescriptor);
+  };
+}
+
+function restoreDocumentProperty(
+  property: 'caretPositionFromPoint' | 'caretRangeFromPoint',
+  descriptor: PropertyDescriptor | undefined,
+): void {
+  if (descriptor === undefined) {
+    delete (document as Document & Record<string, unknown>)[property];
+    return;
+  }
+  Object.defineProperty(document, property, descriptor);
 }

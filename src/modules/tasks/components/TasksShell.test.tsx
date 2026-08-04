@@ -28,6 +28,7 @@ import { getTasksStorageStatusLabel } from './tasksStorageStatus';
 import { TASK_NATIVE_COMMAND_EVENT, TasksShell } from './TasksShell';
 import { useBathosFormInteractions } from '@/platform/hooks/useCommandEnterSubmit';
 import { TASK_CLIPBOARD_KIND } from '@/modules/tasks/domain/taskClipboard';
+import { TASK_CLIPBOARD_MIME_TYPE } from '@/modules/tasks/domain/taskClipboardRepresentations';
 import { NEW_TASK_DRAFT_ID } from '@/modules/tasks/domain/taskCreationDraft';
 import {
   UnsafeTaskRedoError,
@@ -217,27 +218,17 @@ vi.mock('./TaskAreaDetailView', () => ({
   ),
 }));
 
-vi.mock('./TaskSyncDiagnosticsDialog', () => ({
-  TaskSyncDiagnosticsDialog: ({
-    triggerVariant,
-    inAppReminderStatus,
-  }: {
-    triggerVariant?: string;
-    inAppReminderStatus?: string;
-  }) => (
-    <button
-      type="button"
-      data-trigger-variant={triggerVariant}
-      data-in-app-reminder-status={inAppReminderStatus}
-    >
-      Synchronization Status
-    </button>
-  ),
-}));
-
-vi.mock('./TaskDataPortabilityDialog', () => ({
-  TaskDataPortabilityDialog: ({ triggerVariant }: { triggerVariant?: string }) => (
-    <button type="button" data-trigger-variant={triggerVariant}>Manage Backups</button>
+vi.mock('./TaskSyncStatusCard', () => ({
+  TaskSyncStatusCard: () => (
+    <section data-task-sync-status>
+      <h3>Sync Status</h3>
+      <span>Health</span>
+      <span>Healthy</span>
+      <span>Pending Changes</span>
+      <span>0</span>
+      <span>Last Successful Sync</span>
+      <span>2026 Aug 3, 5:55 PM</span>
+    </section>
   ),
 }));
 
@@ -643,7 +634,12 @@ describe('TasksShell', () => {
     Reflect.deleteProperty(window, '__bathosNativeApp');
     Reflect.deleteProperty(window, '__bathosTasksNative');
     Reflect.deleteProperty(window, 'webkit');
-    mockToast.mockReset();
+    let toastSequence = 0;
+    mockToast.mockReset().mockImplementation(() => ({
+      id: `toast-${toastSequence += 1}`,
+      dismiss: vi.fn(),
+      update: vi.fn(),
+    }));
     mockPrepareForSignOut.mockReset().mockResolvedValue(undefined);
     mockTasksRuntime.mockReset().mockReturnValue(defaultTasksRuntime());
     mockTaskList.mockReset();
@@ -1744,7 +1740,6 @@ describe('TasksShell', () => {
       });
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
-          title: 'Task Moved',
           description: 'The task now appears in Anytime.',
         });
       });
@@ -1917,9 +1912,77 @@ describe('TasksShell', () => {
 
     try {
       expect(container.textContent).toContain('Loading Tasks');
-      expect(container.textContent).not.toContain('No Tasks');
+      expect(container.textContent).not.toContain('No tasks');
     } finally {
       cleanup(root, container);
+    }
+  });
+
+  it('uses the celebratory sentence-case empty state across every primary task list', () => {
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [] });
+
+    for (const route of ['today', 'upcoming', 'anytime', 'someday', 'done']) {
+      const { container, root } = renderShell(`/tasks/${route}`);
+      try {
+        const emptyState = container.querySelector<HTMLElement>('[data-task-empty-state]');
+        expect(emptyState).toBeTruthy();
+        expect(emptyState?.querySelector('svg.lucide-sparkles')).toHaveClass('h-8', 'w-8');
+        expect(emptyState?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+        expect(emptyState).toHaveTextContent(route === 'done' ? 'Done is empty' : 'No tasks');
+      } finally {
+        cleanup(root, container);
+      }
+    }
+  });
+
+  it('keeps the active quick filter visible with the celebratory no-match state', () => {
+    mockTaskQuickFilterPreference.mockReturnValue({
+      filter: 'waiting',
+      setFilter: vi.fn(),
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [taskTodoFixture({ ...task, actionability: 'actionable' })],
+    });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      expect(container.querySelector('[data-task-active-quick-filter]'))
+        .toHaveTextContent('Only Waiting');
+      const emptyState = container.querySelector<HTMLElement>('[data-task-empty-state]');
+      expect(emptyState).toHaveTextContent('No tasks match this filter');
+      expect(emptyState?.querySelector('svg.lucide-sparkles')).toBeTruthy();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps full Search empty states sentence-cased, icon-free, and unbucketed', () => {
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [] });
+    mockTaskSearch.mockReturnValue({ tasks: [], loading: false, error: null });
+
+    const noQuery = renderShell('/tasks/search');
+    try {
+      const results = noQuery.container.querySelector<HTMLElement>(
+        '[aria-label="Task Search Results"]',
+      )!;
+      expect(results).toHaveTextContent('Enter a search term');
+      expect(results.querySelector('svg.lucide-sparkles')).toBeNull();
+      expect(results.querySelector('h3')).toBeNull();
+    } finally {
+      cleanup(noQuery.root, noQuery.container);
+    }
+
+    const noMatches = renderShell('/tasks/search?q=unfindable');
+    try {
+      const results = noMatches.container.querySelector<HTMLElement>(
+        '[aria-label="Task Search Results"]',
+      )!;
+      expect(results).toHaveTextContent('No matching tasks');
+      expect(results.querySelector('svg.lucide-sparkles')).toBeNull();
+      expect(results.querySelector('h3')).toBeNull();
+    } finally {
+      cleanup(noMatches.root, noMatches.container);
     }
   });
 
@@ -2244,7 +2307,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('exposes an editable Primary Link in the active task row', () => {
+  it('keeps an editable Primary Link in the summary row while the task is open', async () => {
     mockTaskList.mockReturnValue({
       ...defaultTaskList(),
       tasks: [{
@@ -2264,6 +2327,20 @@ describe('TasksShell', () => {
       expect(link?.getAttribute('href')).toBe('https://example.test/source');
       expect(link?.target).toBe('_blank');
       expect(link?.title).toBe('https://example.test/source');
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-title-control]')?.click();
+        await Promise.resolve();
+      });
+
+      expect(container.querySelector('input[aria-label="Primary Link"]')).toBeTruthy();
+      const openLink = container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open Primary Link for Existing task"]',
+      );
+      expect(openLink?.getAttribute('href')).toBe('https://example.test/source');
+      expect(openLink?.target).toBe('_blank');
+      expect(openLink?.title).toBe('https://example.test/source');
+      expect(container.querySelector('[aria-label="Actions for Existing task"]')).toBeNull();
     } finally {
       cleanup(root, container);
     }
@@ -2809,11 +2886,16 @@ describe('TasksShell', () => {
   });
 
   it('opens keyboard help from its platform shortcut after shifted type-to-search', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell();
 
     try {
-      expect(container.querySelector('[aria-label="Keyboard Commands"]')).toBeNull();
+      expect(container.querySelector('[aria-label="Keyboard Shortcuts"]')).toBeNull();
       const titleButton = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
       titleButton.focus();
       await act(async () => {
@@ -2832,17 +2914,16 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
       const helpEvent = new KeyboardEvent('keydown', {
-        key: '/', ctrlKey: true, bubbles: true, cancelable: true,
+        key: '/', metaKey: true, bubbles: true, cancelable: true,
       });
       await act(async () => {
         window.dispatchEvent(helpEvent);
       });
       expect(helpEvent.defaultPrevented).toBe(true);
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-      expect(dialog.textContent).toContain('Keyboard Commands');
-      expect(dialog.textContent).toContain('Show Keyboard Commands');
+      expect(dialog.textContent).toContain('Keyboard Shortcuts');
+      expect(dialog.textContent).toContain('Show Keyboard Shortcuts');
       expect(dialog.textContent).toContain('⌘/');
-      expect(dialog.textContent).toContain('⌃/');
       expect(dialog.textContent).toContain('Open Next');
       expect(dialog.textContent).toContain('Toggle Done');
       expect(dialog.textContent).not.toContain('⌘1');
@@ -2854,18 +2935,26 @@ describe('TasksShell', () => {
       expect(dialog.textContent).toContain('Start Bulk Selection With Task');
       expect(dialog.textContent).toContain('Set Start to Someday');
       expect(dialog.textContent).toContain('⌘Z / ⌃Z');
-      expect(dialog.textContent).toContain('⌃Z / ⌥⇧Z');
-      expect(dialog.textContent).toContain('⌃R⌥⇧R');
-      expect(dialog.textContent).toContain('⌃T⌥⇧T');
-      expect(dialog.textContent).toContain('⌃A⌥⇧A');
-      expect(dialog.textContent).toContain('⌃D⌥⇧D');
-      expect(dialog.textContent).toContain('⌃F⌥⇧F');
-      expect(dialog.textContent).toContain('⌃G⌥⇧G');
-      expect(dialog.textContent).toContain('⌃X⌥⇧X');
-      expect(dialog.textContent).toContain('⌃B⌥⇧B');
-      expect(dialog.textContent).toContain('⌃Y⌥⇧Y');
+      expect(dialog.textContent).toContain('⌃R');
+      expect(dialog.textContent).toContain('⌃T');
+      expect(dialog.textContent).toContain('⌃A');
+      expect(dialog.textContent).toContain('⌃D');
+      expect(dialog.textContent).toContain('⌃F');
+      expect(dialog.textContent).toContain('⌃G');
+      expect(dialog.textContent).toContain('⌃X');
+      expect(dialog.textContent).toContain('⌃B');
+      expect(dialog.textContent).toContain('⌃Y');
+      expect(dialog.textContent).not.toContain('⌥⇧Q');
       expect(dialog.textContent).not.toContain('⌃N');
       expect(dialog.textContent).toContain('⌘Return / ⌘Escape');
+      expect(dialog.textContent).toContain('Tasks-specific Actions');
+      expect(dialog.textContent).not.toContain('Tasks-Specific Actions');
+      expect(dialog.textContent).not.toContain('Windows');
+      expect(dialog.textContent).not.toContain('Mac · Current');
+      expect(dialog.querySelector('thead')).toBeNull();
+      for (const row of dialog.querySelectorAll('tbody tr')) {
+        expect(row.children).toHaveLength(2);
+      }
       expect(dialog.textContent).toContain('Select Multiple');
       expect(dialog.textContent).toContain('Select Range');
       expect(dialog.textContent).toContain('Edit Checklist');
@@ -2913,7 +3002,7 @@ describe('TasksShell', () => {
       const titleInput = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
       titleInput.focus();
       const editableHelpEvent = new KeyboardEvent('keydown', {
-        key: '/', ctrlKey: true, bubbles: true, cancelable: true,
+        key: '/', metaKey: true, bubbles: true, cancelable: true,
       });
       await act(async () => {
         titleInput.dispatchEvent(editableHelpEvent);
@@ -2921,8 +3010,47 @@ describe('TasksShell', () => {
       });
       expect(editableHelpEvent.defaultPrevented).toBe(true);
       expect(document.querySelector<HTMLElement>('[role="dialog"]')?.textContent)
-        .toContain('Keyboard Commands');
+        .toContain('Keyboard Shortcuts');
     } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
+      cleanup(root, container);
+    }
+  });
+
+  it('shows only Windows shortcuts in keyboard help on Windows', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'Win32',
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '/', ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(dialog).toHaveAccessibleName('Keyboard Shortcuts');
+      expect(dialog.textContent).toContain('⌃/');
+      expect(dialog.textContent).toContain('⌥⇧Q');
+      expect(dialog.textContent).not.toContain('⌘/');
+      expect(dialog.textContent).not.toContain('Mac');
+      expect(dialog.textContent).not.toContain('Windows · Current');
+      expect(dialog.querySelector('thead')).toBeNull();
+      for (const row of dialog.querySelectorAll('tbody tr')) {
+        expect(row.children).toHaveLength(2);
+      }
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
       cleanup(root, container);
     }
   });
@@ -3037,8 +3165,8 @@ describe('TasksShell', () => {
       expect(help).toContain('Focus or Advance Through Tasks');
       expect(help).toContain('Move Back Through Tasks');
       expect(help).toContain('Traverse Page Controls');
-      expect(help).toContain('Mac');
-      expect(help).toContain('Windows');
+      expect(help).toContain('Tasks-specific Actions');
+      expect(help).not.toContain('Windows');
     } finally {
       cleanup(root, container);
     }
@@ -3301,7 +3429,6 @@ describe('TasksShell', () => {
         }]);
       });
       expect(mockToast).toHaveBeenCalledWith({
-        title: 'Task Moved',
         description: 'The task now appears in Upcoming.',
       });
     } finally {
@@ -3385,7 +3512,7 @@ describe('TasksShell', () => {
         today_section: null,
       });
       expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
-        title: 'Task Moved',
+        description: 'The task now appears in Someday.',
       }));
       expect(container.querySelector('[data-task-editor-region]')).not.toBeNull();
 
@@ -3401,7 +3528,6 @@ describe('TasksShell', () => {
       await waitForTaskEditorExit(container);
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
-          title: 'Task Moved',
           description: 'The task now appears in Someday.',
         });
       });
@@ -5326,7 +5452,16 @@ describe('TasksShell', () => {
         await Promise.resolve();
       });
       await waitFor(() => expect(setData).toHaveBeenCalled());
-      const payload = JSON.parse(setData.mock.calls[0][1] as string);
+      expect(setData).toHaveBeenCalledWith('text/plain', 'Existing task');
+      expect(setData).toHaveBeenCalledWith(
+        'text/html',
+        expect.stringContaining('Existing task'),
+      );
+      const structuredCall = setData.mock.calls.find(
+        ([type]) => type === TASK_CLIPBOARD_MIME_TYPE,
+      );
+      expect(structuredCall).toBeDefined();
+      const payload = JSON.parse(structuredCall?.[1] as string);
       expect(payload).toMatchObject({
         kind: TASK_CLIPBOARD_KIND,
         version: 2,
@@ -6481,14 +6616,14 @@ describe('TasksShell', () => {
     }
   });
 
-  it('keeps maintenance surfaces on Settings and out of the daily header and body', () => {
+  it('keeps the ordered settings surfaces out of the daily header and opens keyboard help', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const today = renderShell('/tasks/today');
 
     try {
       expect(today.container.querySelector('[aria-label="Browser Reminder Capability"]')).toBeNull();
       expect(today.container.querySelector('[data-trigger-variant="config"]')).toBeNull();
-      expect(today.container.querySelector('[aria-label="Keyboard Commands"]')).toBeNull();
+      expect(today.container.querySelector('[aria-label="Keyboard Shortcuts"]')).toBeNull();
     } finally {
       cleanup(today.root, today.container);
     }
@@ -6496,27 +6631,78 @@ describe('TasksShell', () => {
     const config = renderShell('/tasks/config');
     try {
       expect(config.container.querySelector('[data-task-view-heading]')?.textContent).toBe('Settings');
-      for (const title of [
-        'Areas',
-        'List Sorting',
-        'Browser Reminders',
-        'Synchronization',
-        'Backup and Restore',
-      ]) {
-        expect(config.container.textContent).toContain(title);
-      }
+      const settingsText = config.container.textContent ?? '';
+      const featuresIndex = settingsText.indexOf('Features');
+      const areasIndex = settingsText.indexOf('Areas');
+      const syncIndex = settingsText.indexOf('Sync Status');
+      expect(featuresIndex).toBeGreaterThanOrEqual(0);
+      expect(areasIndex).toBeGreaterThan(featuresIndex);
+      expect(syncIndex).toBeGreaterThan(areasIndex);
+      expect(settingsText).toContain('Notifications');
+      expect(settingsText).toContain('Automatically Sort Anytime and Someday');
+      expect(settingsText).toContain('Keyboard Shortcuts');
+      expect(settingsText).toContain(
+        'Press ⌃/ to view all keyboard commands at any time.',
+      );
+      expect(settingsText).toContain('Pending Changes');
+      expect(settingsText).toContain('Last Successful Sync');
+      expect(settingsText).not.toContain('Backup and Restore');
+      expect(settingsText).not.toContain('Synchronization Details');
+      expect(settingsText).not.toContain('Manage Backups');
       expect(config.container.querySelector('#tasks-automatic-list-sorting'))
         .toHaveAttribute('data-state', 'unchecked');
-      expect(config.container.querySelectorAll('[data-trigger-variant="config"]')).toHaveLength(2);
       expect(config.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
-      expect(config.container.querySelector('[aria-label="Keyboard Commands"]')).toBeNull();
-      expect(config.container.querySelector('[data-task-keyboard-help-cue]')?.textContent)
-        .toBe('Press ⌃/ to view all keyboard commands.');
+      expect(config.container.querySelector('[aria-label="Keyboard Shortcuts"]')).toBeNull();
+      const keyboardShortcutsHeading = Array.from(
+        config.container.querySelectorAll<HTMLHeadingElement>('h4'),
+      ).find((heading) => heading.textContent === 'Keyboard Shortcuts');
+      const keyboardShortcutsRow = keyboardShortcutsHeading?.closest('div.flex');
+      const showButton = Array.from(
+        keyboardShortcutsRow?.querySelectorAll<HTMLButtonElement>('button') ?? [],
+      ).find((button) => button.textContent?.trim() === 'Show');
+      await act(async () => {
+        showButton?.click();
+      });
+      expect(document.querySelector<HTMLElement>('[role="dialog"]'))
+        .toHaveAccessibleName('Keyboard Shortcuts');
       expect(config.container.querySelector<HTMLAnchorElement>(
         '[data-testid="mobile-nav"] a[href="/tasks/config"]',
       )?.getAttribute('aria-current')).toBe('page');
     } finally {
       cleanup(config.root, config.container);
+    }
+  });
+
+  it('withholds the Keyboard Shortcuts setting from touch devices', async () => {
+    const maxTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      'maxTouchPoints',
+    );
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 5,
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const config = renderShell('/tasks/config');
+
+    try {
+      await waitFor(() => {
+        expect(config.container.textContent).not.toContain('Keyboard Shortcuts');
+      });
+      expect(config.container.textContent).not.toContain(
+        'view all keyboard commands at any time',
+      );
+    } finally {
+      cleanup(config.root, config.container);
+      if (maxTouchPointsDescriptor) {
+        Object.defineProperty(
+          window.navigator,
+          'maxTouchPoints',
+          maxTouchPointsDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window.navigator, 'maxTouchPoints');
+      }
     }
   });
 
@@ -6557,7 +6743,46 @@ describe('TasksShell', () => {
       await act(async () => {
         recorder?.click();
       });
-      expect(recorder).toHaveTextContent('Type Shortcut...');
+      expect(recorder).toHaveTextContent('Type...');
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ',
+          code: 'Space',
+          ctrlKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect(messages).toContainEqual({
+        type: 'configure-quick-entry-shortcut',
+        schemaVersion: 2,
+        shortcut: {
+          code: 'Space',
+          command: false,
+          control: true,
+          option: true,
+          shift: false,
+        },
+      });
+      await act(async () => {
+        window.dispatchEvent(new CustomEvent(
+          'bathos:tasks-native-quick-entry-shortcut',
+          {
+            detail: {
+              success: true,
+              display: '⌃⌥Space',
+              message: null,
+            },
+          },
+        ));
+      });
+      expect(recorder).toHaveTextContent('⌃⌥Space');
+
+      await act(async () => {
+        recorder?.click();
+      });
 
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -6597,6 +6822,29 @@ describe('TasksShell', () => {
       expect(native.container.textContent).toContain(
         'Global Quick Entry shortcut saved',
       );
+
+      const clear = native.container.querySelector<HTMLButtonElement>(
+        '[aria-label="Clear Global Quick Entry Shortcut"]',
+      );
+      await act(async () => clear?.click());
+      expect(messages).toContainEqual({
+        type: 'clear-quick-entry-shortcut',
+        schemaVersion: 2,
+      });
+      await act(async () => {
+        window.dispatchEvent(new CustomEvent(
+          'bathos:tasks-native-quick-entry-shortcut',
+          {
+            detail: {
+              success: true,
+              display: null,
+              message: null,
+            },
+          },
+        ));
+      });
+      expect(native.container.textContent).toContain('Not Set');
+      expect(native.container.textContent).toContain('Global Quick Entry turned off');
     } finally {
       cleanup(native.root, native.container);
       Reflect.deleteProperty(window, '__bathosNativeApp');
@@ -6712,6 +6960,93 @@ describe('TasksShell', () => {
           .toBeTruthy();
       });
       expect(document.querySelector('[data-date-picker-viewport-anchor]')).toBeTruthy();
+    } finally {
+      cleanup(quickEntry.root, quickEntry.container);
+      Reflect.deleteProperty(window, '__bathosNativeApp');
+      Reflect.deleteProperty(window, '__bathosTasksNative');
+      Reflect.deleteProperty(window, 'webkit');
+    }
+  });
+
+  it('applies Control metadata shortcuts to native quick entry and consumes ambiguous commands', async () => {
+    const messages: unknown[] = [];
+    Object.assign(window, {
+      __bathosNativeApp: {
+        schemaVersion: 2,
+        moduleId: 'tasks',
+        platform: 'macos',
+        quickEntryShortcut: '⌃⌥Space',
+      },
+      __bathosTasksNative: {
+        schemaVersion: 2,
+        installationId: '30000000-0000-4000-8000-000000000001',
+      },
+      webkit: {
+        messageHandlers: {
+          bathosTasksWidget: {
+            postMessage: (message: unknown) => messages.push(message),
+          },
+        },
+      },
+    });
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const quickEntry = renderShell(
+      '/tasks/today?native_new_task=1&native_quick_entry=1',
+    );
+
+    try {
+      const title = await waitFor(() => {
+        const input = document.getElementById(
+          `task-title-${NEW_TASK_DRAFT_ID}`,
+        ) as HTMLInputElement | null;
+        expect(input).toBeTruthy();
+        return input!;
+      });
+      await waitFor(() => {
+        expect(messages).toContainEqual({
+          type: 'quick-entry-ready',
+          schemaVersion: 2,
+        });
+      });
+      title.focus();
+
+      const startEvent = new KeyboardEvent('keydown', {
+        key: 'e',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        title.dispatchEvent(startEvent);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(startEvent.defaultPrevented).toBe(true);
+      await waitFor(() => {
+        expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+      });
+
+      const excludedKeys = ['q', 'w', 'a', 's', 'z', 'x', 'b', '1'];
+      for (const key of excludedKeys) {
+        const event = new KeyboardEvent('keydown', {
+          key,
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => {
+          title.dispatchEvent(event);
+        });
+        expect(event.defaultPrevented).toBe(true);
+      }
+
+      expect(document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`)).toBe(title);
+      expect(quickEntry.container.querySelector('[data-task-editor-region]')).toBeTruthy();
+      expect(taskList.createTask).not.toHaveBeenCalled();
+      expect(taskList.transitionTask).not.toHaveBeenCalled();
+      expect(quickEntry.locations.at(-1)).toBe(
+        '/tasks/today?native_quick_entry=1',
+      );
     } finally {
       cleanup(quickEntry.root, quickEntry.container);
       Reflect.deleteProperty(window, '__bathosNativeApp');
@@ -10691,7 +11026,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('shows and acknowledges a claimed due reminder', async () => {
+  it('shows a claimed due reminder as a persistent info toast and acknowledges dismissal', async () => {
     const acknowledge = vi.fn().mockResolvedValue(undefined);
     mockTaskList.mockReturnValue(defaultTaskList());
     mockTaskReminders.mockReturnValue({
@@ -10707,14 +11042,130 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      expect(container.querySelector('section[aria-label="Due Reminders"]')?.textContent)
-        .toContain('Existing task');
-      const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
-        .find(({ textContent }) => textContent === 'Acknowledge');
-      await act(async () => button?.click());
+      await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(1));
+      expect(container.querySelector('section[aria-label="Due Reminders"]')).toBeNull();
+      const reminderToast = mockToast.mock.calls[0][0];
+      expect(reminderToast).toEqual(expect.objectContaining({
+        description: 'Existing task',
+        variant: 'info',
+        duration: Number.POSITIVE_INFINITY,
+        onOpenChange: expect.any(Function),
+      }));
+      expect(React.isValidElement(reminderToast.title)).toBe(true);
+      expect((reminderToast.title as React.ReactElement<{
+        children: React.ReactNode[];
+      }>).props.children).toContain('Reminder');
+      expect(acknowledge).not.toHaveBeenCalled();
+
+      await act(async () => {
+        reminderToast.onOpenChange(false);
+        await Promise.resolve();
+      });
       expect(acknowledge).toHaveBeenCalledWith('delivery-a');
     } finally {
       cleanup(root, container);
+    }
+  });
+
+  it('stacks every simultaneously claimed due reminder', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+      dueItems: [
+        {
+          delivery_id: 'delivery-a', occurrence_id: 'occurrence-a',
+          reminder_id: 'reminder-a', root_type: 'todo', root_id: 'task-a',
+          title: 'First task', resolved_at: '2026-07-20T16:00:00Z', attempt_count: 1,
+        },
+        {
+          delivery_id: 'delivery-b', occurrence_id: 'occurrence-b',
+          reminder_id: 'reminder-b', root_type: 'todo', root_id: 'task-b',
+          title: 'Second task', resolved_at: '2026-07-20T16:00:00Z', attempt_count: 1,
+        },
+      ],
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(2));
+      expect(mockToast.mock.calls.map(([configuration]) => configuration.description))
+        .toEqual(['First task', 'Second task']);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('defers to an active browser notification subscription', async () => {
+    const acknowledge = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge, claimDue: vi.fn(),
+      webPush: { status: 'active' },
+      dueItems: [{
+        delivery_id: 'delivery-a', occurrence_id: 'occurrence-a',
+        reminder_id: 'reminder-a', root_type: 'todo', root_id: 'task-a',
+        title: 'Existing task', resolved_at: '2026-07-20T16:00:00Z', attempt_count: 1,
+      }],
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await waitFor(() => expect(mockToast).not.toHaveBeenCalled());
+      expect(acknowledge).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('defers to enabled native notifications', async () => {
+    const acknowledge = vi.fn().mockResolvedValue(undefined);
+    const nativeWindow = window as Window & {
+      __bathosTasksNative?: {
+        schemaVersion: number;
+        installationId: string;
+        notificationsEnabled: boolean;
+      };
+      webkit?: {
+        messageHandlers?: {
+          bathosTasksWidget?: { postMessage: (message: unknown) => void };
+        };
+      };
+    };
+    nativeWindow.__bathosTasksNative = {
+      schemaVersion: 2,
+      installationId: '53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690',
+      notificationsEnabled: true,
+    };
+    nativeWindow.webkit = {
+      messageHandlers: {
+        bathosTasksWidget: { postMessage: vi.fn() },
+      },
+    };
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge, claimDue: vi.fn(),
+      webPush: { status: 'available' },
+      dueItems: [{
+        delivery_id: 'delivery-a', occurrence_id: 'occurrence-a',
+        reminder_id: 'reminder-a', root_type: 'todo', root_id: 'task-a',
+        title: 'Existing task', resolved_at: '2026-07-20T16:00:00Z', attempt_count: 1,
+      }],
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await waitFor(() => expect(mockToast).not.toHaveBeenCalled());
+      expect(acknowledge).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+      Reflect.deleteProperty(window, '__bathosTasksNative');
+      Reflect.deleteProperty(window, 'webkit');
     }
   });
 
@@ -10734,20 +11185,23 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
-        .find(({ textContent }) => textContent === 'Acknowledge');
+      await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(1));
+      const reminderToast = mockToast.mock.calls[0][0];
       await act(async () => {
-        button?.click();
+        reminderToast.onOpenChange(false);
         await Promise.resolve();
       });
 
       expect(acknowledge).toHaveBeenCalledWith('delivery-a');
-      expect(container.querySelector('section[aria-label="Due Reminders"]')?.textContent)
-        .toContain('Existing task');
       expect(mockToast).toHaveBeenCalledWith({
         title: 'Reminder Could Not Be Acknowledged',
         description: 'The reminder acknowledgement failed. The reminder remains available to retry.',
         variant: 'destructive',
+      });
+      await waitFor(() => {
+        expect(mockToast.mock.calls.filter(([configuration]) => (
+          configuration.description === 'Existing task'
+        ))).toHaveLength(2);
       });
       expect(JSON.stringify(mockToast.mock.calls)).not.toContain('provider receipt');
     } finally {
@@ -10845,8 +11299,7 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/config');
 
     try {
-      expect(container.querySelector('[aria-label="Browser Reminder Capability"]')?.textContent)
-        .toContain('Background Reminders Off');
+      expect(container.textContent).toContain('Notifications');
       const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
         .find(({ textContent }) => textContent === 'Enable');
       await act(async () => button?.click());
@@ -10872,10 +11325,8 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/config');
 
     try {
-      const capability = container.querySelector('[aria-label="Browser Reminder Capability"]');
-      expect(capability?.textContent).toContain('Background Reminders Degraded');
-      expect(capability?.textContent).toContain('In-app reminders remain available');
-      expect(capability?.textContent).not.toContain('provider endpoint');
+      expect(container.textContent).toContain('Notifications');
+      expect(container.textContent).not.toContain('provider endpoint');
 
       const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
         .find(({ textContent }) => textContent === 'Enable');
@@ -10891,6 +11342,55 @@ describe('TasksShell', () => {
         variant: 'destructive',
       });
       expect(JSON.stringify(mockToast.mock.calls)).not.toContain('provider endpoint');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('uses a toggle for active browser notifications', async () => {
+    const disable = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected', dueItems: [],
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+      webPush: {
+        status: 'active', busy: false, error: null,
+        enable: vi.fn().mockResolvedValue(undefined), disable,
+      },
+    });
+    const { container, root } = renderShell('/tasks/config');
+
+    try {
+      const toggle = container.querySelector<HTMLButtonElement>(
+        '[role="switch"][aria-label="Notifications"]',
+      );
+      expect(toggle).toHaveAttribute('data-state', 'checked');
+      await act(async () => toggle?.click());
+      expect(disable).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps blocked browser notifications explanatory and non-operative', () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected', dueItems: [],
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+      webPush: {
+        status: 'denied', busy: false, error: null,
+        enable: vi.fn().mockResolvedValue(undefined),
+        disable: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+    const { container, root } = renderShell('/tasks/config');
+
+    try {
+      expect(container.textContent).toContain('Blocked in Browser Settings');
+      expect(Array.from(container.querySelectorAll('button'))
+        .some((button) => button.textContent === 'Enable')).toBe(false);
     } finally {
       cleanup(root, container);
     }
@@ -11232,7 +11732,7 @@ describe('TasksShell', () => {
 
     try {
       expect(container.textContent).not.toContain('Deleted Checklist Item');
-      expect(container.textContent).toContain('Done Is Empty');
+      expect(container.textContent).toContain('Done is empty');
       const restoreButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent?.trim() === 'Restore');
       expect(restoreButton).toBeUndefined();
@@ -14671,6 +15171,7 @@ describe('TasksShell', () => {
       expect(openLink).toHaveAttribute('href', 'https://example.test');
       expect(openLink).toHaveAttribute('target', '_blank');
       expect(openLink).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(openLink).toHaveClass('border-info', 'text-info');
       expect(openLink.querySelector('svg')).toHaveClass('lucide-external-link');
     } finally {
       cleanup(root, container);
@@ -14927,7 +15428,15 @@ describe('TasksShell', () => {
         ?? Array.from(document.querySelectorAll('[role="menuitemradio"]'))
           .find((item) => item.textContent === 'Only Waiting')!);
       await waitFor(() => {
-        expect(container.querySelector('[aria-label="Quick Filters: Only Waiting"]')).toBeTruthy();
+        const trigger = container.querySelector<HTMLButtonElement>(
+          '[aria-label="Quick Filters: Only Waiting"]',
+        );
+        expect(trigger).toBeTruthy();
+        expect(trigger).toHaveAttribute('aria-pressed', 'true');
+        expect(trigger).toHaveClass('h-9', 'w-9', 'rounded-md', 'bg-info/10', 'text-info');
+        expect(trigger).not.toHaveTextContent('Only Waiting');
+        expect(container.querySelector('[data-task-active-quick-filter]'))
+          .toHaveTextContent('Only Waiting');
       });
       expect(container.querySelector('[data-task-id="task-actionable"]')).toBeNull();
       expect(container.querySelector('[data-task-id="task-waiting"]')).toBeTruthy();
@@ -14952,6 +15461,9 @@ describe('TasksShell', () => {
       await waitFor(() => {
         expect(container.querySelector('[aria-label="Quick Filters"]')).toBeTruthy();
       });
+      expect(container.querySelector('[aria-label="Quick Filters"]'))
+        .toHaveAttribute('aria-pressed', 'false');
+      expect(container.querySelector('[data-task-active-quick-filter]')).toBeNull();
       expect(container.querySelector('[data-task-id="task-actionable"]')).toBeTruthy();
       expect(container.querySelector('[data-task-id="task-waiting"]')).toBeTruthy();
       expect(container.querySelector('[data-task-id="task-rechecking"]')).toBeTruthy();
@@ -15045,6 +15557,8 @@ describe('TasksShell', () => {
       });
       expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Today');
       expect(container.querySelector('[aria-label="Quick Filters: Only Waiting"]')).toBeTruthy();
+      expect(container.querySelector('[data-task-active-quick-filter]'))
+        .toHaveTextContent('Only Waiting');
 
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {

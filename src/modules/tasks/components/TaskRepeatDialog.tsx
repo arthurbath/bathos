@@ -277,6 +277,9 @@ export function TaskRepeatDialog({
     endMode: 'never',
     endAfterCount: null,
     endOnDate: null,
+    afterDateExclusive: editing
+      ? addTaskCalendarDays(planningDate, addDeadline ? deadlineOffsetDays : 0)
+      : null,
     limit: 3,
   });
   const alignedCadenceDate = useMemo(() => (

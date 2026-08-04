@@ -7,6 +7,7 @@ import {
   serializeTaskChecklistClipboard,
   TASK_CHECKLIST_CLIPBOARD_KIND,
 } from '@/modules/tasks/domain/taskChecklistClipboard';
+import { TASK_CHECKLIST_CLIPBOARD_MIME_TYPE } from '@/modules/tasks/domain/taskClipboardRepresentations';
 import { taskChecklistItemFixture } from '@/modules/tasks/testing/taskFixtures';
 import { TaskChecklistEditor } from './TaskChecklistEditor';
 
@@ -98,7 +99,9 @@ function pasteEvent(text: string, html = ''): ClipboardEvent {
   Object.defineProperty(event, 'clipboardData', {
     configurable: true,
     value: {
-      getData: vi.fn((type: string) => (type === 'text/html' ? html : text)),
+      getData: vi.fn((type: string) => (
+        type === 'text/plain' ? text : type === 'text/html' ? html : ''
+      )),
       types: html ? ['text/plain', 'text/html'] : ['text/plain'],
     },
   });
@@ -1150,6 +1153,74 @@ describe('TaskChecklistEditor', () => {
       expect(createItem).toHaveBeenCalledTimes(1);
       expect(container.querySelector('input[aria-label="New Checklist Item"]')).toBeNull();
     } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('creates one item when task-close flushing overlaps the draft blur', async () => {
+    mockUseTaskChecklist.mockReturnValue(checklistModel([]));
+    let flush: (() => Promise<void>) | null = null;
+    let resolveCreate: (item: ReturnType<typeof taskChecklistItemFixture>) => void = () => {};
+    createItem.mockReturnValue(new Promise((resolve) => {
+      resolveCreate = resolve;
+    }));
+    const { container, root } = renderEditor(undefined, {
+      onRegisterFlush: (nextFlush) => {
+        flush = nextFlush;
+      },
+    });
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button[aria-label="Add Checklist"]')?.click();
+      });
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      await act(async () => setInput(input, 'Created once'));
+
+      let flushPromise: Promise<void> = Promise.resolve();
+      await act(async () => {
+        flushPromise = flush?.() ?? Promise.resolve();
+        input.blur();
+        await Promise.resolve();
+      });
+
+      expect(createItem).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        resolveCreate(taskChecklistItemFixture({
+          id: 'created-once',
+          title: 'Created once',
+        }));
+        await flushPromise;
+      });
+      expect(createItem).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('reports a failed checklist completion without an unhandled rejection', async () => {
+    setCompleted.mockRejectedValue(new Error('Completion rejected'));
+    const unhandled = vi.fn();
+    window.addEventListener('unhandledrejection', unhandled);
+    const { container, root } = renderEditor();
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label^="Complete"]',
+        )?.click();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Checklist Item Could Not Be Updated',
+        description: 'Completion rejected',
+        variant: 'destructive',
+      }));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('unhandledrejection', unhandled);
       cleanup(root, container);
     }
   });
@@ -2262,7 +2333,16 @@ describe('TaskChecklistEditor', () => {
       });
       await waitFor(() => expect(setData).toHaveBeenCalled());
 
-      expect(JSON.parse(setData.mock.calls[0][1] as string)).toEqual({
+      expect(setData).toHaveBeenCalledWith('text/plain', 'First\nSecond');
+      expect(setData).toHaveBeenCalledWith(
+        'text/html',
+        expect.stringContaining('First'),
+      );
+      const structuredCall = setData.mock.calls.find(
+        ([type]) => type === TASK_CHECKLIST_CLIPBOARD_MIME_TYPE,
+      );
+      expect(structuredCall).toBeDefined();
+      expect(JSON.parse(structuredCall?.[1] as string)).toEqual({
         kind: TASK_CHECKLIST_CLIPBOARD_KIND,
         version: 1,
         operation: 'copy',
@@ -2316,7 +2396,12 @@ describe('TaskChecklistEditor', () => {
       });
       await waitFor(() => expect(deleteItems).toHaveBeenCalled());
 
-      expect(JSON.parse(setData.mock.calls[0][1] as string)).toMatchObject({
+      expect(setData).toHaveBeenCalledWith('text/plain', 'First\nThird');
+      const structuredCall = setData.mock.calls.find(
+        ([type]) => type === TASK_CHECKLIST_CLIPBOARD_MIME_TYPE,
+      );
+      expect(structuredCall).toBeDefined();
+      expect(JSON.parse(structuredCall?.[1] as string)).toMatchObject({
         operation: 'cut',
         items: [
           { title: 'First', completed: false },

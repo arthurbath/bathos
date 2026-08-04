@@ -53,7 +53,6 @@ describe('task departure notices', () => {
     expect(getTaskDepartureToast([
       { kind: 'moved', destination: 'upcoming' },
     ], 'today')).toEqual({
-      title: 'Task Moved',
       description: 'The task now appears in Upcoming.',
     });
     expect(getTaskDepartureToast([
@@ -61,6 +60,21 @@ describe('task departure notices', () => {
     ], 'today')).toEqual({
       title: 'Task Hidden by Quick Filter',
       description: 'The task no longer matches Only Waiting.',
+    });
+  });
+
+  it('uses one titleless content block for a pure bulk move', () => {
+    expect(getTaskDepartureToast([
+      { kind: 'moved', destination: 'someday' },
+      { kind: 'moved', destination: 'someday' },
+    ], 'today')).toEqual({
+      description: '2 tasks now appear in Someday.',
+    });
+    expect(getTaskDepartureToast([
+      { kind: 'moved', destination: 'upcoming' },
+      { kind: 'moved', destination: 'someday' },
+    ], 'today')).toEqual({
+      description: '2 tasks moved out of Today.',
     });
   });
 

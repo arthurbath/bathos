@@ -1,9 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  generateChecklistMoveOrderKey,
+  generateChecklistOrderKey,
   planChecklistBatchInsertionOrderKeys,
   planChecklistGroupMove,
 } from './taskChecklistOrder';
+
+describe('generateChecklistOrderKey', () => {
+  it('inserts between legacy fixed-width numeric ranks', () => {
+    const key = generateChecklistOrderKey('000000001024', '000000002048');
+
+    expect(key > '000000001024').toBe(true);
+    expect(key < '000000002048').toBe(true);
+  });
+
+  it('continues inserting between a numeric rank and an earlier compatibility rank', () => {
+    const later = generateChecklistOrderKey('000000001024', '000000002048');
+    const earlier = generateChecklistOrderKey('000000001024', later);
+
+    expect(earlier > '000000001024').toBe(true);
+    expect(earlier < later).toBe(true);
+  });
+
+  it('moves an existing legacy-ranked item to the end', () => {
+    const key = generateChecklistMoveOrderKey([
+      { id: 'first', orderKey: '000000001024' },
+      { id: 'second', orderKey: '000000002048' },
+      { id: 'third', orderKey: '000000003072' },
+    ], 'first', 2);
+
+    expect(key > '000000003072').toBe(true);
+  });
+});
 
 describe('planChecklistGroupMove', () => {
   it('conglomerates a noncontiguous selection at the requested boundary in visual order', () => {
@@ -62,5 +91,18 @@ describe('planChecklistGroupMove', () => {
     expect(keys[0] < 'a1').toBe(true);
     expect(keys[1] > keys[0]).toBe(true);
     expect(keys[1] < 'a1').toBe(true);
+  });
+
+  it('plans multiple inserts inside a legacy numeric checklist', () => {
+    const keys = planChecklistBatchInsertionOrderKeys([
+      { id: 'before', orderKey: '000000001024' },
+      { id: 'after', orderKey: '000000002048' },
+    ], 1, 3);
+
+    expect(keys).toHaveLength(3);
+    expect(keys[0] > '000000001024').toBe(true);
+    expect(keys[1] > keys[0]).toBe(true);
+    expect(keys[2] > keys[1]).toBe(true);
+    expect(keys[2] < '000000002048').toBe(true);
   });
 });

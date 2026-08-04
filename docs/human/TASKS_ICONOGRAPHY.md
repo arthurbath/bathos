@@ -62,6 +62,7 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | Redo | `Redo2` | Redo the next undone Tasks change |
 | Search | `Search` | Search Tasks and views |
 | QuickFilters | `Filter` | Apply a predefined quick filter |
+| EmptyState | `Sparkles` | A primary task list has no tasks to display |
 | Delete | `Trash2` | Recoverably delete task content |
 | Reopen | `RotateCcw` | Reopen terminal task content |
 
