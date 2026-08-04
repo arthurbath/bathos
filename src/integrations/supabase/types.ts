@@ -2612,6 +2612,14 @@ export type Database = {
         }
         Returns: Json
       }
+      tasks_create_raycast_page_capture: {
+        Args: {
+          _idempotency_key: string
+          _title: string
+          _url: string
+        }
+        Returns: Json
+      }
       tasks_create_recurrence_from_task: {
         Args: {
           _actor_type?: string
