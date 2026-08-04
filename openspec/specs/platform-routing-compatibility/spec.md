@@ -7,12 +7,12 @@ Define the compatibility and route-preservation contract for the shared BathOS b
 ## Requirements
 
 ### Requirement: Shared browser routing compatibility
-The BathOS platform SHALL explicitly enable the installed router's supported v7 transition-scheduling and relative-splat compatibility behaviors at the shared browser-router boundary.
+The BathOS platform SHALL use a patched supported browser-router release whose default transition scheduling and relative-splat behavior applies consistently at the shared browser-router boundary.
 
 #### Scenario: Application runtime starts
 - **WHEN** the BathOS browser application mounts its shared router
-- **THEN** both supported compatibility behaviors are active for every platform and module route
-- **AND** the router emits no warning requesting either compatibility opt-in
+- **THEN** the installed supported router behavior is active for every platform and module route
+- **AND** the router emits no warning requesting obsolete compatibility opt-ins
 
 ### Requirement: Existing route outcomes are preserved
 Router compatibility behavior SHALL preserve registered platform and module destinations while allowing explicit replacement redirects for retired module routes.
@@ -36,3 +36,19 @@ Router compatibility behavior SHALL preserve registered platform and module dest
 #### Scenario: Module root resolves
 - **WHEN** a user opens the neutral `/tasks` route
 - **THEN** the router replaces it with `/tasks/today`
+
+### Requirement: Authentication redirects remain within BathOS
+BathOS SHALL accept a post-authentication `next` destination only when it resolves to a root-relative path on the current BathOS origin. The same validation SHALL apply when switching between sign-in and sign-up routes.
+
+#### Scenario: Valid internal destination
+- **WHEN** authentication receives a `next` value containing a root-relative BathOS path with an optional query string or fragment
+- **THEN** BathOS preserves the normalized internal destination through tab switching and successful authentication
+
+#### Scenario: Valid OAuth consent destination
+- **WHEN** authentication receives a `next` value for the internal `/.lovable/oauth/consent` route
+- **THEN** BathOS preserves that route and its query string as the post-authentication destination
+
+#### Scenario: External or ambiguous destination
+- **WHEN** authentication receives a protocol-relative path, backslash-based path, encoded separator payload, absolute URL, non-path scheme, or destination that resolves to another origin
+- **THEN** BathOS discards the value and navigates to the launcher after authentication
+- **AND** BathOS does not preserve the unsafe value when switching authentication tabs

@@ -13,5 +13,5 @@
 ## 3. Validation And Release
 
 - [x] 3.1 Run focused Tasks sync tests, lint, TypeScript build, production build, and strict OpenSpec validation
-- [ ] 3.2 Publish the repair and verify Safari drains the stale system queue without recreating missing recurrence instances
-- [ ] 3.3 Verify the Mac container retains and uploads its user-authored pending changes, then record content-free release evidence
+- [x] 3.2 Publish the repair and verify Safari drains the stale system queue without recreating missing recurrence instances
+- [x] 3.3 Verify the Mac container retains and uploads its user-authored pending changes, then record content-free release evidence
