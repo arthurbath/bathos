@@ -25,7 +25,7 @@ import {
   parseTaskExport,
   previewTaskRestore,
   serializeTaskExport,
-  taskExportV12Collections,
+  taskExportV14Collections,
 } from '@/modules/tasks/data/taskPortability';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
@@ -258,14 +258,20 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     expect(reminder.outcome).toBe('accepted');
 
     const taskExport = await createTaskExport(sourceClient);
-    expect(taskExport.schema_version).toBe(12);
-    for (const collection of taskExportV12Collections) {
+    expect(taskExport.schema_version).toBe(14);
+    for (const collection of taskExportV14Collections) {
+      expect(taskExport.manifest.counts[collection], collection)
+        .toBe(taskExport.data[collection].length);
+    }
+    for (const collection of taskExportV14Collections.filter(
+      (name) => name !== 'tasks_recurrence_evaluations',
+    )) {
       expect(taskExport.manifest.counts[collection], collection).toBeGreaterThan(0);
     }
     expect(taskExport.data.tasks_todos.find((task) => task.id === primary.id)).toMatchObject({
       title: 'Preserve This Task',
       disposition: 'present',
-      revision: 5,
+      revision: 6,
     });
     expect(taskExport.data.tasks_todos.find((task) => task.id === doneTask.id)).toMatchObject({
       disposition: 'deleted',
@@ -291,8 +297,8 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     await expectOwnerCounts(adminClient, source.id, 0, 0);
 
     const preview = await previewTaskRestore(targetClient, taskExport);
-    expect(preview).toMatchObject({ dry_run: true, schema_version: 12, applied: false });
-    for (const collection of taskExportV12Collections) {
+    expect(preview).toMatchObject({ dry_run: true, schema_version: 14, applied: false });
+    for (const collection of taskExportV14Collections) {
       expect(preview[collection]).toMatchObject({
         inserts: taskExport.manifest.counts[collection],
         matches: 0,
@@ -302,8 +308,8 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     await expectOwnerCounts(adminClient, target.id, 0, 0);
 
     const restored = await mergeTaskRestore(targetClient, taskExport);
-    expect(restored).toMatchObject({ dry_run: false, schema_version: 12, applied: true });
-    for (const collection of taskExportV12Collections) {
+    expect(restored).toMatchObject({ dry_run: false, schema_version: 14, applied: true });
+    for (const collection of taskExportV14Collections) {
       expect(restored[collection]).toMatchObject({
         inserts: taskExport.manifest.counts[collection],
         matches: 0,
@@ -334,11 +340,11 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     const replay = await mergeTaskRestore(targetClient, taskExport);
     expect(replay).toMatchObject({
       dry_run: false,
-      schema_version: 12,
+      schema_version: 14,
       applied: false,
       code: 'already_applied',
     });
-    for (const collection of taskExportV12Collections) {
+    for (const collection of taskExportV14Collections) {
       expect(replay[collection], collection).toMatchObject({
         inserts: 0,
         matches: taskExport.manifest.counts[collection],

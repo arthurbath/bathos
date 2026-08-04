@@ -109,6 +109,7 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     const occurrence = await waitForTask(
       activeDatabase,
       recurrence.occurrence.root_id,
+      2,
       30_000,
     );
 
@@ -193,7 +194,7 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     await activeDatabase.waitForReady();
     await bindTasksDatabaseOwner(activeDatabase, ownerId);
     const finalRows = await readTasks(activeDatabase, ownerId);
-    expect(finalRows.size).toBe(5);
+    expect(finalRows.size).toBe(4);
     expect(finalRows.get(alpha.id)?.revision).toBe(5);
     expect(finalRows.get(beta.id)?.lifecycle).toBe('completed');
     expect(finalRows.get(occurrence.id)?.lifecycle).toBe('completed');
@@ -229,6 +230,7 @@ async function waitForUploadQueue(
 async function waitForTask(
   database: PowerSyncDatabase,
   taskId: string,
+  expectedRevision: number,
   timeoutMs: number,
 ): Promise<TaskTodo> {
   const deadline = Date.now() + timeoutMs;
@@ -237,10 +239,12 @@ async function waitForTask(
       'SELECT * FROM tasks_todos WHERE id = ?',
       [taskId],
     );
-    if (task !== null) return task;
+    if (task?.revision === expectedRevision) return task;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`Task ${taskId} did not synchronize`);
+  throw new Error(
+    `Task ${taskId} did not synchronize at revision ${expectedRevision}`,
+  );
 }
 
 async function waitForRemoteTask(
