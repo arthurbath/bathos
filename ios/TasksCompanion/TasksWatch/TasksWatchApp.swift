@@ -1,5 +1,6 @@
 import SwiftUI
 import WatchConnectivity
+import WatchKit
 import WidgetKit
 
 @main
@@ -11,6 +12,12 @@ struct TasksWatchApp: App {
         WindowGroup {
             TasksWatchCaptureView(model: model)
                 .onAppear { model.activate() }
+                .onOpenURL { url in
+                    guard TaskWatchCaptureLaunchPolicy.shouldBeginCapture(
+                        for: url
+                    ) else { return }
+                    model.beginComplicationCapture()
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { model.refreshProgress() }
                 }
@@ -64,6 +71,8 @@ final class TasksWatchModel: NSObject, ObservableObject, WCSessionDelegate {
     private var authorityRequestID: UUID?
     private var authorityTimeoutTask: Task<Void, Never>?
     private var statusDismissTask: Task<Void, Never>?
+    private var capturePresentationTask: Task<Void, Never>?
+    private var captureInputIsPresented = false
 
     override init() {
         super.init()
@@ -74,6 +83,47 @@ final class TasksWatchModel: NSObject, ObservableObject, WCSessionDelegate {
         session?.activate()
         apply(session?.receivedApplicationContext ?? [:])
         refreshProgress()
+    }
+
+    func beginComplicationCapture() {
+        guard !isSubmitting,
+              !captureInputIsPresented,
+              capturePresentationTask == nil else { return }
+        capturePresentationTask = Task { [weak self] in
+            guard let self else { return }
+            for attempt in 0..<10 {
+                guard !Task.isCancelled else { return }
+                if presentComplicationCaptureInput() {
+                    return
+                }
+                if attempt < 9 {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+            capturePresentationTask = nil
+        }
+    }
+
+    private func presentComplicationCaptureInput() -> Bool {
+        guard !captureInputIsPresented,
+              let controller = WKApplication.shared().visibleInterfaceController
+                ?? WKApplication.shared().rootInterfaceController else {
+            return false
+        }
+        captureInputIsPresented = true
+        controller.presentTextInputController(
+            withSuggestions: nil,
+            allowedInputMode: .plain
+        ) { [weak self] results in
+            Task { @MainActor in
+                guard let self else { return }
+                self.captureInputIsPresented = false
+                self.capturePresentationTask = nil
+                guard let summary = results?.first as? String else { return }
+                self.submit(summary)
+            }
+        }
+        return true
     }
 
     func submit(_ value: String) {

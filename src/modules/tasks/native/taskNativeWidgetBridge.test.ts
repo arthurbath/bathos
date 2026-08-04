@@ -7,6 +7,7 @@ import {
 
 import {
   buildTaskNativeWidgetSnapshot,
+  clearTaskNativeQuickEntryShortcut,
   clearTaskNativeWidgetCache,
   configureTaskNativeQuickEntryShortcut,
   finishTaskNativeQuickEntry,
@@ -522,7 +523,7 @@ describe('taskNativeWidgetBridge', () => {
     }]);
   });
 
-  it('configures and finishes Mac quick entry only through the current bridge', () => {
+  it('configures, clears, and finishes Mac quick entry only through the current bridge', () => {
     const messages: unknown[] = [];
     const shortcut = {
       code: 'Space',
@@ -541,6 +542,9 @@ describe('taskNativeWidgetBridge', () => {
       shortcut,
       bridgeWindow(messages),
     )).toBe(true);
+    expect(clearTaskNativeQuickEntryShortcut({} as Window)).toBe(false);
+    expect(clearTaskNativeQuickEntryShortcut(bridgeWindow(messages, 1))).toBe(false);
+    expect(clearTaskNativeQuickEntryShortcut(bridgeWindow(messages))).toBe(true);
     expect(finishTaskNativeQuickEntry(true, bridgeWindow(messages))).toBe(true);
     expect(finishTaskNativeQuickEntry(false, bridgeWindow(messages))).toBe(true);
     expect(messages).toEqual([
@@ -548,6 +552,10 @@ describe('taskNativeWidgetBridge', () => {
         type: 'configure-quick-entry-shortcut',
         schemaVersion: 2,
         shortcut,
+      },
+      {
+        type: 'clear-quick-entry-shortcut',
+        schemaVersion: 2,
       },
       {
         type: 'quick-entry-finished',

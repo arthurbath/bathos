@@ -11,6 +11,8 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     static let webTextInputEngagedMessageType = "web-text-input-engaged"
     static let configureQuickEntryShortcutMessageType =
         "configure-quick-entry-shortcut"
+    static let clearQuickEntryShortcutMessageType =
+        "clear-quick-entry-shortcut"
     static let quickEntryFinishedMessageType = "quick-entry-finished"
     static let quickEntryReadyMessageType = "quick-entry-ready"
     static let quickEntryDismissRequestedMessageType =
@@ -100,6 +102,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     var configureQuickEntryShortcut: ((
         TaskQuickEntryShortcutPayload
     ) -> TaskQuickEntryShortcutResponse)?
+    var clearQuickEntryShortcut: (() -> TaskQuickEntryShortcutResponse)?
     var quickEntryDidFinish: ((_ committed: Bool) -> Void)?
     var quickEntryPresentationDidBecomeReady: (() -> Void)?
     var quickEntryDismissalRequested: (() -> Void)?
@@ -480,6 +483,19 @@ final class TasksBrowserModel: NSObject, ObservableObject {
                 return
             }
             let response = configureQuickEntryShortcut?(request.shortcut)
+                ?? TaskQuickEntryShortcutResponse(
+                    success: false,
+                    display: nil,
+                    message: "The native shortcut recorder is unavailable"
+                )
+            sendQuickEntryShortcutResponse(response)
+            Self.recordBridgeDiagnostic(
+                "Accepted: \(envelope.type); success=\(response.success)"
+            )
+            return
+        }
+        if envelope.type == Self.clearQuickEntryShortcutMessageType {
+            let response = clearQuickEntryShortcut?()
                 ?? TaskQuickEntryShortcutResponse(
                     success: false,
                     display: nil,

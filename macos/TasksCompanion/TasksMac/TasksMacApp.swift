@@ -24,6 +24,12 @@ struct TasksMacApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings...") {
+                    browserModel.open(TaskNativeRoute.settings)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
             CommandMenu("Navigate") {
                 navigationButton("Today", route: .today, key: "1")
                 navigationButton("Upcoming", route: .upcoming, key: "2")

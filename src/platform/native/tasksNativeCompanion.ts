@@ -8,6 +8,7 @@ type TasksNativeBridgeWindow = Window & {
   __bathosTasksNative?: {
     schemaVersion?: unknown;
     installationId?: unknown;
+    notificationsEnabled?: unknown;
   };
   webkit?: {
     messageHandlers?: Partial<Record<string, TasksNativeMessageHandler>>;
@@ -36,4 +37,9 @@ export function getTasksNativeInstallationId(target: Window = window): string | 
     && uuidPattern.test(context.installationId)
     ? context.installationId
     : null;
+}
+
+export function getTasksNativeNotificationsEnabled(target: Window = window): boolean {
+  if (!isTasksNativeCompanion(target)) return false;
+  return (target as TasksNativeBridgeWindow).__bathosTasksNative?.notificationsEnabled === true;
 }

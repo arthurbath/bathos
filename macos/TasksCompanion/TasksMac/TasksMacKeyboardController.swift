@@ -35,6 +35,16 @@ final class TasksMacKeyboardController: ObservableObject {
             }
             return self.shortcutRegistrar.configure(shortcut)
         }
+        browserModel.clearQuickEntryShortcut = { [weak self] in
+            guard let self else {
+                return TaskQuickEntryShortcutResponse(
+                    success: false,
+                    display: nil,
+                    message: "The native shortcut recorder is unavailable"
+                )
+            }
+            return self.shortcutRegistrar.clear()
+        }
         shortcutRegistrar.onTrigger = { [weak self] in
             self?.quickEntryPanel.toggle()
         }
@@ -81,6 +91,7 @@ final class TasksMacKeyboardController: ObservableObject {
         keyMonitor = nil
         shortcutRegistrar.onTrigger = nil
         browserModel?.configureQuickEntryShortcut = nil
+        browserModel?.clearQuickEntryShortcut = nil
         browserModel = nil
     }
 
@@ -95,8 +106,15 @@ final class TasksMacKeyboardController: ObservableObject {
             .shift,
         ])
         guard taskModifiers == [.command],
-              let charactersIgnoringModifiers,
-              let number = Int(charactersIgnoringModifiers),
+              let charactersIgnoringModifiers else {
+            return nil
+        }
+
+        if charactersIgnoringModifiers == "," {
+            return .settings
+        }
+
+        guard let number = Int(charactersIgnoringModifiers),
               let destination = TasksMacDestination(rawValue: number) else {
             return nil
         }
@@ -186,6 +204,10 @@ struct TasksGlobalShortcutStore {
             return
         }
         defaults.set(data, forKey: storageKey)
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: storageKey)
     }
 
     static func display(
@@ -327,6 +349,20 @@ final class TasksGlobalShortcutRegistrar {
         register(shortcut, persist: true)
     }
 
+    func clear() -> TaskQuickEntryShortcutResponse {
+        if let hotKey {
+            _ = unregisterHotKey(hotKey)
+        }
+        hotKey = nil
+        activeShortcut = nil
+        TasksGlobalShortcutStore.clear(defaults: defaults)
+        return TaskQuickEntryShortcutResponse(
+            success: true,
+            display: nil,
+            message: nil
+        )
+    }
+
     func trigger() {
         onTrigger?()
     }
@@ -430,13 +466,24 @@ private func tasksGlobalQuickEntryHotKeyHandler(
 @MainActor
 final class TasksMacQuickEntryPanelController: NSObject {
     private let onFinish: (Bool) -> Void
-    private let browserModel = TasksBrowserModel()
+    private let browserModel: TasksBrowserModel
     private lazy var panel: TasksMacQuickEntryPanel = makePanel()
     private var cancellationPending = false
     private var presentationPending = false
     private var cancellationFallback: DispatchWorkItem?
 
-    init(onFinish: @escaping (Bool) -> Void) {
+    convenience init(onFinish: @escaping (Bool) -> Void) {
+        self.init(
+            browserModel: TasksBrowserModel(),
+            onFinish: onFinish
+        )
+    }
+
+    init(
+        browserModel: TasksBrowserModel,
+        onFinish: @escaping (Bool) -> Void
+    ) {
+        self.browserModel = browserModel
         self.onFinish = onFinish
         super.init()
         browserModel.quickEntryDidFinish = { [weak self] committed in
@@ -467,7 +514,6 @@ final class TasksMacQuickEntryPanelController: NSObject {
     }
 
     func show() {
-        let warmPresentation = browserModel.hasLoadedContent
         cancellationPending = false
         cancellationFallback?.cancel()
         cancellationFallback = nil
@@ -478,9 +524,7 @@ final class TasksMacQuickEntryPanelController: NSObject {
         TasksMacQuickEntryPanelPolicy.apply(to: panel)
         panel.center()
         NSApp.activate(ignoringOtherApps: true)
-        if !warmPresentation {
-            panel.makeKeyAndOrderFront(nil)
-        }
+        panel.makeKeyAndOrderFront(nil)
     }
 
     private func finishPresentation() {
@@ -515,6 +559,14 @@ final class TasksMacQuickEntryPanelController: NSObject {
         )
         panel.onCancel = { [weak self] in
             self?.requestCancellation()
+        }
+        panel.onControlShortcut = { [weak self] key in
+            guard let webView = self?.browserModel.webView else {
+                return
+            }
+            webView.evaluateJavaScript(
+                TasksMacQuickEntryControlShortcutPolicy.javaScript(for: key)
+            )
         }
         panel.isMovableByWindowBackground = true
         panel.isFloatingPanel = true
@@ -587,6 +639,7 @@ private struct TasksMacQuickEntryPanelContent: View {
             )
 
             TasksMacQuickEntryDragRegion()
+                .frame(maxWidth: .infinity)
                 .frame(height: TasksMacQuickEntryPanelPolicy.dragRegionHeight)
                 .accessibilityHidden(true)
         }
@@ -604,8 +657,35 @@ private struct TasksMacQuickEntryDragRegion: NSViewRepresentable {
     ) {}
 }
 
-private final class TasksMacQuickEntryDragView: NSView {
-    override var mouseDownCanMoveWindow: Bool { true }
+final class TasksMacQuickEntryDragView: NSView {
+    typealias WindowDragPerformer = (NSWindow, NSEvent) -> Void
+
+    private let windowDragPerformer: WindowDragPerformer
+
+    init(
+        windowDragPerformer: @escaping WindowDragPerformer = { window, event in
+            window.performDrag(with: event)
+        }
+    ) {
+        self.windowDragPerformer = windowDragPerformer
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        self.windowDragPerformer = { window, event in
+            window.performDrag(with: event)
+        }
+        super.init(coder: coder)
+    }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window else {
+            return
+        }
+        windowDragPerformer(window, event)
+    }
 }
 
 enum TasksMacQuickEntryPanelPolicy {
@@ -657,11 +737,83 @@ enum TasksMacQuickEntryPanelPolicy {
     )!
 }
 
+enum TasksMacQuickEntryControlShortcutAction: Equatable {
+    case forward(String)
+    case consume
+    case passThrough
+}
+
+enum TasksMacQuickEntryControlShortcutPolicy {
+    private static let metadataKeys: Set<String> = [
+        "e", "r", "t", "y", "d", "f", "g", "c", "v",
+    ]
+    private static let excludedTaskKeys: Set<String> = [
+        "q", "w", "a", "s", "z", "x", "b",
+        "1", "2", "3", "4", "5", "6",
+    ]
+
+    static func action(
+        charactersIgnoringModifiers: String?,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> TasksMacQuickEntryControlShortcutAction {
+        let commandModifiers = modifierFlags.intersection([
+            .command,
+            .control,
+            .option,
+            .shift,
+        ])
+        guard commandModifiers == [.control],
+              let key = charactersIgnoringModifiers?.lowercased() else {
+            return .passThrough
+        }
+        if metadataKeys.contains(key) {
+            return .forward(key)
+        }
+        if excludedTaskKeys.contains(key) {
+            return .consume
+        }
+        return .passThrough
+    }
+
+    static func javaScript(for key: String) -> String {
+        """
+        (() => {
+          const target = document.activeElement || document.body;
+          target.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "\(key)",
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true
+          }));
+        })();
+        """
+    }
+}
+
 final class TasksMacQuickEntryPanel: NSPanel {
     var onCancel: (() -> Void)?
+    var onControlShortcut: ((String) -> Void)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown {
+            switch TasksMacQuickEntryControlShortcutPolicy.action(
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                modifierFlags: event.modifierFlags
+            ) {
+            case let .forward(key):
+                onControlShortcut?(key)
+                return
+            case .consume:
+                return
+            case .passThrough:
+                break
+            }
+        }
+        super.sendEvent(event)
+    }
 
     override func cancelOperation(_ sender: Any?) {
         onCancel?()

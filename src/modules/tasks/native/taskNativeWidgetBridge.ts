@@ -129,6 +129,11 @@ export type TaskNativeQuickEntryShortcutMessage = {
   shortcut: TaskNativeQuickEntryShortcut;
 };
 
+export type TaskNativeQuickEntryShortcutClearMessage = {
+  type: 'clear-quick-entry-shortcut';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+};
+
 export type TaskNativeQuickEntryFinishedMessage = {
   type: 'quick-entry-finished';
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
@@ -359,6 +364,18 @@ export function configureTaskNativeQuickEntryShortcut(
     schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
     shortcut,
   } satisfies TaskNativeQuickEntryShortcutMessage);
+  return true;
+}
+
+export function clearTaskNativeQuickEntryShortcut(
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'clear-quick-entry-shortcut',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+  } satisfies TaskNativeQuickEntryShortcutClearMessage);
   return true;
 }
 

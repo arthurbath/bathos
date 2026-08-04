@@ -4,6 +4,28 @@ import XCTest
 @testable import TasksCompanion
 
 final class TasksCompanionTests: XCTestCase {
+    func testWatchComplicationCaptureRouteIsExact() {
+        XCTAssertEqual(
+            TaskWatchCaptureLaunchPolicy.captureURL.absoluteString,
+            "bathostasks-watch://capture"
+        )
+        XCTAssertTrue(TaskWatchCaptureLaunchPolicy.shouldBeginCapture(
+            for: TaskWatchCaptureLaunchPolicy.captureURL
+        ))
+
+        for urlString in [
+            "bathostasks-watch://capture/other",
+            "bathostasks-watch://capture?source=other",
+            "bathostasks-watch://other",
+            "bathostasks://capture",
+            "https://os.bath.garden/tasks/today",
+        ] {
+            XCTAssertFalse(TaskWatchCaptureLaunchPolicy.shouldBeginCapture(
+                for: URL(string: urlString)!
+            ), urlString)
+        }
+    }
+
     func testSnapshotAcceptsAllFiveBoundedListsWithoutPrivateFields() throws {
         let directory = temporaryDirectory()
         let store = TaskWidgetStore(directoryURL: directory)

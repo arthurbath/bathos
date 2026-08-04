@@ -139,6 +139,28 @@ final class TasksMacTests: XCTestCase {
         ))
     }
 
+    func testCommandCommaOpensSettings() {
+        XCTAssertEqual(
+            TasksMacKeyboardController.destination(
+                charactersIgnoringModifiers: ",",
+                modifierFlags: [.command]
+            ),
+            .settings
+        )
+        XCTAssertNil(TasksMacKeyboardController.destination(
+            charactersIgnoringModifiers: ",",
+            modifierFlags: []
+        ))
+        XCTAssertNil(TasksMacKeyboardController.destination(
+            charactersIgnoringModifiers: ",",
+            modifierFlags: [.command, .shift]
+        ))
+        XCTAssertNil(TasksMacKeyboardController.destination(
+            charactersIgnoringModifiers: ",",
+            modifierFlags: [.control]
+        ))
+    }
+
     func testCacheClearingRefreshUsesTheExactActiveWindowChord() {
         XCTAssertTrue(TasksMacKeyboardController.shouldPerformCacheClearingRefresh(
             charactersIgnoringModifiers: "r",
@@ -270,6 +292,47 @@ final class TasksMacTests: XCTestCase {
         XCTAssertTrue(unregistered.isEmpty)
     }
 
+    func testClearingGlobalShortcutUnregistersAndRemovesTheStoredShortcut() throws {
+        let suiteName = "TasksMacTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        var unregistered: [EventHotKeyRef] = []
+        let registrar = TasksGlobalShortcutRegistrar(
+            defaults: defaults,
+            installEventHandler: false,
+            registerHotKey: { _, _, _, candidate in
+                candidate.pointee = OpaquePointer(bitPattern: 1)
+                return noErr
+            },
+            unregisterHotKey: {
+                unregistered.append($0)
+                return noErr
+            }
+        )
+        let shortcut = TaskQuickEntryShortcutPayload(
+            code: "Space",
+            command: false,
+            control: true,
+            option: true,
+            shift: false
+        )
+
+        XCTAssertTrue(registrar.configure(shortcut).success)
+        XCTAssertEqual(TasksGlobalShortcutStore.load(defaults: defaults), shortcut)
+        XCTAssertEqual(
+            registrar.clear(),
+            TaskQuickEntryShortcutResponse(
+                success: true,
+                display: nil,
+                message: nil
+            )
+        )
+        XCTAssertEqual(unregistered.count, 1)
+        XCTAssertNil(TasksGlobalShortcutStore.load(defaults: defaults))
+    }
+
     func testGlobalQuickEntryPanelUsesTheAuthoritativeWebEditorOnAllSpaces() {
         let policy = TasksMacQuickEntryPanelPolicy.self
 
@@ -344,6 +407,67 @@ final class TasksMacTests: XCTestCase {
         )
     }
 
+    func testGlobalQuickEntryForwardsOnlyTaskMetadataControlShortcuts() {
+        let forwardedKeys = ["e", "r", "t", "y", "d", "f", "g", "c", "v"]
+        for key in forwardedKeys {
+            XCTAssertEqual(
+                TasksMacQuickEntryControlShortcutPolicy.action(
+                    charactersIgnoringModifiers: key,
+                    modifierFlags: [.control]
+                ),
+                .forward(key)
+            )
+        }
+
+        let consumedKeys = [
+            "q", "w", "a", "s", "z", "x", "b",
+            "1", "2", "3", "4", "5", "6",
+        ]
+        for key in consumedKeys {
+            XCTAssertEqual(
+                TasksMacQuickEntryControlShortcutPolicy.action(
+                    charactersIgnoringModifiers: key,
+                    modifierFlags: [.control]
+                ),
+                .consume
+            )
+        }
+    }
+
+    func testGlobalQuickEntryPreservesUnownedKeyboardBehavior() {
+        XCTAssertEqual(
+            TasksMacQuickEntryControlShortcutPolicy.action(
+                charactersIgnoringModifiers: "p",
+                modifierFlags: [.control]
+            ),
+            .passThrough
+        )
+        XCTAssertEqual(
+            TasksMacQuickEntryControlShortcutPolicy.action(
+                charactersIgnoringModifiers: "e",
+                modifierFlags: []
+            ),
+            .passThrough
+        )
+        XCTAssertEqual(
+            TasksMacQuickEntryControlShortcutPolicy.action(
+                charactersIgnoringModifiers: "e",
+                modifierFlags: [.control, .shift]
+            ),
+            .passThrough
+        )
+    }
+
+    func testGlobalQuickEntryMetadataJavaScriptDispatchesOneControlKey() {
+        let javaScript = TasksMacQuickEntryControlShortcutPolicy.javaScript(for: "e")
+
+        XCTAssertTrue(javaScript.contains("document.activeElement"))
+        XCTAssertTrue(javaScript.contains("new KeyboardEvent(\"keydown\""))
+        XCTAssertTrue(javaScript.contains("key: \"e\""))
+        XCTAssertTrue(javaScript.contains("ctrlKey: true"))
+        XCTAssertEqual(javaScript.components(separatedBy: "dispatchEvent").count - 1, 1)
+    }
+
     func testGlobalQuickEntryControllerPresentsTheDeclaredContentSize() throws {
         let controller = TasksMacQuickEntryPanelController { _ in }
 
@@ -360,6 +484,65 @@ final class TasksMacTests: XCTestCase {
             panel.contentRect(forFrameRect: panel.frame).size,
             TasksMacQuickEntryPanelPolicy.contentSize
         )
+    }
+
+    func testWarmGlobalQuickEntryImmediatelyPresentsItsLoadingShell() throws {
+        let model = TasksBrowserModel(inPageNavigator: { _, _ in })
+        let webView = WKWebView()
+        model.webView = webView
+        model.didFinishLoading()
+        model.didBecomeContentReady()
+        XCTAssertTrue(model.hasLoadedContent)
+
+        let controller = TasksMacQuickEntryPanelController(
+            browserModel: model
+        ) { _ in }
+
+        controller.show()
+        let panel = try XCTUnwrap(
+            NSApp.windows.compactMap { $0 as? TasksMacQuickEntryPanel }.first {
+                $0.isVisible
+            }
+        )
+        defer {
+            panel.orderOut(nil)
+        }
+
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertFalse(model.quickEntryPresentationReady)
+    }
+
+    func testGlobalQuickEntryDragRegionExplicitlyStartsWindowDrag() throws {
+        var capturedWindow: NSWindow?
+        var capturedEvent: NSEvent?
+        let dragView = TasksMacQuickEntryDragView { window, event in
+            capturedWindow = window
+            capturedEvent = event
+        }
+        let panel = TasksMacQuickEntryPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 44),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentView = dragView
+        let event = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: NSPoint(x: 20, y: 20),
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: panel.windowNumber,
+            context: nil,
+            eventNumber: 1,
+            clickCount: 1,
+            pressure: 1
+        ))
+
+        dragView.mouseDown(with: event)
+
+        XCTAssertTrue(capturedWindow === panel)
+        XCTAssertTrue(capturedEvent === event)
+        XCTAssertFalse(dragView.mouseDownCanMoveWindow)
     }
 
     func testEscapeIsConsumedOnlyForTheKeyTasksWindow() {

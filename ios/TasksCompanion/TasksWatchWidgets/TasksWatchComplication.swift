@@ -67,6 +67,7 @@ struct TasksWatchProgressView: View {
                 .foregroundStyle(.primary)
         }
         .padding(3)
+        .widgetURL(TaskWatchCaptureLaunchPolicy.captureURL)
         .containerBackground(.clear, for: .widget)
     }
 }

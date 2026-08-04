@@ -165,7 +165,8 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
             nativeContextScript += """
             window.__bathosTasksNative = Object.freeze({
               schemaVersion: 2,
-              installationId: "\(installationID.uuidString.lowercased())"
+              installationId: "\(installationID.uuidString.lowercased())",
+              notificationsEnabled: false
             });
             """
         }

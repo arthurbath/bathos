@@ -1,5 +1,17 @@
 import Foundation
 
+enum TaskWatchCaptureLaunchPolicy {
+    static let captureURL = URL(string: "bathostasks-watch://capture")!
+
+    static func shouldBeginCapture(for url: URL) -> Bool {
+        url.scheme?.lowercased() == captureURL.scheme
+            && url.host?.lowercased() == captureURL.host
+            && (url.path.isEmpty || url.path == "/")
+            && url.query == nil
+            && url.fragment == nil
+    }
+}
+
 struct TaskWatchCredential: Codable, Equatable {
     static let schemaVersion = 1
 
