@@ -206,6 +206,71 @@ describe('task sync connector', () => {
     );
   });
 
+  it('rebases a stale checklist patch before draining its local transaction', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(
+      checklistPatchEntry(),
+      [
+        { status: 'conflict', remoteRevision: 3 },
+        { status: 'applied' },
+      ],
+    );
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateChecklistItem).toHaveBeenNthCalledWith(
+      1,
+      'item-a',
+      1,
+      expect.objectContaining({
+        completed: true,
+        revision: 2,
+      }),
+    );
+    expect(remoteStore.updateChecklistItem).toHaveBeenNthCalledWith(
+      2,
+      'item-a',
+      3,
+      expect.objectContaining({
+        completed: true,
+        completed_at: '2026-07-20T05:00:00.000Z',
+        revision: 4,
+        updated_at: detectedAt,
+      }),
+    );
+    const rebasedPatch = vi.mocked(remoteStore.updateChecklistItem).mock.calls[1]?.[2];
+    expect(rebasedPatch).not.toHaveProperty('title');
+    expect(rebasedPatch).not.toHaveProperty('order_key');
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
+      expect.arrayContaining(['revision_conflict_recovered']),
+    );
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a repeatedly conflicting checklist patch queued', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(
+      checklistPatchEntry(),
+      [
+        { status: 'conflict', remoteRevision: 3 },
+        { status: 'conflict', remoteRevision: 4 },
+        { status: 'conflict', remoteRevision: 5 },
+        { status: 'conflict', remoteRevision: 6 },
+      ],
+    );
+
+    await expect(connector.uploadData(database)).rejects.toMatchObject({
+      name: 'TasksTransientSyncError',
+      code: 'revision_conflict_retry_pending',
+    });
+
+    expect(remoteStore.updateChecklistItem).toHaveBeenCalledTimes(4);
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
+      expect.arrayContaining(['revision_conflict_retry_pending']),
+    );
+    expect(complete).not.toHaveBeenCalled();
+  });
+
   it('uploads one atomic hierarchy operation instead of its optimistic row patches', async () => {
     const { connector, database, remoteStore } = createHarness([
       taskPatchEntry({ lifecycle: 'completed', completed_at: detectedAt }),

@@ -470,16 +470,33 @@ export class TaskRepository {
                   id`,
         [ownerId, reachedDate, reachedDate],
       );
+      const inboxTail = await transaction.getOptional<{ order_key: string }>(
+        `SELECT order_key FROM tasks_todos
+         WHERE owner_id = ?
+           AND destination = 'anytime'
+           AND lifecycle = 'open'
+           AND disposition = 'present'
+           AND today_section = 'inbox'
+         ORDER BY order_key DESC, id DESC
+         LIMIT 1`,
+        [ownerId],
+      );
       const occurredAt = this.now();
       const activated: TaskTodo[] = [];
+      let nextOrderKey = inboxTail?.order_key ?? null;
       for (const current of dueTasks) {
         const materializedDeadlineStart = current.start_date === null
           ? reachedDate
           : null;
+        nextOrderKey = generateTaskOrderKey(nextOrderKey, null);
         activated.push(await updateOwnedTask(
           transaction,
           current,
-          { start_date: materializedDeadlineStart, today_section: 'inbox' },
+          {
+            start_date: materializedDeadlineStart,
+            today_section: 'inbox',
+            order_key: nextOrderKey,
+          },
           this.createId(),
           occurredAt,
           { channel: 'native', actorType: 'system' },

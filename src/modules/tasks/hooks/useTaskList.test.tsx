@@ -163,6 +163,186 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
+  it('does not repaint an older horizon after the accepted move reaches the query', async () => {
+    const movedTask = {
+      ...originalTask,
+      today_section: 'later' as const,
+      revision: 2,
+      client_mutation_id: 'mutation-horizon',
+      updated_at: '2026-07-20T04:01:00.000Z',
+    };
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      moveTasks: vi.fn().mockResolvedValue([movedTask]),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.moveTasks(['task-a'], {
+          destination: 'anytime',
+          todaySection: 'later',
+          startDate: null,
+        });
+      });
+      expect(latest.tasks[0].today_section).toBe('later');
+
+      queryData = [movedTask];
+      rerender(root);
+      expect(latest.tasks[0].today_section).toBe('later');
+
+      queryData = [originalTask];
+      rerender(root);
+      expect(latest.tasks[0].today_section).toBe('later');
+
+      const newerTask = {
+        ...movedTask,
+        today_section: 'inbox' as const,
+        revision: 3,
+        client_mutation_id: 'mutation-newer-horizon',
+      };
+      queryData = [newerTask];
+      rerender(root);
+      expect(latest.tasks[0].today_section).toBe('inbox');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('does not repaint older Area or Actionability values after an accepted update', async () => {
+    const updatedTask = {
+      ...originalTask,
+      area_id: 'area-new',
+      actionability: 'waiting' as const,
+      revision: 2,
+      client_mutation_id: 'mutation-metadata',
+      updated_at: '2026-07-20T04:01:00.000Z',
+    };
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn().mockResolvedValue(updatedTask),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.updateTask('task-a', {
+          area_id: 'area-new',
+          actionability: 'waiting',
+        });
+      });
+      expect(latest.tasks[0]).toMatchObject({
+        area_id: 'area-new',
+        actionability: 'waiting',
+      });
+
+      queryData = [updatedTask];
+      rerender(root);
+      expect(latest.tasks[0]).toMatchObject({
+        area_id: 'area-new',
+        actionability: 'waiting',
+      });
+
+      queryData = [originalTask];
+      rerender(root);
+      expect(latest.tasks[0]).toMatchObject({
+        area_id: 'area-new',
+        actionability: 'waiting',
+      });
+
+      const divergentTask = {
+        ...updatedTask,
+        area_id: 'area-divergent',
+        actionability: 'rechecking' as const,
+        client_mutation_id: 'mutation-divergent-metadata',
+      };
+      queryData = [divergentTask];
+      rerender(root);
+      expect(latest.tasks[0]).toMatchObject({
+        area_id: 'area-divergent',
+        actionability: 'rechecking',
+      });
+
+      queryData = [];
+      rerender(root);
+      expect(latest.tasks).toEqual([]);
+
+      const newerTask = {
+        ...updatedTask,
+        area_id: 'area-newer',
+        actionability: 'rechecking' as const,
+        revision: 3,
+        client_mutation_id: 'mutation-newer-metadata',
+      };
+      queryData = [newerTask];
+      rerender(root);
+      expect(latest.tasks[0]).toMatchObject({
+        area_id: 'area-newer',
+        actionability: 'rechecking',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('does not let an older accepted shortcut response overwrite a newer optimistic cycle', async () => {
+    const firstUpdate = deferred<TaskTodo>();
+    const secondUpdate = deferred<TaskTodo>();
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn()
+        .mockReturnValueOnce(firstUpdate.promise)
+        .mockReturnValueOnce(secondUpdate.promise),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let firstPromise!: Promise<TaskTodo>;
+      act(() => {
+        firstPromise = latest.updateTask('task-a', { actionability: 'waiting' });
+      });
+      expect(latest.tasks[0].actionability).toBe('waiting');
+
+      let secondPromise!: Promise<TaskTodo>;
+      act(() => {
+        secondPromise = latest.updateTask('task-a', { actionability: 'rechecking' });
+      });
+      expect(latest.tasks[0].actionability).toBe('rechecking');
+
+      await act(async () => {
+        firstUpdate.resolve({
+          ...originalTask,
+          actionability: 'waiting',
+          revision: 2,
+          client_mutation_id: 'mutation-first-cycle',
+        });
+        await firstPromise;
+      });
+      expect(latest.tasks[0].actionability).toBe('rechecking');
+
+      await act(async () => {
+        secondUpdate.resolve({
+          ...originalTask,
+          actionability: 'rechecking',
+          revision: 3,
+          client_mutation_id: 'mutation-second-cycle',
+        });
+        await secondPromise;
+      });
+      expect(latest.tasks[0].actionability).toBe('rechecking');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('projects checklist presence from the existing task-list query', () => {
     queryData = [{
       ...originalTask,

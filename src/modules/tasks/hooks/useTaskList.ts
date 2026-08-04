@@ -80,6 +80,7 @@ export function useTaskList(
   const { repository, planningTimeZone } = useTasksRuntime();
   const planningDate = useTaskPlanningDate(planningTimeZone);
   const [optimisticTasks, setOptimisticTasks] = useState<Record<string, TaskTodo | null>>({});
+  const [acceptedTaskHighWater, setAcceptedTaskHighWater] = useState<Record<string, TaskTodo>>({});
   const query = useQuery<TaskListQueryRow>(
     view === 'done'
       ? `${TASK_LIST_SELECT}
@@ -156,10 +157,36 @@ export function useTaskList(
     });
   }, [query.data]);
 
+  useEffect(() => {
+    setAcceptedTaskHighWater((current) => {
+      const next = { ...current };
+      let changed = false;
+
+      for (const [taskId, acceptedTask] of Object.entries(current)) {
+        const queriedTask = query.data.find((task) => task.id === taskId);
+        const querySupersedesAccepted = queriedTask !== undefined && (
+          queriedTask.revision > acceptedTask.revision
+          || (
+            queriedTask.revision === acceptedTask.revision
+            && queriedTask.client_mutation_id !== acceptedTask.client_mutation_id
+          )
+        );
+
+        if (querySupersedesAccepted) {
+          delete next[taskId];
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [query.data]);
+
   const allTasks = useMemo(() => mergeTaskRecords(
     query.data,
+    acceptedTaskHighWater,
     optimisticTasks,
-  ), [optimisticTasks, query.data]);
+  ), [acceptedTaskHighWater, optimisticTasks, query.data]);
   const retainedProjectionRef = useRef<{
     id: string;
     view: TaskListView;
@@ -215,6 +242,28 @@ export function useTaskList(
       return { ...current, [taskId]: task };
     });
   }, []);
+  const retainAcceptedTask = useCallback((task: TaskTodo) => {
+    setAcceptedTaskHighWater((current) => {
+      const retainedTask = current[task.id];
+      if (retainedTask !== undefined && retainedTask.revision > task.revision) return current;
+      return { ...current, [task.id]: task };
+    });
+  }, []);
+  const setAcceptedTaskProjection = useCallback((
+    task: TaskTodo,
+    projection: TaskTodo | null,
+  ) => {
+    retainAcceptedTask(task);
+    setOptimisticTasks((current) => {
+      const currentTask = current[task.id];
+      if (
+        currentTask !== undefined
+        && currentTask !== null
+        && currentTask.revision > task.revision
+      ) return current;
+      return { ...current, [task.id]: projection };
+    });
+  }, [retainAcceptedTask]);
 
   const createTask = useCallback(
     async (input: string | TaskListCreateInput) => {
@@ -247,11 +296,11 @@ export function useTaskList(
           orderKey: generateTaskOrderKey(null, firstScopedTask?.order_key ?? null),
         } : {}),
       });
-      setOptimisticTask(createdTask.id, createdTask);
+      setAcceptedTaskProjection(createdTask, createdTask);
       onForwardMutation?.(createdTask);
       return createdTask;
     },
-    [allTasks, onForwardMutation, ownerId, repository, setOptimisticTask, view],
+    [allTasks, onForwardMutation, ownerId, repository, setAcceptedTaskProjection, view],
   );
   const updateTask = useCallback(
     async (taskId: string, patch: EditableTaskPatch) => {
@@ -282,8 +331,8 @@ export function useTaskList(
         if (currentTask) {
           onMetadataMutation?.([{ before: currentTask, after: updatedTask }]);
         }
-        setOptimisticTask(
-          taskId,
+        setAcceptedTaskProjection(
+          updatedTask,
           retainedTaskId === taskId || taskIsVisible(updatedTask, ownerId, view, planningDate)
             ? updatedTask
             : null,
@@ -304,6 +353,7 @@ export function useTaskList(
       repository,
       reserveForwardMutation,
       retainedTaskId,
+      setAcceptedTaskProjection,
       setOptimisticTask,
       view,
     ],
@@ -336,8 +386,8 @@ export function useTaskList(
         );
         reservation?.commit(transitionedTask);
         onForwardMutation?.(transitionedTask);
-        setOptimisticTask(
-          taskId,
+        setAcceptedTaskProjection(
+          transitionedTask,
           retainedTaskId === taskId
             || taskIsVisible(transitionedTask, ownerId, view, planningDate)
             ? transitionedTask
@@ -358,6 +408,7 @@ export function useTaskList(
       repository,
       reserveForwardMutation,
       retainedTaskId,
+      setAcceptedTaskProjection,
       setOptimisticTask,
       view,
     ],
@@ -380,7 +431,7 @@ export function useTaskList(
         actionability: source.actionability,
         areaId: source.area_id,
       });
-      setOptimisticTask(duplicated.id, taskIsVisible(
+      setAcceptedTaskProjection(duplicated, taskIsVisible(
         duplicated,
         ownerId,
         view,
@@ -388,7 +439,7 @@ export function useTaskList(
       ) ? duplicated : null);
       return duplicated;
     },
-    [allTasks, ownerId, planningDate, repository, setOptimisticTask, view],
+    [allTasks, ownerId, planningDate, repository, setAcceptedTaskProjection, view],
   );
   const moveTask = useCallback(
     async (taskId: string, input: TaskPlanningMoveInput) => {
@@ -425,8 +476,8 @@ export function useTaskList(
         if (currentTask) {
           onMetadataMutation?.([{ before: currentTask, after: movedTask }]);
         }
-        setOptimisticTask(
-          taskId,
+        setAcceptedTaskProjection(
+          movedTask,
           retainedTaskId === taskId || taskIsVisible(movedTask, ownerId, view, planningDate)
             ? movedTask
             : null,
@@ -447,6 +498,7 @@ export function useTaskList(
       repository,
       reserveForwardMutation,
       retainedTaskId,
+      setAcceptedTaskProjection,
       setOptimisticTask,
       view,
     ],
@@ -487,8 +539,8 @@ export function useTaskList(
         for (const movedTask of movedTasks) {
           reservations.get(movedTask.id)?.commit(movedTask);
           onForwardMutation?.(movedTask);
-          setOptimisticTask(
-            movedTask.id,
+          setAcceptedTaskProjection(
+            movedTask,
             retainedTaskId === movedTask.id
               || taskIsVisible(movedTask, ownerId, view, planningDate)
               ? movedTask
@@ -520,6 +572,7 @@ export function useTaskList(
       repository,
       reserveForwardMutation,
       retainedTaskId,
+      setAcceptedTaskProjection,
       setOptimisticTask,
       view,
     ],
@@ -546,8 +599,8 @@ export function useTaskList(
       for (const updatedTask of updatedTasks) {
         reservations.get(updatedTask.id)?.commit(updatedTask);
         onForwardMutation?.(updatedTask);
-        setOptimisticTask(
-          updatedTask.id,
+        setAcceptedTaskProjection(
+          updatedTask,
           taskIsVisible(updatedTask, ownerId, view, planningDate) ? updatedTask : null,
         );
       }
@@ -571,6 +624,7 @@ export function useTaskList(
     planningDate,
     repository,
     reserveForwardMutation,
+    setAcceptedTaskProjection,
     setOptimisticTask,
     view,
   ]);
@@ -704,9 +758,18 @@ export function deriveTaskViewTasks(
 
 function mergeTaskRecords(
   queriedTasks: readonly TaskTodo[],
+  acceptedTaskHighWater: Readonly<Record<string, TaskTodo>>,
   optimisticTasks: Readonly<Record<string, TaskTodo | null>>,
 ): TaskTodo[] {
-  const merged = new Map(queriedTasks.map((task) => [task.id, task]));
+  const merged = new Map<string, TaskTodo>(queriedTasks.map((task) => {
+    const acceptedTask = acceptedTaskHighWater[task.id];
+    return [
+      task.id,
+      acceptedTask !== undefined && task.revision < acceptedTask.revision
+        ? acceptedTask
+        : task,
+    ] as const;
+  }));
   for (const [taskId, optimisticTask] of Object.entries(optimisticTasks)) {
     if (optimisticTask === null) merged.delete(taskId);
     else merged.set(taskId, optimisticTask);

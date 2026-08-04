@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(76);
+SELECT plan(84);
 
 SELECT has_table('public', 'tasks_recurrence_definitions', 'stores recurrence prototypes');
 SELECT has_table('public', 'tasks_recurrence_revisions', 'stores immutable prototype revisions');
@@ -910,6 +910,264 @@ SELECT is(
   NULL::date,
   'clears the next spawn date when the watched instance is restored'
 );
+
+-- Midnight activation must preserve one mixed Upcoming bucket order across
+-- ordinary tasks and a recurrence prototype that generates at the boundary.
+SELECT set_config(
+  'test.mixed_order_snapshot',
+  (
+    SELECT jsonb_set(
+      jsonb_set(
+        revision.prototype_snapshot,
+        '{root,title}',
+        '"Recurrence Middle"'::jsonb
+      ),
+      '{root,order_key}',
+      '"z0"'::jsonb
+    )::text
+    FROM public.tasks_recurrence_revisions AS revision
+    WHERE revision.recurrence_id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid
+      AND revision.revision = 2
+  ),
+  false
+);
+
+RESET ROLE;
+INSERT INTO auth.users (
+  id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) VALUES (
+  'b2000000-0000-4000-8000-000000000001',
+  'authenticated', 'authenticated', 'mixed-order@example.test', '', now(),
+  '{}', '{}', now(), now()
+);
+INSERT INTO public.tasks_user_settings (
+  id, owner_id, planning_timezone, client_mutation_id
+) VALUES (
+  'b2000000-0000-4000-8000-000000000002',
+  'b2000000-0000-4000-8000-000000000001',
+  'UTC',
+  'b2000000-0000-4000-8000-000000000003'
+);
+UPDATE tasks_private.today_rollover_state
+SET planning_date = current_date - 1,
+    updated_at = clock_timestamp()
+WHERE owner_id = 'b2000000-0000-4000-8000-000000000001';
+
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000001', true
+);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+
+INSERT INTO public.tasks_todos (
+  id, owner_id, title, destination, order_key, upcoming_order_key,
+  start_date, today_section, updated_at, client_mutation_id
+) VALUES
+  (
+    'b2000000-0000-4000-8000-000000000010',
+    'b2000000-0000-4000-8000-000000000001',
+    'Existing Inbox', 'anytime', 'a0', 'a0', NULL, 'inbox',
+    clock_timestamp(), 'b2000000-0000-4000-8000-000000000011'
+  ),
+  (
+    'b2000000-0000-4000-8000-000000000012',
+    'b2000000-0000-4000-8000-000000000001',
+    'Rolled Existing', 'anytime', 'a9', 'a1', NULL, 'later',
+    (current_date - 1)::timestamp AT TIME ZONE 'UTC',
+    'b2000000-0000-4000-8000-000000000013'
+  ),
+  (
+    'b2000000-0000-4000-8000-000000000014',
+    'b2000000-0000-4000-8000-000000000001',
+    'Ordinary First', 'anytime', 'z9', 'a2', current_date + 1, NULL,
+    clock_timestamp(), 'b2000000-0000-4000-8000-000000000015'
+  ),
+  (
+    'b2000000-0000-4000-8000-000000000016',
+    'b2000000-0000-4000-8000-000000000001',
+    'Ordinary Last', 'anytime', 'A0', 'a4', current_date + 1, NULL,
+    clock_timestamp(), 'b2000000-0000-4000-8000-000000000017'
+  );
+
+-- Simulate the foreground client reaching midnight and uploading one ordinary
+-- activation before the authoritative recurrence pass runs.
+SELECT set_config('garden.bath.tasks_activation', 'on', true);
+UPDATE public.tasks_todos
+SET start_date = NULL,
+    today_section = 'inbox',
+    revision = revision + 1,
+    client_mutation_id = 'b2000000-0000-4000-8000-000000000018',
+    last_mutation_channel = 'native',
+    last_actor_type = 'system',
+    updated_at = (
+      current_date::timestamp + interval '1 minute'
+    ) AT TIME ZONE 'UTC'
+WHERE id = 'b2000000-0000-4000-8000-000000000014';
+UPDATE public.tasks_todos
+SET start_date = NULL,
+    deadline = current_date,
+    revision = revision + 1,
+    client_mutation_id = 'b2000000-0000-4000-8000-000000000019',
+    last_mutation_channel = 'native',
+    last_actor_type = 'system',
+    updated_at = clock_timestamp()
+WHERE id = 'b2000000-0000-4000-8000-000000000016';
+SELECT set_config('garden.bath.tasks_activation', 'off', true);
+
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+INSERT INTO public.tasks_recurrence_definitions (
+  id, owner_id, name, status, current_revision, record_revision,
+  evaluated_through_date, next_occurrence_date, upcoming_order_key,
+  last_mutation_channel, last_actor_type, client_mutation_id
+) VALUES (
+  'b2000000-0000-4000-8000-000000000020',
+  'b2000000-0000-4000-8000-000000000001',
+  'Recurrence Middle', 'active', 1, 1,
+  current_date - 1, current_date, 'a3',
+  'native', 'system', 'b2000000-0000-4000-8000-000000000021'
+);
+INSERT INTO public.tasks_recurrence_revisions (
+  id, owner_id, recurrence_id, revision, name, rule_mode, frequency,
+  interval_count, start_date, planning_timezone, missed_policy,
+  catch_up_limit, target_area_id, client_mutation_id, rule_config,
+  end_mode, end_after_count, end_on_date, reminder_local_time,
+  deadline_offset_days, prototype_snapshot
+) VALUES (
+  'b2000000-0000-4000-8000-000000000022',
+  'b2000000-0000-4000-8000-000000000001',
+  'b2000000-0000-4000-8000-000000000020', 1,
+  'Recurrence Middle', 'calendar', 'daily', 1,
+  current_date, 'UTC', 'all', 100, NULL,
+  'b2000000-0000-4000-8000-000000000023', '{}'::jsonb,
+  'never', NULL, NULL, NULL, NULL,
+  current_setting('test.mixed_order_snapshot')::jsonb
+);
+
+RESET ROLE;
+SELECT set_config(
+  'test.mixed_order_activation',
+  tasks_private.activate_due_roots(
+    (current_date::timestamp + interval '12 hours') AT TIME ZONE 'UTC',
+    'b2000000-0000-4000-8000-000000000001'
+  )::text,
+  false
+);
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000001', true
+);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT is(
+  (current_setting('test.mixed_order_activation')::jsonb
+    ->> 'generated_recurrence_instances')::integer,
+  1,
+  'mixed midnight activation generates the reached recurrence instance'
+);
+SELECT is(
+  (current_setting('test.mixed_order_activation')::jsonb
+    ->> 'activated_todos')::integer,
+  2,
+  'mixed midnight activation promotes both reached ordinary tasks'
+);
+SELECT is(
+  (
+    SELECT array_agg(task.title ORDER BY task.order_key, task.id)
+    FROM public.tasks_todos AS task
+    WHERE task.owner_id = 'b2000000-0000-4000-8000-000000000001'
+      AND task.today_section = 'inbox'
+      AND task.lifecycle = 'open'
+      AND task.disposition = 'present'
+  ),
+  ARRAY[
+    'Existing Inbox',
+    'Rolled Existing',
+    'Ordinary First',
+    'Recurrence Middle',
+    'Ordinary Last'
+  ]::text[],
+  'appends the mixed reached batch in its deliberate Upcoming order'
+);
+SELECT is(
+  (
+    SELECT task.start_date
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id
+     AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id =
+      'b2000000-0000-4000-8000-000000000020'
+  ),
+  current_date,
+  'retains the generated recurrence instance Start during order allocation'
+);
+SELECT is(
+  (
+    SELECT task.start_date
+    FROM public.tasks_todos AS task
+    WHERE task.id = 'b2000000-0000-4000-8000-000000000014'
+  ),
+  NULL::date,
+  'retains foreground explicit-Start clearing during authoritative ordering'
+);
+SELECT set_config(
+  'test.mixed_order_digest',
+  (
+    SELECT md5(string_agg(task.id::text || ':' || task.order_key, ','
+      ORDER BY task.order_key, task.id))
+    FROM public.tasks_todos AS task
+    WHERE task.owner_id = 'b2000000-0000-4000-8000-000000000001'
+      AND task.today_section = 'inbox'
+  ),
+  false
+);
+
+RESET ROLE;
+SELECT set_config(
+  'test.mixed_order_retry',
+  tasks_private.activate_due_roots(
+    (current_date::timestamp + interval '12 hours') AT TIME ZONE 'UTC',
+    'b2000000-0000-4000-8000-000000000001'
+  )::text,
+  false
+);
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000001', true
+);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT is(
+  (current_setting('test.mixed_order_retry')::jsonb
+    ->> 'generated_recurrence_instances')::integer,
+  0,
+  'retry creates no duplicate recurrence instance'
+);
+SELECT is(
+  (current_setting('test.mixed_order_retry')::jsonb
+    ->> 'activated_todos')::integer,
+  0,
+  'retry reactivates no ordinary task'
+);
+SELECT is(
+  (
+    SELECT md5(string_agg(task.id::text || ':' || task.order_key, ','
+      ORDER BY task.order_key, task.id))
+    FROM public.tasks_todos AS task
+    WHERE task.owner_id = 'b2000000-0000-4000-8000-000000000001'
+      AND task.today_section = 'inbox'
+  ),
+  current_setting('test.mixed_order_digest'),
+  'retry preserves the allocated Inbox order exactly'
+);
+
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true
+);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT set_config(
   'test.export_v14', public.tasks_create_export_v14()::text, false

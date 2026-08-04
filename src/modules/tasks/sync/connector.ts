@@ -17,7 +17,7 @@ const supportedUploadTables = new Set([
   'tasks_hierarchy_operations',
 ]);
 
-const taskPatchUploadAttemptLimit = 4;
+const revisionedPatchUploadAttemptLimit = 4;
 
 type HierarchyTable =
   | 'tasks_areas'
@@ -160,21 +160,35 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
           patch,
         );
       } else if (entry.table === 'tasks_areas') {
-        outcome = await uploadHierarchyEntry(
-          entry,
-          parseAreaInsert,
-          parseAreaUpdate,
-          this.options.remoteStore.insertArea.bind(this.options.remoteStore),
-          this.options.remoteStore.updateArea.bind(this.options.remoteStore),
-        );
+        if (entry.op === UpdateType.PUT) {
+          outcome = await this.options.remoteStore.insertArea(parseAreaInsert(entry));
+        } else if (entry.op === UpdateType.PATCH) {
+          outcome = await this.uploadHierarchyPatch(
+            database,
+            entry,
+            parseAreaUpdate(entry),
+            this.options.remoteStore.updateArea.bind(this.options.remoteStore),
+          );
+        } else {
+          throw new InvalidTasksCrudEntryError('Unsupported task area mutation operation');
+        }
       } else if (entry.table === 'tasks_checklist_items') {
-        outcome = await uploadHierarchyEntry(
-          entry,
-          parseChecklistItemInsert,
-          parseChecklistItemUpdate,
-          this.options.remoteStore.insertChecklistItem.bind(this.options.remoteStore),
-          this.options.remoteStore.updateChecklistItem.bind(this.options.remoteStore),
-        );
+        if (entry.op === UpdateType.PUT) {
+          outcome = await this.options.remoteStore.insertChecklistItem(
+            parseChecklistItemInsert(entry),
+          );
+        } else if (entry.op === UpdateType.PATCH) {
+          outcome = await this.uploadHierarchyPatch(
+            database,
+            entry,
+            parseChecklistItemUpdate(entry),
+            this.options.remoteStore.updateChecklistItem.bind(this.options.remoteStore),
+          );
+        } else {
+          throw new InvalidTasksCrudEntryError(
+            'Unsupported task checklist mutation operation',
+          );
+        }
       } else if (entry.table === 'tasks_hierarchy_operations'
         && entry.op === UpdateType.PUT) {
         outcome = await this.options.remoteStore.insertHierarchyOperation(
@@ -218,7 +232,7 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
     let patch = originalPatch;
     let encounteredConflict = false;
 
-    for (let attempt = 1; attempt <= taskPatchUploadAttemptLimit; attempt += 1) {
+    for (let attempt = 1; attempt <= revisionedPatchUploadAttemptLimit; attempt += 1) {
       const outcome = await this.options.remoteStore.updateTask(entry.id, baseRevision, patch);
 
       if (outcome.status !== 'conflict') {
@@ -240,7 +254,7 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
       const canRebase = outcome.remoteRevision !== null
         && Number.isSafeInteger(outcome.remoteRevision)
         && outcome.remoteRevision >= 1
-        && attempt < taskPatchUploadAttemptLimit;
+        && attempt < revisionedPatchUploadAttemptLimit;
       if (!canRebase) {
         await recordSyncIssue(database, entry, {
           kind: 'conflict',
@@ -263,6 +277,69 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
 
     throw new TasksTransientSyncError(
       'Task revision conflict remains queued for retry',
+      'revision_conflict_retry_pending',
+    );
+  }
+
+  private async uploadHierarchyPatch<U extends { revision?: number; updated_at?: string }>(
+    database: AbstractPowerSyncDatabase,
+    entry: CrudEntry,
+    originalPatch: U,
+    update: (
+      id: string,
+      baseRevision: number,
+      patch: U,
+    ) => Promise<TasksRemoteWriteOutcome>,
+  ): Promise<TasksRemoteWriteOutcome> {
+    const originalRevision = requirePositiveInteger(originalPatch.revision, 'revision');
+    let baseRevision = originalRevision - 1;
+    let patch = originalPatch;
+    let encounteredConflict = false;
+
+    for (let attempt = 1; attempt <= revisionedPatchUploadAttemptLimit; attempt += 1) {
+      const outcome = await update(entry.id, baseRevision, patch);
+      if (outcome.status !== 'conflict') {
+        if (outcome.status === 'applied' || outcome.status === 'already_applied') {
+          if (encounteredConflict) {
+            await recordSyncIssue(database, entry, {
+              kind: 'conflict',
+              code: 'revision_conflict_recovered',
+              remoteRevision: requirePositiveInteger(patch.revision, 'revision'),
+            }, this.now());
+          } else if (outcome.status === 'already_applied') {
+            await resolvePendingConflictReceipt(database, entry, this.now());
+          }
+        }
+        return outcome;
+      }
+
+      encounteredConflict = true;
+      const canRebase = outcome.remoteRevision !== null
+        && Number.isSafeInteger(outcome.remoteRevision)
+        && outcome.remoteRevision >= 1
+        && attempt < revisionedPatchUploadAttemptLimit;
+      if (!canRebase) {
+        await recordSyncIssue(database, entry, {
+          kind: 'conflict',
+          code: 'revision_conflict_retry_pending',
+          remoteRevision: outcome.remoteRevision,
+        }, this.now());
+        throw new TasksTransientSyncError(
+          'Task hierarchy revision conflict remains queued for retry',
+          'revision_conflict_retry_pending',
+        );
+      }
+
+      baseRevision = outcome.remoteRevision as number;
+      patch = {
+        ...originalPatch,
+        revision: baseRevision + 1,
+        updated_at: this.now(),
+      };
+    }
+
+    throw new TasksTransientSyncError(
+      'Task hierarchy revision conflict remains queued for retry',
       'revision_conflict_retry_pending',
     );
   }
@@ -688,25 +765,6 @@ function parseSettingsUpdate(entry: CrudEntry): TaskSettingsUpdate {
   requireText(data.client_mutation_id, 'client_mutation_id');
   requireText(data.updated_at, 'updated_at');
   return { ...data } as TaskSettingsUpdate;
-}
-
-async function uploadHierarchyEntry<I, U extends { revision?: number }>(
-  entry: CrudEntry,
-  parseInsert: (entry: CrudEntry) => I,
-  parseUpdate: (entry: CrudEntry) => U,
-  insert: (row: I) => Promise<TasksRemoteWriteOutcome>,
-  update: (id: string, baseRevision: number, patch: U) => Promise<TasksRemoteWriteOutcome>,
-): Promise<TasksRemoteWriteOutcome> {
-  if (entry.op === UpdateType.PUT) return insert(parseInsert(entry));
-  if (entry.op === UpdateType.PATCH) {
-    const patch = parseUpdate(entry);
-    return update(
-      entry.id,
-      requirePositiveInteger(patch.revision, 'revision') - 1,
-      patch,
-    );
-  }
-  throw new InvalidTasksCrudEntryError('Unsupported task hierarchy mutation operation');
 }
 
 function parseAreaInsert(entry: CrudEntry): TaskAreaInsert {

@@ -7,6 +7,7 @@ import {
   UnsafeTaskUndoError,
   type TaskHistoryStorageRow,
 } from '@/modules/tasks/domain/taskHistory';
+import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
 import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 
 import {
@@ -165,16 +166,28 @@ describe('task repository', () => {
 
   it('activates reached explicit and deadline-implied start dates into Today Inbox', async () => {
     const { repository, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional).mockResolvedValueOnce({ order_key: 'a5' });
     vi.mocked(transaction.getAll).mockResolvedValueOnce([
-      { ...existingTask, start_date: '2026-07-20' },
+      {
+        ...existingTask,
+        start_date: '2026-07-20',
+        today_section: null,
+        order_key: 'z9',
+        upcoming_order_key: 'a1',
+      },
       {
         ...existingTask,
         id: 'deadline-only',
         today_section: null,
         start_date: null,
         deadline: '2026-07-20',
+        order_key: 'A0',
+        upcoming_order_key: 'a2',
       },
     ]);
+
+    const firstInboxOrderKey = generateTaskOrderKey('a5', null);
+    const secondInboxOrderKey = generateTaskOrderKey(firstInboxOrderKey, null);
 
     await expect(
       repository.activateDueStartDates('owner-a', '2026-07-20'),
@@ -183,6 +196,7 @@ describe('task repository', () => {
         id: 'task-a',
         start_date: null,
         today_section: 'inbox',
+        order_key: firstInboxOrderKey,
         last_mutation_channel: 'native',
         last_actor_type: 'system',
         revision: 2,
@@ -192,6 +206,7 @@ describe('task repository', () => {
         start_date: '2026-07-20',
         deadline: '2026-07-20',
         today_section: 'inbox',
+        order_key: secondInboxOrderKey,
         last_mutation_channel: 'native',
         last_actor_type: 'system',
         revision: 2,
@@ -202,6 +217,10 @@ describe('task repository', () => {
         /start_date IS NULL[\s\S]*today_section IS NULL[\s\S]*deadline <= \?/,
       ),
       ['owner-a', '2026-07-20', '2026-07-20'],
+    );
+    expect(transaction.getOptional).toHaveBeenCalledWith(
+      expect.stringMatching(/today_section = 'inbox'[\s\S]*ORDER BY order_key DESC/),
+      ['owner-a'],
     );
     expect(
       vi.mocked(transaction.execute).mock.calls.filter(([query]) =>

@@ -152,4 +152,15 @@ describe('task recurrence previews', () => {
       limit: 5,
     })).toEqual(['2026-07-27', '2026-07-28']);
   });
+
+  it('returns the requested number of cadence dates after an exclusive cutoff', () => {
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-08-09',
+      frequency: 'weekly',
+      intervalCount: 1,
+      ruleConfig: { weekdays: [7] },
+      afterDateExclusive: '2026-08-09',
+      limit: 3,
+    })).toEqual(['2026-08-16', '2026-08-23', '2026-08-30']);
+  });
 });

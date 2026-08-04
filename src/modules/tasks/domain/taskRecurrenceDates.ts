@@ -16,6 +16,7 @@ export type TaskRecurrencePreviewInput = {
   endMode?: TaskRecurrenceEndMode;
   endAfterCount?: number | null;
   endOnDate?: string | null;
+  afterDateExclusive?: string | null;
   limit?: number;
 };
 
@@ -37,6 +38,7 @@ export function getTaskRecurrencePreviewDates(
     const date = recurrenceDateForStep(input, step);
     if (!date) break;
     if (input.endMode === 'on_date' && input.endOnDate && date > input.endOnDate) break;
+    if (input.afterDateExclusive && date <= input.afterDateExclusive) continue;
     dates.push(date);
   }
   return dates;
