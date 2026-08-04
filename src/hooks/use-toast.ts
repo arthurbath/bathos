@@ -6,7 +6,7 @@ import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 // This matters now that the shared viewport can retain more than one live toast.
 const TOAST_REMOVE_DELAY = 1000;
 
-type ToasterToast = ToastProps & {
+type ToasterToast = Omit<ToastProps, "title"> & {
   id: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
