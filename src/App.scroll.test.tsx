@@ -7,7 +7,6 @@ import {
   TASK_ROUTE_PATHS,
   isSupportedTaskRoute,
 } from "@/modules/tasks/routes";
-import { BROWSER_ROUTER_FUTURE } from "@/platform/routingCompatibility";
 import {
   BathOSBrowserRouter,
   ScrollToTopOnPathnameChange,
@@ -37,7 +36,7 @@ describe("task route registry", () => {
 });
 
 describe("BathOSBrowserRouter", () => {
-  it("enables both React Router v7 compatibility behaviors without opt-in warnings", () => {
+  it("uses the patched router defaults without compatibility warnings", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -52,15 +51,11 @@ describe("BathOSBrowserRouter", () => {
         );
       });
 
-      expect(BROWSER_ROUTER_FUTURE).toEqual({
-        v7_relativeSplatPath: true,
-        v7_startTransition: true,
-      });
       expect(container).toHaveTextContent("Router Ready");
       expect(
         consoleWarn.mock.calls.some(([message]) => (
-          String(message).includes("v7_startTransition")
-          || String(message).includes("v7_relativeSplatPath")
+          String(message).includes("Future Flag Warning")
+          || String(message).includes("compatibility opt-in")
         )),
       ).toBe(false);
     } finally {
@@ -72,10 +67,7 @@ describe("BathOSBrowserRouter", () => {
 
 function TestRoutes() {
   return (
-    <MemoryRouter
-      initialEntries={["/budget/summary"]}
-      future={BROWSER_ROUTER_FUTURE}
-    >
+    <MemoryRouter initialEntries={["/budget/summary"]}>
       <ScrollToTopOnPathnameChange />
       <Routes>
         <Route

@@ -3,7 +3,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { BROWSER_ROUTER_FUTURE } from '@/platform/routingCompatibility';
 import { AppRoutes, RouteScopedDataGridHistory } from './App';
 
 const mockTasksLifecycle = vi.hoisted(() => ({ mounts: 0, cleanups: 0 }));
@@ -43,7 +42,7 @@ async function renderRoutes(initialPath: string) {
 
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={[initialPath]} future={BROWSER_ROUTER_FUTURE}>
+      <MemoryRouter initialEntries={[initialPath]}>
         <RouteScopedDataGridHistory>
           <AppRoutes />
         </RouteScopedDataGridHistory>

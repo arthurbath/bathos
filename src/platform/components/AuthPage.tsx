@@ -15,13 +15,44 @@ import { PasswordRequirements } from '@/components/PasswordRequirements';
 import { checkAuthRateLimit, formatRetryAfter } from '@/lib/authRateLimit';
 import GatewayPageLayout from '@/platform/components/GatewayPageLayout';
 
+const MAX_REDIRECT_DECODE_PASSES = 5;
+
+function hasUnsafeRedirectPath(path: string): boolean {
+  let decoded = path;
+
+  for (let pass = 0; pass < MAX_REDIRECT_DECODE_PASSES; pass += 1) {
+    if (!decoded.startsWith('/') || decoded.startsWith('//') || decoded.includes('\\')) {
+      return true;
+    }
+
+    try {
+      const nextDecoded = decodeURIComponent(decoded);
+      if (nextDecoded === decoded) return false;
+      decoded = nextDecoded;
+    } catch {
+      return true;
+    }
+  }
+
+  return true;
+}
+
 function getSafeNextPath(search: string): string | null {
-  const params = new URLSearchParams(search);
-  const next = params.get('next');
-  if (!next) return null;
-  // Only allow same-origin relative paths to prevent open redirects.
-  if (!next.startsWith('/') || next.startsWith('//') || /[\r\n]/.test(next)) return null;
-  return next;
+  const next = new URLSearchParams(search).get('next');
+  if (!next || /[\r\n]/.test(next)) return null;
+
+  const pathEnd = next.search(/[?#]/);
+  const path = pathEnd === -1 ? next : next.slice(0, pathEnd);
+  if (hasUnsafeRedirectPath(path)) return null;
+
+  try {
+    const destination = new URL(next, window.location.origin);
+    if (destination.origin !== window.location.origin) return null;
+    if (hasUnsafeRedirectPath(destination.pathname)) return null;
+    return `${destination.pathname}${destination.search}${destination.hash}`;
+  } catch {
+    return null;
+  }
 }
 
 export default function AuthPage() {

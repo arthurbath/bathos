@@ -101,6 +101,40 @@ describe('AuthPage redirect after sign-in', () => {
     }
   });
 
+  it('preserves an internal next path with its query and fragment', () => {
+    mockAuthContext.mockReturnValue({
+      session: { user: { id: 'user-1' } },
+      signIn: vi.fn(),
+      signUp: vi.fn(),
+    });
+
+    const next = '/tasks/today?focus=task-1#notes';
+    const { root, container } = renderAt(`/signin?next=${encodeURIComponent(next)}`);
+
+    try {
+      expect(mockNavigate).toHaveBeenCalledWith(next, { replace: true });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('preserves the internal OAuth consent destination after authentication', () => {
+    mockAuthContext.mockReturnValue({
+      session: { user: { id: 'user-1' } },
+      signIn: vi.fn(),
+      signUp: vi.fn(),
+    });
+
+    const next = '/.lovable/oauth/consent?id=123';
+    const { root, container } = renderAt(`/signin?next=${encodeURIComponent(next)}`);
+
+    try {
+      expect(mockNavigate).toHaveBeenCalledWith(next, { replace: true });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('redirects to the launcher when no next path is provided', () => {
     mockAuthContext.mockReturnValue({
       session: { user: { id: 'user-1' } },
@@ -128,6 +162,52 @@ describe('AuthPage redirect after sign-in', () => {
 
     try {
       expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it.each([
+    ['protocol-relative path', '//evil.example/path'],
+    ['backslash authority', String.raw`\\evil.example\path`],
+    ['mixed slash and backslash authority', String.raw`/\evil.example/path`],
+    ['mixed backslash and slash authority', String.raw`\/evil.example/path`],
+    ['encoded backslash authority', '/%5Cevil.example/path'],
+    ['nested encoded backslash authority', '/%255Cevil.example/path'],
+    ['absolute URL', 'https://evil.example/path'],
+    ['non-path scheme', 'javascript:alert(1)'],
+  ])('rejects an unsafe %s after authentication', (_label, next) => {
+    mockAuthContext.mockReturnValue({
+      session: { user: { id: 'user-1' } },
+      signIn: vi.fn(),
+      signUp: vi.fn(),
+    });
+
+    const { root, container } = renderAt(`/signin?next=${encodeURIComponent(next)}`);
+
+    try {
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('does not preserve an unsafe next path when switching authentication tabs', () => {
+    mockAuthContext.mockReturnValue({
+      session: null,
+      signIn: vi.fn(),
+      signUp: vi.fn(),
+    });
+
+    const next = String.raw`/\evil.example/path`;
+    const { root, container } = renderAt(`/signin?next=${encodeURIComponent(next)}`);
+
+    try {
+      expect(capturedOnValueChange).toBeTruthy();
+      act(() => {
+        capturedOnValueChange?.('signup');
+      });
+      expect(mockNavigate).toHaveBeenCalledWith('/signup', { replace: true });
     } finally {
       cleanup(root, container);
     }
