@@ -1,6 +1,5 @@
 import type { Database, Json } from '@/integrations/supabase/types';
 import { isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
-import { generateTaskOrderKey } from '../../../modules/tasks/domain/taskOrder';
 import { normalizeTaskPrimaryLink } from '../../../modules/tasks/domain/taskPrimaryLink';
 
 import { defineTool, z } from '../mcp-core';
@@ -80,15 +79,15 @@ type NormalizedCreateTaskRequest = {
   primaryLink: string | null;
 };
 
-type ExistingCreation = {
-  event: Pick<
+export type CreateTaskResult = {
+  idempotency_outcome: 'created' | 'already_applied';
+  receipt: Pick<
     TaskHistoryRow,
-    'task_id' | 'client_mutation_id' | 'actor_type' | 'mutation_channel'
-      | 'affected_ids' | 'base_revision'
-      | 'result_revision' | 'transition' | 'occurred_at' | 'outcome'
-      | 'after_state'
-  >;
-  task: TaskTodoRow;
+    'client_mutation_id' | 'actor_type' | 'mutation_channel'
+      | 'affected_ids' | 'base_revision' | 'result_revision'
+      | 'transition' | 'occurred_at' | 'outcome'
+  > & { code: null };
+  task: Omit<TaskTodoRow, 'owner_id'>;
 };
 
 function trimRequired(value: string, label: string, maxLength: number): string {
@@ -165,185 +164,25 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
   };
 }
 
-async function readOne<T>(
-  query: PromiseLike<{ data: T | null; error: { message: string } | null }>,
-): Promise<T | null> {
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-async function findExistingCreation(
-  auth: AuthenticatedMcpContext,
-  idempotencyKey: string,
-): Promise<ExistingCreation | null> {
-  const event = await readOne<ExistingCreation['event']>(auth.supabase
-    .from('tasks_history_events')
-    .select('task_id, client_mutation_id, actor_type, mutation_channel, affected_ids, base_revision, result_revision, transition, occurred_at, outcome, after_state')
-    .eq('owner_id', auth.userId)
-    .eq('client_mutation_id', idempotencyKey)
-    .eq('transition', 'create')
-    .maybeSingle());
-  if (event === null) return null;
-
-  const task = await readOne<TaskTodoRow>(auth.supabase
-    .from('tasks_todos')
-    .select('*')
-    .eq('owner_id', auth.userId)
-    .eq('id', event.task_id)
-    .maybeSingle());
-  if (task === null) throw new Error('The idempotent task creation record is unavailable.');
-  return { event, task };
-}
-
 function jsonRecord(value: Json): Record<string, Json | undefined> {
   if (value === null || Array.isArray(value) || typeof value !== 'object') {
-    throw new Error('The idempotent task creation record is invalid.');
+    throw new Error('The transactional task creation response is invalid.');
   }
   return value;
 }
 
-function assertSameCreationRequest(
-  request: NormalizedCreateTaskRequest,
-  existing: ExistingCreation,
-): void {
-  const state = jsonRecord(existing.event.after_state);
-  const checks: Array<[unknown, unknown]> = [
-    [state.title, request.title],
-    [state.notes, request.notes],
-    [state.destination, request.destination],
-    [state.actionability, request.actionability],
-    [existing.event.mutation_channel, request.entryChannel],
-    [state.deadline, request.deadline],
-    [state.area_id, request.areaId],
-    [state.source_kind, request.sourceKind],
-    [state.source_url, request.sourceUrl],
-    [state.source_title, request.sourceTitle],
-    [state.source_external_id, request.sourceExternalId],
-    [state.primary_link, request.primaryLink],
-  ];
-  if (request.placementWasImplicit) {
-    checks.push([state.today_section, 'next']);
-    checks.push([state.start_date, null]);
-  } else {
-    const expectedStartDate = request.requestedStartDate;
-    const expectedTodaySection = request.destination === 'someday'
-      ? null
-      : expectedStartDate === null ? request.todaySection : null;
-    checks.push([state.start_date, expectedStartDate]);
-    checks.push([state.today_section, expectedTodaySection]);
+function parseCreationResult(value: Json): CreateTaskResult {
+  const result = jsonRecord(value);
+  const receipt = jsonRecord(result.receipt ?? null);
+  const task = jsonRecord(result.task ?? null);
+  if (
+    !['created', 'already_applied'].includes(String(result.idempotency_outcome))
+    || receipt.transition !== 'create'
+    || task.owner_id !== undefined
+  ) {
+    throw new Error('The transactional task creation response is invalid.');
   }
-  if (checks.some(([actual, expected]) => actual !== expected)) {
-    throw new Error('The idempotency key was already used for a different task creation request.');
-  }
-}
-
-async function ownerPlanningDate(auth: AuthenticatedMcpContext): Promise<string> {
-  const settings = await readOne<{ planning_timezone: string }>(auth.supabase
-    .from('tasks_user_settings')
-    .select('planning_timezone')
-    .eq('owner_id', auth.userId)
-    .maybeSingle());
-  if (!settings) {
-    throw new Error('Task planning settings are not initialized. Open the Tasks module once.');
-  }
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: settings.planning_timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-async function validateContainer(
-  request: NormalizedCreateTaskRequest,
-  auth: AuthenticatedMcpContext,
-): Promise<void> {
-  const area = request.areaId === null ? null : await readOne<{ id: string }>(auth.supabase
-    .from('tasks_areas')
-    .select('id')
-    .eq('owner_id', auth.userId)
-    .eq('id', request.areaId)
-    .eq('disposition', 'present')
-    .maybeSingle());
-  if (request.areaId !== null && area === null) throw new Error('The task area is unavailable.');
-}
-
-async function nextPlanningOrderKey(
-  request: NormalizedCreateTaskRequest,
-  auth: AuthenticatedMcpContext,
-): Promise<string> {
-  const query = auth.supabase
-    .from('tasks_todos')
-    .select('order_key')
-    .eq('owner_id', auth.userId)
-    .eq('destination', request.destination)
-    .eq('lifecycle', 'open')
-    .eq('disposition', 'present');
-  const last = await readOne<{ order_key: string }>(query
-    .order('order_key', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle());
-  return generateTaskOrderKey(last?.order_key ?? null, null);
-}
-
-async function nextHierarchyOrderKey(
-  request: NormalizedCreateTaskRequest,
-  auth: AuthenticatedMcpContext,
-): Promise<string | null> {
-  if (request.areaId === null) {
-    return null;
-  }
-  let query = auth.supabase
-    .from('tasks_todos')
-    .select('hierarchy_order_key')
-    .eq('owner_id', auth.userId)
-    .eq('lifecycle', 'open')
-    .eq('disposition', 'present');
-  query = request.areaId === null ? query.is('area_id', null) : query.eq('area_id', request.areaId);
-  const last = await readOne<{ hierarchy_order_key: string | null }>(query
-    .not('hierarchy_order_key', 'is', null)
-    .order('hierarchy_order_key', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle());
-  return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
-}
-
-function withoutOwner(row: TaskTodoRow) {
-  const { owner_id: _ownerId, ...task } = row;
-  return task;
-}
-
-function creationResult(existing: ExistingCreation, idempotencyOutcome: 'created' | 'already_applied') {
-  return {
-    idempotency_outcome: idempotencyOutcome,
-    receipt: {
-      client_mutation_id: existing.event.client_mutation_id,
-      actor_type: existing.event.actor_type,
-      mutation_channel: existing.event.mutation_channel,
-      affected_ids: existing.event.affected_ids,
-      base_revision: existing.event.base_revision,
-      result_revision: existing.event.result_revision,
-      transition: existing.event.transition,
-      occurred_at: existing.event.occurred_at,
-      outcome: existing.event.outcome,
-      code: null,
-    },
-    task: withoutOwner(existing.task),
-  };
-}
-
-async function readCreationEvent(
-  auth: AuthenticatedMcpContext,
-  idempotencyKey: string,
-): Promise<ExistingCreation> {
-  const created = await findExistingCreation(auth, idempotencyKey);
-  if (created === null) throw new Error('The accepted task creation receipt is unavailable.');
-  return created;
+  return value as unknown as CreateTaskResult;
 }
 
 export async function createTaskData(
@@ -351,73 +190,26 @@ export async function createTaskData(
   auth: AuthenticatedMcpContext,
 ) {
   const request = normalizeRequest(input);
-  const existing = await findExistingCreation(auth, request.idempotencyKey);
-  if (existing !== null) {
-    assertSameCreationRequest(request, existing);
-    return creationResult(existing, 'already_applied');
-  }
-
-  await validateContainer(request, auth);
-  const startDate = request.destination === 'someday' ? null : request.requestedStartDate;
-  if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
-    throw new Error('Start must be later than today in the owner planning time zone.');
-  }
-  const todaySection = request.destination === 'someday'
-    ? null
-    : startDate !== null
-      ? null
-      : request.placementWasImplicit ? 'next' : request.todaySection;
-  const [orderKey, hierarchyOrderKey] = await Promise.all([
-    nextPlanningOrderKey(request, auth),
-    nextHierarchyOrderKey(request, auth),
-  ]);
-  const timestamp = new Date().toISOString();
-  const row: Tables['tasks_todos']['Insert'] = {
-    id: crypto.randomUUID(),
-    owner_id: auth.userId,
-    area_id: request.areaId,
-    title: request.title,
-    notes: request.notes,
-    lifecycle: 'open',
-    completed_at: null,
-    canceled_at: null,
-    disposition: 'present',
-    deleted_at: null,
-    deletion_root_id: null,
-    destination: request.destination,
-    today_section: todaySection,
-    actionability: request.actionability,
-    order_key: orderKey,
-    hierarchy_order_key: hierarchyOrderKey,
-    start_date: startDate,
-    deadline: request.deadline,
-    entry_channel: request.entryChannel,
-    last_mutation_channel: request.entryChannel,
-    last_actor_type: 'automation',
-    undo_source_event_id: null,
-    source_kind: request.sourceKind,
-    source_url: request.sourceUrl,
-    source_title: request.sourceTitle,
-    source_external_id: request.sourceExternalId,
-    primary_link: request.primaryLink,
-    revision: 1,
-    client_mutation_id: request.idempotencyKey,
-    created_at: timestamp,
-    updated_at: timestamp,
-  };
-  const { error } = await auth.supabase.from('tasks_todos').insert(row);
-  if (error) {
-    if (error.code === '23505') {
-      const replay = await findExistingCreation(auth, request.idempotencyKey);
-      if (replay !== null) {
-        assertSameCreationRequest(request, replay);
-        return creationResult(replay, 'already_applied');
-      }
-      throw new Error('The idempotency key is unavailable. Use a new key for a new task request.');
-    }
-    throw new Error(error.message);
-  }
-  return creationResult(await readCreationEvent(auth, request.idempotencyKey), 'created');
+  const { data, error } = await auth.supabase.rpc('tasks_create_mcp_task', {
+    _idempotency_key: request.idempotencyKey,
+    _title: request.title,
+    _notes: request.notes,
+    _destination: request.destination,
+    _requested_today_section: request.todaySection,
+    _actionability: request.actionability,
+    _entry_channel: request.entryChannel,
+    _requested_start_date: request.requestedStartDate,
+    _placement_was_implicit: request.placementWasImplicit,
+    _deadline: request.deadline,
+    _area_id: request.areaId,
+    _source_kind: request.sourceKind,
+    _source_url: request.sourceUrl,
+    _source_title: request.sourceTitle,
+    _source_external_id: request.sourceExternalId,
+    _primary_link: request.primaryLink,
+  });
+  if (error) throw new Error(error.message);
+  return parseCreationResult(data);
 }
 
 export const createTask = defineTool({

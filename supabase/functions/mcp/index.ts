@@ -899,74 +899,6 @@ function isTaskCalendarDate(value) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-// src/modules/tasks/domain/taskOrder.ts
-import { generateKeyBetween } from "npm:fractional-indexing@4.0.0";
-var InvalidTaskOrderError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "InvalidTaskOrderError";
-  }
-};
-function compareTaskOrder(left, right) {
-  const keyComparison = compareOrdinalText(left.orderKey, right.orderKey);
-  return keyComparison === 0 ? compareOrdinalText(left.id, right.id) : keyComparison;
-}
-function generateTaskOrderKey(previousKey, nextKey) {
-  if (previousKey !== null && nextKey !== null && previousKey >= nextKey) {
-    throw new InvalidTaskOrderError("The previous order key must sort before the next order key");
-  }
-  try {
-    return generateKeyBetween(previousKey, nextKey);
-  } catch (error) {
-    throw new InvalidTaskOrderError(
-      error instanceof Error ? error.message : "Unable to generate a task order key"
-    );
-  }
-}
-function generateTaskMoveOrderKey(tasks, movingTaskId, destinationIndex) {
-  const ordered = [...tasks].sort(compareTaskOrder);
-  const movingIndex = ordered.findIndex((task) => task.id === movingTaskId);
-  if (movingIndex === -1) {
-    throw new InvalidTaskOrderError("The moving task is not present in the ordered collection");
-  }
-  const remaining = ordered.filter((task) => task.id !== movingTaskId);
-  if (!Number.isInteger(destinationIndex) || destinationIndex < 0 || destinationIndex > remaining.length) {
-    throw new InvalidTaskOrderError("The destination index is outside the ordered collection");
-  }
-  const previousKey = remaining[destinationIndex - 1]?.orderKey ?? null;
-  const nextKey = remaining[destinationIndex]?.orderKey ?? null;
-  if (previousKey === null || nextKey === null || previousKey !== nextKey) {
-    return generateTaskOrderKey(previousKey, nextKey);
-  }
-  if (destinationIndex < movingIndex) {
-    let firstTiedIndex = destinationIndex - 1;
-    while (firstTiedIndex > 0 && remaining[firstTiedIndex - 1].orderKey === nextKey) {
-      firstTiedIndex -= 1;
-    }
-    return generateTaskOrderKey(
-      remaining[firstTiedIndex - 1]?.orderKey ?? null,
-      nextKey
-    );
-  }
-  let lastTiedIndex = destinationIndex;
-  while (lastTiedIndex + 1 < remaining.length && remaining[lastTiedIndex + 1].orderKey === previousKey) {
-    lastTiedIndex += 1;
-  }
-  return generateTaskOrderKey(
-    previousKey,
-    remaining[lastTiedIndex + 1]?.orderKey ?? null
-  );
-}
-function compareOrdinalText(left, right) {
-  if (left < right) {
-    return -1;
-  }
-  if (left > right) {
-    return 1;
-  }
-  return 0;
-}
-
 // src/modules/tasks/domain/taskPrimaryLink.ts
 function normalizeTaskPrimaryLink(value) {
   const normalized = value?.trim() ?? "";
@@ -1068,176 +1000,43 @@ function normalizeRequest(input) {
     primaryLink
   };
 }
-async function readOne2(query) {
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data;
-}
-async function findExistingCreation(auth2, idempotencyKey) {
-  const event = await readOne2(auth2.supabase.from("tasks_history_events").select("task_id, client_mutation_id, actor_type, mutation_channel, affected_ids, base_revision, result_revision, transition, occurred_at, outcome, after_state").eq("owner_id", auth2.userId).eq("client_mutation_id", idempotencyKey).eq("transition", "create").maybeSingle());
-  if (event === null) return null;
-  const task = await readOne2(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", event.task_id).maybeSingle());
-  if (task === null) throw new Error("The idempotent task creation record is unavailable.");
-  return { event, task };
-}
 function jsonRecord(value) {
   if (value === null || Array.isArray(value) || typeof value !== "object") {
-    throw new Error("The idempotent task creation record is invalid.");
+    throw new Error("The transactional task creation response is invalid.");
   }
   return value;
 }
-function assertSameCreationRequest(request, existing) {
-  const state = jsonRecord(existing.event.after_state);
-  const checks = [
-    [state.title, request.title],
-    [state.notes, request.notes],
-    [state.destination, request.destination],
-    [state.actionability, request.actionability],
-    [existing.event.mutation_channel, request.entryChannel],
-    [state.deadline, request.deadline],
-    [state.area_id, request.areaId],
-    [state.source_kind, request.sourceKind],
-    [state.source_url, request.sourceUrl],
-    [state.source_title, request.sourceTitle],
-    [state.source_external_id, request.sourceExternalId],
-    [state.primary_link, request.primaryLink]
-  ];
-  if (request.placementWasImplicit) {
-    checks.push([state.today_section, "next"]);
-    checks.push([state.start_date, null]);
-  } else {
-    const expectedStartDate = request.requestedStartDate;
-    const expectedTodaySection = request.destination === "someday" ? null : expectedStartDate === null ? request.todaySection : null;
-    checks.push([state.start_date, expectedStartDate]);
-    checks.push([state.today_section, expectedTodaySection]);
+function parseCreationResult(value) {
+  const result = jsonRecord(value);
+  const receipt2 = jsonRecord(result.receipt ?? null);
+  const task = jsonRecord(result.task ?? null);
+  if (!["created", "already_applied"].includes(String(result.idempotency_outcome)) || receipt2.transition !== "create" || task.owner_id !== void 0) {
+    throw new Error("The transactional task creation response is invalid.");
   }
-  if (checks.some(([actual, expected]) => actual !== expected)) {
-    throw new Error("The idempotency key was already used for a different task creation request.");
-  }
-}
-async function ownerPlanningDate(auth2) {
-  const settings = await readOne2(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
-  if (!settings) {
-    throw new Error("Task planning settings are not initialized. Open the Tasks module once.");
-  }
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: settings.planning_timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(/* @__PURE__ */ new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-async function validateContainer(request, auth2) {
-  const area = request.areaId === null ? null : await readOne2(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", request.areaId).eq("disposition", "present").maybeSingle());
-  if (request.areaId !== null && area === null) throw new Error("The task area is unavailable.");
-}
-async function nextPlanningOrderKey(request, auth2) {
-  const query = auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", request.destination).eq("lifecycle", "open").eq("disposition", "present");
-  const last = await readOne2(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey(last?.order_key ?? null, null);
-}
-async function nextHierarchyOrderKey(request, auth2) {
-  if (request.areaId === null) {
-    return null;
-  }
-  let query = auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("lifecycle", "open").eq("disposition", "present");
-  query = request.areaId === null ? query.is("area_id", null) : query.eq("area_id", request.areaId);
-  const last = await readOne2(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
-}
-function withoutOwner(row) {
-  const { owner_id: _ownerId, ...task } = row;
-  return task;
-}
-function creationResult(existing, idempotencyOutcome) {
-  return {
-    idempotency_outcome: idempotencyOutcome,
-    receipt: {
-      client_mutation_id: existing.event.client_mutation_id,
-      actor_type: existing.event.actor_type,
-      mutation_channel: existing.event.mutation_channel,
-      affected_ids: existing.event.affected_ids,
-      base_revision: existing.event.base_revision,
-      result_revision: existing.event.result_revision,
-      transition: existing.event.transition,
-      occurred_at: existing.event.occurred_at,
-      outcome: existing.event.outcome,
-      code: null
-    },
-    task: withoutOwner(existing.task)
-  };
-}
-async function readCreationEvent(auth2, idempotencyKey) {
-  const created = await findExistingCreation(auth2, idempotencyKey);
-  if (created === null) throw new Error("The accepted task creation receipt is unavailable.");
-  return created;
+  return value;
 }
 async function createTaskData(input, auth2) {
   const request = normalizeRequest(input);
-  const existing = await findExistingCreation(auth2, request.idempotencyKey);
-  if (existing !== null) {
-    assertSameCreationRequest(request, existing);
-    return creationResult(existing, "already_applied");
-  }
-  await validateContainer(request, auth2);
-  const startDate = request.destination === "someday" ? null : request.requestedStartDate;
-  if (startDate !== null && startDate <= await ownerPlanningDate(auth2)) {
-    throw new Error("Start must be later than today in the owner planning time zone.");
-  }
-  const todaySection2 = request.destination === "someday" ? null : startDate !== null ? null : request.placementWasImplicit ? "next" : request.todaySection;
-  const [orderKey, hierarchyOrderKey] = await Promise.all([
-    nextPlanningOrderKey(request, auth2),
-    nextHierarchyOrderKey(request, auth2)
-  ]);
-  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
-  const row = {
-    id: crypto.randomUUID(),
-    owner_id: auth2.userId,
-    area_id: request.areaId,
-    title: request.title,
-    notes: request.notes,
-    lifecycle: "open",
-    completed_at: null,
-    canceled_at: null,
-    disposition: "present",
-    deleted_at: null,
-    deletion_root_id: null,
-    destination: request.destination,
-    today_section: todaySection2,
-    actionability: request.actionability,
-    order_key: orderKey,
-    hierarchy_order_key: hierarchyOrderKey,
-    start_date: startDate,
-    deadline: request.deadline,
-    entry_channel: request.entryChannel,
-    last_mutation_channel: request.entryChannel,
-    last_actor_type: "automation",
-    undo_source_event_id: null,
-    source_kind: request.sourceKind,
-    source_url: request.sourceUrl,
-    source_title: request.sourceTitle,
-    source_external_id: request.sourceExternalId,
-    primary_link: request.primaryLink,
-    revision: 1,
-    client_mutation_id: request.idempotencyKey,
-    created_at: timestamp,
-    updated_at: timestamp
-  };
-  const { error } = await auth2.supabase.from("tasks_todos").insert(row);
-  if (error) {
-    if (error.code === "23505") {
-      const replay = await findExistingCreation(auth2, request.idempotencyKey);
-      if (replay !== null) {
-        assertSameCreationRequest(request, replay);
-        return creationResult(replay, "already_applied");
-      }
-      throw new Error("The idempotency key is unavailable. Use a new key for a new task request.");
-    }
-    throw new Error(error.message);
-  }
-  return creationResult(await readCreationEvent(auth2, request.idempotencyKey), "created");
+  const { data, error } = await auth2.supabase.rpc("tasks_create_mcp_task", {
+    _idempotency_key: request.idempotencyKey,
+    _title: request.title,
+    _notes: request.notes,
+    _destination: request.destination,
+    _requested_today_section: request.todaySection,
+    _actionability: request.actionability,
+    _entry_channel: request.entryChannel,
+    _requested_start_date: request.requestedStartDate,
+    _placement_was_implicit: request.placementWasImplicit,
+    _deadline: request.deadline,
+    _area_id: request.areaId,
+    _source_kind: request.sourceKind,
+    _source_url: request.sourceUrl,
+    _source_title: request.sourceTitle,
+    _source_external_id: request.sourceExternalId,
+    _primary_link: request.primaryLink
+  });
+  if (error) throw new Error(error.message);
+  return parseCreationResult(data);
 }
 var createTask = defineTool({
   name: "create_task",
@@ -1261,6 +1060,74 @@ var createTask = defineTool({
   handler: (input, ctx) => toMcpResult(createTaskData(input, requireAuthenticated(ctx)))
 });
 
+// src/modules/tasks/domain/taskOrder.ts
+import { generateKeyBetween } from "npm:fractional-indexing@4.0.0";
+var InvalidTaskOrderError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "InvalidTaskOrderError";
+  }
+};
+function compareTaskOrder(left, right) {
+  const keyComparison = compareOrdinalText(left.orderKey, right.orderKey);
+  return keyComparison === 0 ? compareOrdinalText(left.id, right.id) : keyComparison;
+}
+function generateTaskOrderKey(previousKey, nextKey) {
+  if (previousKey !== null && nextKey !== null && previousKey >= nextKey) {
+    throw new InvalidTaskOrderError("The previous order key must sort before the next order key");
+  }
+  try {
+    return generateKeyBetween(previousKey, nextKey);
+  } catch (error) {
+    throw new InvalidTaskOrderError(
+      error instanceof Error ? error.message : "Unable to generate a task order key"
+    );
+  }
+}
+function generateTaskMoveOrderKey(tasks, movingTaskId, destinationIndex) {
+  const ordered = [...tasks].sort(compareTaskOrder);
+  const movingIndex = ordered.findIndex((task) => task.id === movingTaskId);
+  if (movingIndex === -1) {
+    throw new InvalidTaskOrderError("The moving task is not present in the ordered collection");
+  }
+  const remaining = ordered.filter((task) => task.id !== movingTaskId);
+  if (!Number.isInteger(destinationIndex) || destinationIndex < 0 || destinationIndex > remaining.length) {
+    throw new InvalidTaskOrderError("The destination index is outside the ordered collection");
+  }
+  const previousKey = remaining[destinationIndex - 1]?.orderKey ?? null;
+  const nextKey = remaining[destinationIndex]?.orderKey ?? null;
+  if (previousKey === null || nextKey === null || previousKey !== nextKey) {
+    return generateTaskOrderKey(previousKey, nextKey);
+  }
+  if (destinationIndex < movingIndex) {
+    let firstTiedIndex = destinationIndex - 1;
+    while (firstTiedIndex > 0 && remaining[firstTiedIndex - 1].orderKey === nextKey) {
+      firstTiedIndex -= 1;
+    }
+    return generateTaskOrderKey(
+      remaining[firstTiedIndex - 1]?.orderKey ?? null,
+      nextKey
+    );
+  }
+  let lastTiedIndex = destinationIndex;
+  while (lastTiedIndex + 1 < remaining.length && remaining[lastTiedIndex + 1].orderKey === previousKey) {
+    lastTiedIndex += 1;
+  }
+  return generateTaskOrderKey(
+    previousKey,
+    remaining[lastTiedIndex + 1]?.orderKey ?? null
+  );
+}
+function compareOrdinalText(left, right) {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+}
+
 // src/lib/mcp/tools/tasks-hierarchy-create.ts
 function trimTitle(value) {
   const title = value.trim();
@@ -1278,19 +1145,19 @@ function jsonRecord2(value) {
   }
   return value;
 }
-async function readOne3(query) {
+async function readOne2(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
 }
 async function readHierarchyRecord(auth2, recordType, id) {
   if (recordType === "area") {
-    return readOne3(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+    return readOne2(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
   }
-  return readOne3(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  return readOne2(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
 }
-async function findExistingCreation2(auth2, idempotencyKey) {
-  const event = await readOne3(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", idempotencyKey).maybeSingle());
+async function findExistingCreation(auth2, idempotencyKey) {
+  const event = await readOne2(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", idempotencyKey).maybeSingle());
   if (event === null) return null;
   if (event.transition !== "create") {
     throw new Error("The idempotency key belongs to a different hierarchy mutation.");
@@ -1313,7 +1180,7 @@ function assertExactReplay(existing, expectedType, expected) {
     throw new Error("The idempotency key was already used with different hierarchy data.");
   }
 }
-function creationResult2(existing, status) {
+function creationResult(existing, status) {
   const { event, record } = existing;
   return {
     mutation_outcome: status,
@@ -1335,9 +1202,9 @@ function creationResult2(existing, status) {
 }
 async function replayOrNull(auth2, idempotencyKey, recordType, expected) {
   const [existing, todoMutation, hierarchyOperation] = await Promise.all([
-    findExistingCreation2(auth2, idempotencyKey),
-    readOne3(auth2.supabase.from("tasks_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", idempotencyKey).maybeSingle()),
-    readOne3(auth2.supabase.from("tasks_hierarchy_operations").select("id").eq("owner_id", auth2.userId).eq("id", idempotencyKey).maybeSingle())
+    findExistingCreation(auth2, idempotencyKey),
+    readOne2(auth2.supabase.from("tasks_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", idempotencyKey).maybeSingle()),
+    readOne2(auth2.supabase.from("tasks_hierarchy_operations").select("id").eq("owner_id", auth2.userId).eq("id", idempotencyKey).maybeSingle())
   ]);
   if (todoMutation !== null) {
     throw new Error("The idempotency key was already used for a different task mutation.");
@@ -1347,10 +1214,10 @@ async function replayOrNull(auth2, idempotencyKey, recordType, expected) {
   }
   if (existing === null) return null;
   assertExactReplay(existing, recordType, expected);
-  return creationResult2(existing, "already_applied");
+  return creationResult(existing, "already_applied");
 }
 async function readCreated(auth2, idempotencyKey) {
-  const existing = await findExistingCreation2(auth2, idempotencyKey);
+  const existing = await findExistingCreation(auth2, idempotencyKey);
   if (existing === null) throw new Error("The accepted hierarchy creation receipt is unavailable.");
   return existing;
 }
@@ -1364,14 +1231,14 @@ async function insertWithReplay(auth2, table, row, idempotencyKey, recordType, e
     }
     throw new Error(error.message);
   }
-  return creationResult2(await readCreated(auth2, idempotencyKey), "created");
+  return creationResult(await readCreated(auth2, idempotencyKey), "created");
 }
 async function nextAreaOrderKey(auth2) {
-  const last = await readOne3(auth2.supabase.from("tasks_areas").select("order_key").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne2(auth2.supabase.from("tasks_areas").select("order_key").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextChecklistOrderKey(auth2, taskId) {
-  const last = await readOne3(auth2.supabase.from("tasks_checklist_items").select("order_key").eq("owner_id", auth2.userId).eq("task_id", taskId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne2(auth2.supabase.from("tasks_checklist_items").select("order_key").eq("owner_id", auth2.userId).eq("task_id", taskId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function createTaskAreaData(input, auth2) {
@@ -1402,7 +1269,7 @@ async function createTaskChecklistItemData(input, auth2) {
   const expected = { title, task_id: input.task_id };
   const replay = await replayOrNull(auth2, input.idempotency_key, "checklist_item", expected);
   if (replay !== null) return replay;
-  const task = await readOne3(auth2.supabase.from("tasks_todos").select("id").eq("owner_id", auth2.userId).eq("id", input.task_id).eq("disposition", "present").eq("lifecycle", "open").maybeSingle());
+  const task = await readOne2(auth2.supabase.from("tasks_todos").select("id").eq("owner_id", auth2.userId).eq("id", input.task_id).eq("disposition", "present").eq("lifecycle", "open").maybeSingle());
   if (task === null) throw new Error("The parent task is unavailable.");
   const timestamp = (/* @__PURE__ */ new Date()).toISOString();
   return insertWithReplay(auth2, "tasks_checklist_items", {
@@ -1472,16 +1339,16 @@ function jsonRecord3(value) {
   }
   return value;
 }
-async function readOne4(query) {
+async function readOne3(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
 }
 async function readHierarchyRecord2(auth2, recordType, id) {
   if (recordType === "area") {
-    return readOne4(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+    return readOne3(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
   }
-  return readOne4(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  return readOne3(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
 }
 async function requireHierarchyRecord(auth2, recordType, id) {
   const record = await readHierarchyRecord2(auth2, recordType, id);
@@ -1489,7 +1356,7 @@ async function requireHierarchyRecord(auth2, recordType, id) {
   return record;
 }
 async function readHierarchyMutation(auth2, mutationId) {
-  return readOne4(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne3(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 function receipt(event) {
   return {
@@ -1553,8 +1420,8 @@ function assertExactRetry(request, event) {
 async function resolveRetry(request, auth2) {
   const [event, todoEvent, hierarchyOperation] = await Promise.all([
     readHierarchyMutation(auth2, request.client_mutation_id),
-    readOne4(auth2.supabase.from("tasks_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", request.client_mutation_id).maybeSingle()),
-    readOne4(auth2.supabase.from("tasks_hierarchy_operations").select("id").eq("owner_id", auth2.userId).eq("id", request.client_mutation_id).maybeSingle())
+    readOne3(auth2.supabase.from("tasks_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", request.client_mutation_id).maybeSingle()),
+    readOne3(auth2.supabase.from("tasks_hierarchy_operations").select("id").eq("owner_id", auth2.userId).eq("id", request.client_mutation_id).maybeSingle())
   ]);
   if (todoEvent !== null) {
     throw new Error("The mutation identifier was already used for a different task request.");
@@ -1575,7 +1442,7 @@ function assertMutable(record) {
 async function assertParentMutable(request, record, auth2) {
   if (request.recordType === "checklist_item") {
     const item = record;
-    const task = await readOne4(auth2.supabase.from("tasks_todos").select("id").eq("owner_id", auth2.userId).eq("id", item.task_id).eq("disposition", "present").eq("lifecycle", "open").maybeSingle());
+    const task = await readOne3(auth2.supabase.from("tasks_todos").select("id").eq("owner_id", auth2.userId).eq("id", item.task_id).eq("disposition", "present").eq("lifecycle", "open").maybeSingle());
     if (task === null) throw new Error("Reopen or restore the parent task before editing.");
   }
 }
@@ -1724,24 +1591,24 @@ function jsonObject(value) {
 function normalizeRequest2(input) {
   return { ...input, operation: input.transition, policy: "cascade" };
 }
-async function readOne5(query) {
+async function readOne4(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
 }
 async function readRoot(auth2, rootType, rootId) {
   if (rootType === "area") {
-    return readOne5(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
+    return readOne4(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
   }
-  return readOne5(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
+  return readOne4(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
 }
 async function readOperation(auth2, mutationId) {
-  return readOne5(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+  return readOne4(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
 }
 async function assertMutationIdAvailable(auth2, mutationId) {
   const [taskEvent, hierarchyEvent] = await Promise.all([
-    readOne5(auth2.supabase.from("tasks_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle()),
-    readOne5(auth2.supabase.from("tasks_hierarchy_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle())
+    readOne4(auth2.supabase.from("tasks_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle()),
+    readOne4(auth2.supabase.from("tasks_hierarchy_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle())
   ]);
   if (taskEvent !== null || hierarchyEvent !== null) {
     throw new Error("The mutation identifier is unavailable. Use a new UUID for a new request.");
@@ -1901,7 +1768,7 @@ var messageDeepLinkSchema = z.string().max(8e3).refine(
   (value) => value.startsWith("message://"),
   { message: "Expected a message:// Mail deep link." }
 );
-async function readOne6(query) {
+async function readOne5(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
@@ -1916,17 +1783,17 @@ function trimRequired2(value, label, maxLength) {
 }
 async function validateArea(areaId, auth2) {
   if (!areaId) return null;
-  const area = await readOne6(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
+  const area = await readOne5(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
   if (!area) throw new Error("The task area is unavailable.");
   return area.id;
 }
-async function nextPlanningOrderKey2(auth2) {
-  const last = await readOne6(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "anytime").eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+async function nextPlanningOrderKey(auth2) {
+  const last = await readOne5(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "anytime").eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextAreaOrderKey2(areaId, auth2) {
   if (areaId === null) return null;
-  const last = await readOne6(auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("area_id", areaId).eq("lifecycle", "open").eq("disposition", "present").not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne5(auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("area_id", areaId).eq("lifecycle", "open").eq("disposition", "present").not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
 }
 async function createMailTaskData(input, auth2) {
@@ -1942,7 +1809,7 @@ async function createMailTaskData(input, auth2) {
   const sourceTitle = input.source_title?.trim() || null;
   const areaId = await validateArea(input.area_id, auth2);
   const [orderKey, hierarchyOrderKey] = await Promise.all([
-    nextPlanningOrderKey2(auth2),
+    nextPlanningOrderKey(auth2),
     nextAreaOrderKey2(areaId, auth2)
   ]);
   const { data, error } = await auth2.supabase.rpc("tasks_create_mail_capture", {
@@ -2187,7 +2054,7 @@ function trimOptional2(value) {
   const normalized = value?.trim() ?? "";
   return normalized || null;
 }
-function withoutOwner2(row) {
+function withoutOwner(row) {
   const { owner_id: _ownerId, ...task } = row;
   return task;
 }
@@ -2203,7 +2070,7 @@ function rowSnapshot(row) {
 function snapshotsMatch(actual, expected, ignored = /* @__PURE__ */ new Set()) {
   return snapshotKeys.every((key) => ignored.has(key) || actual[key] === expected[key]);
 }
-async function readOne7(query) {
+async function readOne6(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
@@ -2214,7 +2081,7 @@ async function readMany2(query) {
   return data ?? [];
 }
 async function readTask(auth2, taskId) {
-  return readOne7(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", taskId).maybeSingle());
+  return readOne6(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", taskId).maybeSingle());
 }
 async function requireTask(auth2, taskId) {
   const task = await readTask(auth2, taskId);
@@ -2222,10 +2089,10 @@ async function requireTask(auth2, taskId) {
   return task;
 }
 async function readHistoryByMutation(auth2, mutationId) {
-  return readOne7(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne6(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 async function readHierarchyOperation(auth2, mutationId) {
-  return readOne7(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+  return readOne6(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
 }
 function historyReceipt(event) {
   return {
@@ -2256,7 +2123,7 @@ function ephemeralReceipt3(input, transition, task, outcome, code) {
   };
 }
 function mutationResult3(status, receipt2, task) {
-  return { mutation_outcome: status, receipt: receipt2, task: withoutOwner2(task) };
+  return { mutation_outcome: status, receipt: receipt2, task: withoutOwner(task) };
 }
 function assertCurrentMutationBoundary(input, task, transition) {
   if (task.revision !== input.expected_revision) {
@@ -2339,27 +2206,27 @@ function validatePlanningPlacement(destination, todaySection2, startDate) {
     throw new Error("A future Start cannot retain a Today horizon.");
   }
 }
-async function nextPlanningOrderKey3(auth2, taskId, destination) {
+async function nextPlanningOrderKey2(auth2, taskId, destination) {
   const query = auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId);
-  const last = await readOne7(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne6(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
-async function validateContainer2(auth2, areaId) {
-  const area = areaId === null ? null : await readOne7(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
+async function validateContainer(auth2, areaId) {
+  const area = areaId === null ? null : await readOne6(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
   if (areaId !== null && area === null) throw new Error("The task area is unavailable.");
 }
-async function nextHierarchyOrderKey2(auth2, taskId, areaId) {
+async function nextHierarchyOrderKey(auth2, taskId, areaId) {
   if (areaId === null) return null;
   let query = auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId);
   query = areaId === null ? query.is("area_id", null) : query.eq("area_id", areaId);
-  const last = await readOne7(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne6(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
 }
 function hasOwn(input, key) {
   return Object.prototype.hasOwnProperty.call(input, key);
 }
-async function ownerPlanningDate2(auth2) {
-  const settings = await readOne7(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
+async function ownerPlanningDate(auth2) {
+  const settings = await readOne6(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
   if (!settings) {
     throw new Error("Task planning settings are not initialized. Open the Tasks module once.");
   }
@@ -2378,7 +2245,7 @@ async function movePatch(input, current, auth2) {
   if (planningRequested) {
     const destination = input.destination;
     const startDate = destination === "someday" ? null : input.start_date ?? null;
-    if (startDate !== null && startDate <= await ownerPlanningDate2(auth2)) {
+    if (startDate !== null && startDate <= await ownerPlanningDate(auth2)) {
       throw new Error("Start must be later than today in the owner planning time zone.");
     }
     const todaySection2 = destination === "someday" ? null : startDate === null ? input.today_section ?? null : null;
@@ -2390,7 +2257,7 @@ async function movePatch(input, current, auth2) {
     patch.today_section = todaySection2;
     patch.start_date = startDate;
     if (destination !== current.destination) {
-      patch.order_key = await nextPlanningOrderKey3(
+      patch.order_key = await nextPlanningOrderKey2(
         auth2,
         current.id,
         destination
@@ -2399,10 +2266,10 @@ async function movePatch(input, current, auth2) {
   }
   if (containerRequested) {
     const areaId = input.area_id ?? null;
-    await validateContainer2(auth2, areaId);
+    await validateContainer(auth2, areaId);
     patch.area_id = areaId;
     if (areaId !== current.area_id) {
-      patch.hierarchy_order_key = await nextHierarchyOrderKey2(
+      patch.hierarchy_order_key = await nextHierarchyOrderKey(
         auth2,
         current.id,
         areaId
@@ -2423,7 +2290,7 @@ async function schedulePatch(input, current, auth2) {
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error("Deadline must be a valid ISO calendar date.");
   }
-  if (startDate !== null && startDate <= await ownerPlanningDate2(auth2)) {
+  if (startDate !== null && startDate <= await ownerPlanningDate(auth2)) {
     throw new Error("Start must be later than today in the owner planning time zone.");
   }
   let destination = current.destination;
@@ -2439,7 +2306,7 @@ async function schedulePatch(input, current, auth2) {
   if (destination !== current.destination) {
     patch.destination = destination;
     patch.today_section = todaySection2;
-    patch.order_key = await nextPlanningOrderKey3(auth2, current.id, destination);
+    patch.order_key = await nextPlanningOrderKey2(auth2, current.id, destination);
   } else if (todaySection2 !== current.today_section) {
     patch.today_section = todaySection2;
   }
@@ -2842,7 +2709,7 @@ function jsonRecord5(value) {
 function jsonEqual(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
-async function readOne8(query) {
+async function readOne7(query) {
   const { data, error } = await query;
   if (error) {
     const failure = new Error(error.message);
@@ -2868,22 +2735,22 @@ async function readAll(loadPage) {
   }
 }
 async function readTask2(auth2, id) {
-  return readOne8(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
 }
 async function readHierarchyRecord3(auth2, type, id) {
   if (type === "area") {
-    return readOne8(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+    return readOne7(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
   }
-  return readOne8(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
 }
 async function readTaskHistory(auth2, mutationId) {
-  return readOne8(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 async function readHierarchyHistory(auth2, mutationId) {
-  return readOne8(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 async function readHierarchyOperation2(auth2, mutationId) {
-  return readOne8(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
 }
 function historyReceipt2(event) {
   return {
@@ -3070,7 +2937,7 @@ async function updateTaskOrder(input, current, orderKey, auth2) {
     last_mutation_channel: "mcp",
     undo_source_event_id: null
   };
-  return readOne8(auth2.supabase.from("tasks_todos").update(patch).eq("owner_id", auth2.userId).eq("id", input.task_id).eq("revision", input.expected_revision).eq("disposition", "present").eq("lifecycle", "open").select("*").maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_todos").update(patch).eq("owner_id", auth2.userId).eq("id", input.task_id).eq("revision", input.expected_revision).eq("disposition", "present").eq("lifecycle", "open").select("*").maybeSingle());
 }
 async function updateHierarchyOrder(input, current, orderKey, auth2) {
   const patch = {
@@ -3081,9 +2948,9 @@ async function updateHierarchyOrder(input, current, orderKey, auth2) {
     last_mutation_channel: "mcp"
   };
   if (input.record_type === "area") {
-    return readOne8(auth2.supabase.from("tasks_areas").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
+    return readOne7(auth2.supabase.from("tasks_areas").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
   }
-  return readOne8(auth2.supabase.from("tasks_checklist_items").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_checklist_items").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
 }
 async function reorderTaskData(input, auth2) {
   const retry = await resolveTaskRetry(input, auth2);

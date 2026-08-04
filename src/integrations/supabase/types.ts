@@ -2591,6 +2591,27 @@ export type Database = {
         }
         Returns: Json
       }
+      tasks_create_mcp_task: {
+        Args: {
+          _actionability: string
+          _area_id: string | null
+          _deadline: string | null
+          _destination: string
+          _entry_channel: string
+          _idempotency_key: string
+          _notes: string
+          _placement_was_implicit: boolean
+          _primary_link: string | null
+          _requested_start_date: string | null
+          _requested_today_section: string | null
+          _source_external_id: string | null
+          _source_kind: string | null
+          _source_title: string | null
+          _source_url: string | null
+          _title: string
+        }
+        Returns: Json
+      }
       tasks_create_recurrence_from_task: {
         Args: {
           _actor_type?: string
