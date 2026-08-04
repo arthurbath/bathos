@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sdk_version": "0.20.0",
+  "sdk_version": "0.20.1",
   "path": "/functions/v1/mcp",
   "auth": {
     "type": "oauth",
@@ -571,34 +571,6 @@
         "outputSchema": null
       },
       {
-        "name": "get_task_templates",
-        "title": "Get Task Templates",
-        "description": "Read the signed-in user's native task templates with each current immutable revision and relative planning snapshot.",
-        "annotations": {
-          "readOnlyHint": true,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "include_archived": {
-              "type": "boolean",
-              "default": false
-            },
-            "limit": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 500,
-              "default": 250
-            }
-          },
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
         "name": "get_task_recurrences",
         "title": "Get Task Recurrences",
         "description": "Read owner-scoped recurrence definitions, immutable current rules, and optionally their generated occurrence identities.",
@@ -790,7 +762,7 @@
                 "kind"
               ],
               "additionalProperties": false,
-              "description": "Optional typed source reference. Template provenance is reserved for template instantiation."
+              "description": "Optional typed source reference for captured work."
             },
             "primary_link": {
               "anyOf": [
@@ -1611,9 +1583,9 @@
         "outputSchema": null
       },
       {
-        "name": "instantiate_task_template",
-        "title": "Instantiate Task Template",
-        "description": "Atomically create a complete task and checklist hierarchy from one native template revision for an explicit calendar date.",
+        "name": "create_task_recurrence",
+        "title": "Create Task Recurrence",
+        "description": "Turn one existing open task into the first ordinary instance of a recurrence whose independent prototype remains in Upcoming.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1622,73 +1594,15 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "template_id": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "template_revision": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "description": "Immutable revision to create. Defaults to the template current revision."
-            },
-            "anchor_date": {
-              "type": "string",
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-              "description": "Explicit reference date used to preserve relative Starts and Deadlines."
-            },
-            "target_area_id": {
-              "$ref": "#/properties/template_id",
-              "description": "Optional accessible destination Area for the instantiated task."
-            },
-            "idempotency_key": {
+            "task_id": {
               "type": "string",
               "format": "uuid",
-              "description": "Stable UUID for this exact creation request. Reuse only for an exact retry."
-            }
-          },
-          "required": [
-            "template_id",
-            "anchor_date",
-            "idempotency_key"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
-        "name": "save_task_recurrence",
-        "title": "Save Task Recurrence",
-        "description": "Create or revise one recurrence definition from an immutable native task-template revision. Existing generated work never changes.",
-        "annotations": {
-          "readOnlyHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "recurrence_id": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Existing recurrence to revise. Omit to create."
-            },
-            "expected_record_revision": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "description": "Required current record revision when revising an existing recurrence."
+              "description": "Existing open task to adopt as the first recurrence instance."
             },
             "name": {
               "type": "string",
               "minLength": 1,
               "maxLength": 500
-            },
-            "template_id": {
-              "$ref": "#/properties/recurrence_id"
-            },
-            "template_revision": {
-              "type": "integer",
-              "exclusiveMinimum": 0
             },
             "rule_mode": {
               "type": "string",
@@ -1712,32 +1626,38 @@
               "maximum": 1000,
               "default": 1
             },
-            "start_date": {
+            "schedule_date": {
               "type": "string",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             },
-            "planning_timezone": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200
+            "rule_config": {
+              "type": "object",
+              "additionalProperties": {},
+              "default": {}
             },
-            "missed_policy": {
+            "end_mode": {
               "type": "string",
               "enum": [
-                "skip",
-                "latest",
-                "all"
+                "never",
+                "after",
+                "on_date"
               ],
-              "default": "latest"
+              "default": "never"
             },
-            "catch_up_limit": {
+            "end_after_count": {
               "type": "integer",
-              "minimum": 1,
-              "maximum": 100,
-              "default": 50
+              "exclusiveMinimum": 0
             },
-            "target_area_id": {
-              "$ref": "#/properties/recurrence_id"
+            "end_on_date": {
+              "$ref": "#/properties/schedule_date"
+            },
+            "reminder_local_time": {
+              "type": "string",
+              "pattern": "^\\d{2}:\\d{2}(?::\\d{2})?$"
+            },
+            "deadline_offset_days": {
+              "type": "integer",
+              "minimum": 0
             },
             "idempotency_key": {
               "type": "string",
@@ -1746,12 +1666,11 @@
             }
           },
           "required": [
+            "task_id",
             "name",
-            "template_id",
             "rule_mode",
             "frequency",
-            "start_date",
-            "planning_timezone",
+            "schedule_date",
             "idempotency_key"
           ],
           "additionalProperties": false,

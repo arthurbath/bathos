@@ -108,6 +108,7 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     }
     const occurrence = await waitForTask(
       activeDatabase,
+      supabase,
       recurrence.occurrence.root_id,
       2,
       30_000,
@@ -229,21 +230,34 @@ async function waitForUploadQueue(
 
 async function waitForTask(
   database: PowerSyncDatabase,
+  client: SupabaseClient<Database>,
   taskId: string,
   expectedRevision: number,
   timeoutMs: number,
 ): Promise<TaskTodo> {
   const deadline = Date.now() + timeoutMs;
+  const observedRevisions = new Set<number>();
+  const observedRemoteRevisions = new Set<number>();
   while (Date.now() < deadline) {
     const task = await database.getOptional<TaskTodo>(
       'SELECT * FROM tasks_todos WHERE id = ?',
       [taskId],
     );
+    if (task !== null) observedRevisions.add(task.revision);
     if (task?.revision === expectedRevision) return task;
+    if (observedRemoteRevisions.size === 0) {
+      const { data, error } = await client
+        .from('tasks_todos')
+        .select('revision')
+        .eq('id', taskId)
+        .maybeSingle();
+      if (error) throw error;
+      if (data !== null) observedRemoteRevisions.add(data.revision);
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(
-    `Task ${taskId} did not synchronize at revision ${expectedRevision}`,
+    `Task ${taskId} did not synchronize at revision ${expectedRevision}; observed local revisions: ${[...observedRevisions].join(', ') || 'none'}; observed remote revisions: ${[...observedRemoteRevisions].join(', ') || 'none'}`,
   );
 }
 

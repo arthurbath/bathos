@@ -114,8 +114,7 @@ describePerformance('Tasks rendered-view performance', () => {
         );
       });
       const renderMs = performance.now() - renderStartedAt;
-      expect(container.querySelectorAll('[data-task-title-control]')).toHaveLength(1_000);
-      expect(renderMs).toBeLessThan(2_000);
+      const renderedTaskCount = container.querySelectorAll('[data-task-title-control]').length;
 
       container.querySelector<HTMLElement>('[data-task-title-control]')?.focus();
       const searchStartedAt = performance.now();
@@ -128,10 +127,6 @@ describePerformance('Tasks rendered-view performance', () => {
       });
       const searchOpenMs = performance.now() - searchStartedAt;
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
-      expect(dialog).toHaveAccessibleName('Quick Find');
-      expect(dialog?.querySelector('[aria-label="Find Tasks"]')).toBeTruthy();
-      expect(dialog?.querySelectorAll('select')).toHaveLength(0);
-      expect(searchOpenMs).toBeLessThan(1_000);
 
       console.info(
         `[tasks-performance] rendered view: rows=1000 duration=${renderMs.toFixed(2)}ms`,
@@ -139,6 +134,53 @@ describePerformance('Tasks rendered-view performance', () => {
       console.info(
         `[tasks-performance] search dialog: records=10000 duration=${searchOpenMs.toFixed(2)}ms`,
       );
+
+      expect(renderedTaskCount).toBe(1_000);
+      expect(renderMs).toBeLessThan(2_000);
+      expect(dialog).toHaveAccessibleName('Quick Find');
+      expect(dialog?.querySelector('[aria-label="Find Tasks"]')).toBeTruthy();
+      expect(dialog?.querySelectorAll('select')).toHaveLength(0);
+      expect(searchOpenMs).toBeLessThan(1_000);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('measures a practical 100-row task view', () => {
+    const viewTasks = Array.from({ length: 100 }, (_, index) => syntheticTask(index));
+    mockTaskList.mockReturnValue({
+      tasks: viewTasks,
+      checklistTaskIds: new Set<string>(),
+      loading: false,
+      error: null,
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      moveTasks: vi.fn(),
+      reorderTask: vi.fn(),
+      transitionTask: vi.fn(),
+      planningDate: '2026-07-20',
+    });
+    mockTaskSearch.mockReturnValue({ tasks: [], loading: false, error: null });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      const renderStartedAt = performance.now();
+      act(() => {
+        root.render(
+          <MemoryRouter initialEntries={['/tasks/today']}>
+            <TasksShell userId="synthetic-owner" displayName="Synthetic" onSignOut={vi.fn()} />
+          </MemoryRouter>,
+        );
+      });
+      const renderMs = performance.now() - renderStartedAt;
+      console.info(
+        `[tasks-performance] practical rendered view: rows=100 duration=${renderMs.toFixed(2)}ms`,
+      );
+      expect(container.querySelectorAll('[data-task-title-control]')).toHaveLength(100);
     } finally {
       act(() => root.unmount());
       container.remove();

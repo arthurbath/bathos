@@ -425,7 +425,16 @@ function useGridNav(
   containerRef: React.RefObject<HTMLDivElement | null>,
   onNavigateTarget?: (target: GridNavTarget) => void,
 ) {
+  const mountedRef = useRef(true);
   const pointerInitiatedFocusRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const getEditableCells = useCallback(() => {
     if (!containerRef.current) return [];
     return Array.from(containerRef.current.querySelectorAll<HTMLElement>('[data-row][data-col]'));
@@ -568,12 +577,14 @@ function useGridNav(
   const focusWithRetry = useCallback((target: { row: number; col: number; rowId: string | null }, attempts = 120) => {
     let tries = 0;
     const tryFocus = () => {
+      if (!mountedRef.current) return;
       const focused =
         (target.rowId ? focusCellByRowId(target.rowId, target.col) : false) ||
         focusCell(target.row, target.col);
 
       if (focused || tries >= attempts) return;
       tries += 1;
+      if (typeof window === 'undefined') return;
       window.setTimeout(() => scheduleInNextFrame(tryFocus), 24);
     };
     scheduleInNextFrame(tryFocus);

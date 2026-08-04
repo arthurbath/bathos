@@ -14,6 +14,12 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-08-04 | `2026-08-04_dependency_upgrade_final_performance.md` | Final repeated dependency-upgrade performance comparison and improvement theory |
+| 2026-08-04 | `2026-08-04_dependency_upgrade_performance_gate_waiver.md` | Temporary performance-gate waiver and required closeout evidence |
+| 2026-08-04 | `2026-08-04_edge-runtime-dependency-pinning.md` | Exact Edge Function dependency alignment, local runtime proof, and rollback evidence |
+| 2026-08-04 | `2026-08-04_security-patched-dependency-refresh.md` | Supported security-patched dependency refresh and residual advisory classification |
+| 2026-08-04 | `2026-08-04_supabase-browser-client-alignment.md` | Supabase browser-client alignment, bounded retry ownership, and session verification |
+| 2026-08-04 | `2026-08-04_vite-7-toolchain-upgrade.md` | Supported Vite 7 toolchain upgrade and compatibility verification |
 | 2026-07-31 | `2026-07-31_tasks_recurrence_projection_repair.md` | Future recurrence projection repair, production data correction, and release acceptance |
 | 2026-07-31 | `2026-07-31_tasks_template_elimination_preflight.md` | Template-free recurrence model, exact production conversion preflight, and gated rollout |
 | 2026-07-28 | `2026-07-28_things_authoritative_cutover.md` | Private Things migration, Tasks-only capture cutover, and production acceptance |

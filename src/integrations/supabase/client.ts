@@ -9,11 +9,14 @@ const companionAuthLock = resolveSupabaseAuthLock();
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+export const supabase = createClient<Database, 'public'>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  db: {
+    retry: true,
+  },
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
     ...(companionAuthLock ? { lock: companionAuthLock } : {}),
-  }
+  },
 });

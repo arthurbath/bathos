@@ -1581,13 +1581,33 @@ async function waitForCondition(assertion: () => void, timeoutMs = 1500) {
 }
 
 async function startEditing(input: HTMLInputElement) {
-  await act(async () => {
-    input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    input.focus();
-  });
-  await waitForCondition(() => {
-    expect(input.getAttribute("data-grid-editing")).toBe("true");
-  });
+  const rowId = input.dataset.rowId;
+  const col = input.dataset.col;
+  const resolveCurrentInput = () => {
+    if (input.isConnected) return input;
+    if (rowId === undefined || col === undefined) return input;
+    return document.querySelector<HTMLInputElement>(
+      `input[data-row-id="${rowId}"][data-col="${col}"]`,
+    ) ?? input;
+  };
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const currentInput = resolveCurrentInput();
+    await act(async () => {
+      currentInput.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      currentInput.focus();
+    });
+    try {
+      await waitForCondition(() => {
+        expect(resolveCurrentInput().getAttribute("data-grid-editing")).toBe("true");
+      }, 300);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Input did not enter editing mode");
 }
 
 async function dispatchInputChange(input: HTMLInputElement, value: string) {

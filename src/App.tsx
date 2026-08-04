@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { AuthProvider } from "@/platform/contexts/AuthContext";
@@ -19,7 +19,7 @@ import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
 import { InstalledAppNavigationBoundary } from "@/platform/components/InstalledAppNavigationBoundary";
 import { useDocumentHead } from "@/platform/hooks/useDocumentHead";
 import { useBathosFormInteractions } from "@/platform/hooks/useCommandEnterSubmit";
-import { isLikelyNetworkError } from "@/lib/networkErrors";
+import { queryClient } from "@/platform/queryClient";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { DataGridHistoryProvider } from "@/components/ui/data-grid-history";
 import Index from "./pages/Index";
@@ -31,19 +31,6 @@ import { isSupportedTaskRoute } from "@/modules/tasks/routes";
 import NotFound from "./pages/NotFound";
 
 const TasksIndex = lazy(() => import("@/modules/tasks/TasksIndex"));
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: (failureCount, error) => {
-        if (failureCount >= 3) return false;
-        return isLikelyNetworkError(error);
-      },
-      staleTime: 30_000,
-    },
-  },
-});
 
 function DeferredNotFound() {
   const location = useLocation();

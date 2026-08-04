@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-04
 **Category:** Performance / Dependency Maintenance
-**Status:** Active for the current dependency-hardening program
+**Status:** Expired after final assessment
 
 ## Decision
 
@@ -76,3 +76,7 @@ virtualization or other Tasks rendering changes.
 The waiver expires after the final dependency-upgrade performance assessment.
 Any subsequent product or dependency change is again subject to the durable
 performance gates unless separately authorized.
+
+The final assessment is recorded in
+`docs/agents/evaluations/2026-08-04_dependency_upgrade_final_performance.md`.
+It found no serious average degradation, so this waiver is now expired.

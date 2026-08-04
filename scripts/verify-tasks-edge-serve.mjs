@@ -5,7 +5,20 @@ import {
 } from './supabase-functions-local.mjs';
 
 const REMINDER_URL = 'http://127.0.0.1:54321/functions/v1/dispatch-task-reminders';
+const FUNCTION_NAMES = [
+  'admin-delete-users',
+  'check-auth-rate-limit',
+  'delete-user-account',
+  'dispatch-task-reminders',
+  'manifest',
+  'mcp',
+  'notify-new-signup',
+  'send-feedback-email',
+  'submit-help-request',
+  'tasks-widget-actions',
+];
 const START_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 5_000;
 const MAX_DIAGNOSTIC_CHARACTERS = 12_000;
 
@@ -104,9 +117,26 @@ export async function verifyTasksEdgeServe({
       throw new Error(`Supabase Functions did not become ready within ${START_TIMEOUT_MS}ms.`);
     }
 
+    const functionStatuses = {};
+    for (const functionName of FUNCTION_NAMES) {
+      const response = await fetch(
+        `http://127.0.0.1:54321/functions/v1/${functionName}`,
+        {
+          method: 'OPTIONS',
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        },
+      );
+      if (response.status === 404 || response.status >= 500) {
+        throw new Error(
+          `${functionName} returned ${response.status} during local dependency resolution.`,
+        );
+      }
+      functionStatuses[functionName] = response.status;
+    }
+
     const response = await fetch(REMINDER_URL, {
       method: 'GET',
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const body = await response.json().catch(() => null);
     if (
@@ -119,7 +149,11 @@ export async function verifyTasksEdgeServe({
       );
     }
 
-    return { status: response.status, allow: response.headers.get('allow') };
+    return {
+      status: response.status,
+      allow: response.headers.get('allow'),
+      functionStatuses,
+    };
   } catch (error) {
     if (diagnostic.trim()) {
       console.error('Supabase Functions diagnostic output:');
@@ -137,6 +171,7 @@ export async function verifyTasksEdgeServe({
 async function run() {
   const result = await verifyTasksEdgeServe();
   console.log('Task reminder HTTP runtime booted successfully.');
+  console.log(`Resolved ${Object.keys(result.functionStatuses).length} local Edge Functions.`);
   console.log(`GET boundary: ${result.status} Method Not Allowed`);
   console.log(`Allowed method: ${result.allow}`);
   console.log('Local Edge Runtime stopped cleanly.');

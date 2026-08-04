@@ -27,13 +27,16 @@ describePerformance('Tasks large-library performance', () => {
 
   it('derives every task view within the large-library budget', () => {
     const views = ['today', 'upcoming', 'anytime', 'someday', 'done'] as const;
-    for (const view of views) {
-      const result = measure(`${view} view`, 20, () => deriveTaskViewTasks(
+    const results = views.map((view) => ({
+      view,
+      result: measure(`${view} view`, 20, () => deriveTaskViewTasks(
         tasks,
         ownerId,
         view,
         planningDate,
-      ).length);
+      ).length),
+    }));
+    for (const { result } of results) {
       expect(result.lastValue).toBeGreaterThan(0);
       expect(result.p95Ms).toBeLessThan(100);
     }
