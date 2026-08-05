@@ -17,6 +17,7 @@ import type {
 } from '@/modules/tasks/domain/taskChecklistClipboard';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskChecklistItem } from '@/modules/tasks/types/tasks';
+import { notifyTaskChecklistForwardMutation } from './taskChecklistForwardMutationEvents';
 
 export function useTaskChecklist(ownerId: string, taskId: string) {
   const { hierarchyOperationsRepository, hierarchyRepository } = useTasksRuntime();
@@ -74,7 +75,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       occurredAt,
     });
     setOptimistic((current) => ({ ...current, [item.id]: item }));
-    notifyTaskChecklistForwardMutation();
+    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
     return item;
   }, [hierarchyRepository, items, ownerId, taskId]);
 
@@ -117,7 +118,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       created.push(item);
       setOptimistic((current) => ({ ...current, [item.id]: item }));
     }
-    notifyTaskChecklistForwardMutation();
+    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
     return created;
   }, [hierarchyRepository, items, ownerId, taskId]);
 
@@ -137,9 +138,12 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     context?: TaskMutationContext,
   ) => {
     const mutationEpoch = beginItemMutation([itemId]).get(itemId)!;
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
     const mutationContext = {
       ...context,
-      operationId: context?.operationId ?? globalThis.crypto.randomUUID(),
+      occurredAt,
+      operationId,
     };
     const item = await hierarchyRepository.updateChecklistItem(
       ownerId,
@@ -152,7 +156,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
         ? { ...current, [item.id]: item }
         : current
     ));
-    notifyTaskChecklistForwardMutation();
+    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
     return item;
   }, [beginItemMutation, hierarchyRepository, isCurrentItemMutation, ownerId]);
 
@@ -197,7 +201,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
           ? { ...current, [item.id]: saved }
           : current
       ));
-      notifyTaskChecklistForwardMutation();
+      notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
       return saved;
     } catch (error) {
       setOptimistic((current) => {
@@ -214,9 +218,12 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
   }, [beginItemMutation, hierarchyRepository, isCurrentItemMutation, items, ownerId]);
 
   const deleteItem = useCallback(async (itemId: string, context?: TaskMutationContext) => {
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
     const mutationContext = {
       ...context,
-      operationId: context?.operationId ?? globalThis.crypto.randomUUID(),
+      occurredAt,
+      operationId,
     };
     await hierarchyOperationsRepository.request({
       ownerId,
@@ -227,7 +234,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       context: mutationContext,
     });
     setOptimistic((current) => ({ ...current, [itemId]: null }));
-    notifyTaskChecklistForwardMutation();
+    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
   }, [hierarchyOperationsRepository, ownerId]);
 
   const deleteItems = useCallback(async (
@@ -270,7 +277,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       });
       throw error;
     }
-    notifyTaskChecklistForwardMutation();
+    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
   }, [hierarchyOperationsRepository, items, ownerId]);
 
   const reorderItem = useCallback(async (
@@ -351,7 +358,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
         }
         return next;
       });
-      notifyTaskChecklistForwardMutation();
+      notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
       return savedItems;
     } catch (error) {
       setOptimistic((current) => {
@@ -383,10 +390,6 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     reorderItem,
     reorderItems,
   };
-}
-
-function notifyTaskChecklistForwardMutation() {
-  globalThis.dispatchEvent?.(new Event('bathos:task-checklist-forward-mutation'));
 }
 
 function compareChecklistRows(left: TaskChecklistItem, right: TaskChecklistItem): number {

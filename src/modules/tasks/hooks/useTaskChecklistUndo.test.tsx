@@ -273,6 +273,92 @@ describe('useTaskChecklistUndo', () => {
     }
   });
 
+  it('waits for the exact accepted grouped reorder before undoing and redoing it', async () => {
+    const firstBefore = taskChecklistItemFixture({
+      id: 'checklist-a',
+      task_id: 'task-a',
+      order_key: 'a0',
+      revision: 1,
+    });
+    const firstAfter = taskChecklistItemFixture({
+      ...firstBefore,
+      order_key: 'z0',
+      revision: 2,
+    });
+    const secondBefore = taskChecklistItemFixture({
+      id: 'checklist-b',
+      task_id: 'task-a',
+      order_key: 'a1',
+      revision: 1,
+    });
+    const secondAfter = taskChecklistItemFixture({
+      ...secondBefore,
+      order_key: 'z1',
+      revision: 2,
+    });
+    const projectedRows = [
+      historyEvent({
+        id: 'event-a',
+        actionId: 'accepted-reorder',
+        before: firstBefore,
+        after: firstAfter,
+      }),
+      historyEvent({
+        id: 'event-b',
+        actionId: 'accepted-reorder',
+        before: secondBefore,
+        after: secondAfter,
+      }),
+    ];
+    let rows: typeof projectedRows = [];
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    mocks.useQuery.mockImplementation(() => ({
+      data: rows,
+      isLoading: false,
+      error: null,
+      refresh,
+    }));
+    const { container, root } = renderHarness();
+
+    try {
+      act(() => {
+        latest.registerForwardAction({
+          actionId: 'accepted-reorder',
+          occurredAt: '2026-07-27T01:00:00.000Z',
+        });
+      });
+      expect(latest.available).toBe(true);
+      expect(latest.forwardActionPending).toBe(true);
+
+      let undoPromise: ReturnType<typeof latest.undoWhenAvailable>;
+      act(() => {
+        undoPromise = latest.undoWhenAvailable(1_000);
+      });
+      act(() => {
+        rows = projectedRows;
+        root.render(<Harness />);
+      });
+      await act(async () => {
+        await undoPromise!;
+      });
+      expect(refresh).toHaveBeenCalled();
+      expect(updateChecklistItem.mock.calls.map((call) => call[1])).toEqual([
+        'checklist-b',
+        'checklist-a',
+      ]);
+
+      await act(async () => {
+        await latest.redoWhenAvailable(1_000);
+      });
+      expect(updateChecklistItem.mock.calls.slice(2).map((call) => call[1])).toEqual([
+        'checklist-a',
+        'checklist-b',
+      ]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('undoes and redoes a recoverable checklist deletion', async () => {
     const before = taskChecklistItemFixture({ revision: 2 });
     const after = taskChecklistItemFixture({

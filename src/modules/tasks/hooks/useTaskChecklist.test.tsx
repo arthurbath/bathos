@@ -2,6 +2,10 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { taskChecklistItemFixture } from '@/modules/tasks/testing/taskFixtures';
+import {
+  TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+  type TaskChecklistForwardMutationDetail,
+} from './taskChecklistForwardMutationEvents';
 import { useTaskChecklist } from './useTaskChecklist';
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +24,7 @@ vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
 describe('useTaskChecklist', () => {
   const createChecklistItem = vi.fn();
   const updateChecklistItem = vi.fn();
+  const request = vi.fn();
   let queryItems: ReturnType<typeof taskChecklistItemFixture>[];
 
   beforeEach(() => {
@@ -58,8 +63,79 @@ describe('useTaskChecklist', () => {
         createChecklistItem,
         updateChecklistItem,
       },
-      hierarchyOperationsRepository: { request: vi.fn() },
+      hierarchyOperationsRepository: { request },
     });
+  });
+
+  it('announces the exact accepted action for insertion, editing, completion, deletion, and reorder', async () => {
+    const forwarded: TaskChecklistForwardMutationDetail[] = [];
+    const handleForwardMutation = (event: Event) => {
+      forwarded.push((event as CustomEvent<TaskChecklistForwardMutationDetail>).detail);
+    };
+    globalThis.addEventListener(
+      TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+      handleForwardMutation,
+    );
+    createChecklistItem.mockImplementation(async ({
+      operationId,
+      occurredAt,
+      orderKey,
+      title,
+    }) => taskChecklistItemFixture({
+      id: 'created-item',
+      title,
+      order_key: orderKey,
+      last_operation_id: operationId,
+      updated_at: occurredAt,
+    }));
+    updateChecklistItem.mockImplementation(async (
+      _ownerId: string,
+      itemId: string,
+      patch: Partial<ReturnType<typeof taskChecklistItemFixture>>,
+      context: { operationId: string; occurredAt: string },
+    ) => ({
+      ...queryItems.find(({ id }) => id === itemId)!,
+      ...patch,
+      last_operation_id: context.operationId,
+      updated_at: context.occurredAt,
+      revision: 2,
+      client_mutation_id: `saved-${itemId}-${context.operationId}`,
+    }));
+    request.mockResolvedValue(undefined);
+    const { result, unmount } = renderHook(() => useTaskChecklist('owner-a', 'task-a'));
+
+    try {
+      await act(async () => {
+        await result.current.createItem('Inserted');
+        await result.current.updateItem('item-a', { title: 'Edited' });
+        await result.current.setCompleted(
+          result.current.items.find(({ id }) => id === 'item-b')!,
+          true,
+        );
+        await result.current.deleteItem('item-c');
+        await result.current.reorderItems(['item-a'], 2);
+      });
+
+      expect(forwarded).toHaveLength(5);
+      expect(new Set(forwarded.map(({ actionId }) => actionId)).size).toBe(5);
+      expect(forwarded).toEqual(forwarded.map((detail) => ({
+        schemaVersion: 1,
+        actionId: expect.any(String),
+        occurredAt: expect.any(String),
+      })));
+      expect(createChecklistItem.mock.calls[0][0].operationId).toBe(forwarded[0].actionId);
+      expect(updateChecklistItem.mock.calls[0][3].operationId).toBe(forwarded[1].actionId);
+      expect(updateChecklistItem.mock.calls[1][3].operationId).toBe(forwarded[2].actionId);
+      expect(request.mock.calls[0][0].context.operationId).toBe(forwarded[3].actionId);
+      expect(updateChecklistItem.mock.calls.at(-1)?.[3].operationId)
+        .toBe(forwarded[4].actionId);
+    } finally {
+      globalThis.removeEventListener(
+        TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+        handleForwardMutation,
+      );
+      unmount();
+    }
   });
 
   it('adds an item inside a checklist whose rows use legacy numeric ranks', async () => {

@@ -1,5 +1,5 @@
 import { useQuery } from '@powersync/react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TaskChecklistItemPatch } from '@/modules/tasks/data/taskHierarchyRepository';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
@@ -24,6 +24,13 @@ type ChecklistHistoryCursor = {
 };
 
 const emptyCursor = (): ChecklistHistoryCursor => ({ undo: [], redo: [] });
+export const CHECKLIST_HISTORY_PROJECTION_WAIT_MS = 30_000;
+const CHECKLIST_HISTORY_PROJECTION_POLL_MS = 100;
+
+export type TaskChecklistForwardAction = {
+  actionId: string;
+  occurredAt: string;
+};
 
 export function useTaskChecklistUndo(ownerId: string) {
   const { hierarchyOperationsRepository, hierarchyRepository } = useTasksRuntime();
@@ -39,6 +46,8 @@ export function useTaskChecklistUndo(ownerId: string) {
     )),
     [query.data],
   );
+  const eventsRef = useRef<StoredChecklistHistoryEvent[]>([]);
+  eventsRef.current = events;
   const projectedCursor = useMemo(() => replayChecklistHistory(events), [events]);
   const cursorRef = useRef<ChecklistHistoryCursor>(emptyCursor());
   const projectionKeyRef = useRef('');
@@ -49,6 +58,51 @@ export function useTaskChecklistUndo(ownerId: string) {
   }
   const [, rerender] = useState(0);
   const pendingRef = useRef(false);
+  const historyRequestPendingRef = useRef(false);
+  const historyRefreshRef = useRef(query.refresh);
+  historyRefreshRef.current = query.refresh;
+  const pendingForwardActionsRef = useRef<TaskChecklistForwardAction[]>([]);
+  const [pendingForwardActions, setPendingForwardActions] = useState<
+    TaskChecklistForwardAction[]
+  >([]);
+  const [pending, setPending] = useState(false);
+  const [projectionWaitPending, setProjectionWaitPending] = useState(false);
+
+  useEffect(() => {
+    const projectedActionIds = new Set(eventsRef.current.map(({ action_id }) => action_id));
+    const next = pendingForwardActionsRef.current.filter(
+      ({ actionId }) => !projectedActionIds.has(actionId),
+    );
+    if (next.length === pendingForwardActionsRef.current.length) return;
+    pendingForwardActionsRef.current = next;
+    setPendingForwardActions(next);
+  }, [projectionKey]);
+
+  const removeForwardAction = useCallback((actionId: string) => {
+    const next = pendingForwardActionsRef.current.filter(
+      (action) => action.actionId !== actionId,
+    );
+    if (next.length === pendingForwardActionsRef.current.length) return;
+    pendingForwardActionsRef.current = next;
+    setPendingForwardActions(next);
+  }, []);
+
+  const registerForwardAction = useCallback((action: TaskChecklistForwardAction) => {
+    if (
+      eventsRef.current.some(({ action_id }) => action_id === action.actionId)
+      || pendingForwardActionsRef.current.some(
+        ({ actionId }) => actionId === action.actionId,
+      )
+    ) return;
+    const next = [...pendingForwardActionsRef.current, action];
+    pendingForwardActionsRef.current = next;
+    setPendingForwardActions(next);
+  }, []);
+
+  const hasPendingForwardAction = useCallback(
+    () => pendingForwardActionsRef.current.length > 0,
+    [],
+  );
 
   const apply = useCallback(async (
     event: StoredChecklistHistoryEvent,
@@ -56,6 +110,7 @@ export function useTaskChecklistUndo(ownerId: string) {
   ) => {
     if (pendingRef.current) return null;
     pendingRef.current = true;
+    setPending(true);
     try {
       const occurredAt = new Date().toISOString();
       const operationId = globalThis.crypto.randomUUID();
@@ -128,6 +183,7 @@ export function useTaskChecklistUndo(ownerId: string) {
       return event;
     } finally {
       pendingRef.current = false;
+      setPending(false);
     }
   }, [hierarchyOperationsRepository, hierarchyRepository, ownerId]);
 
@@ -140,17 +196,106 @@ export function useTaskChecklistUndo(ownerId: string) {
     return event ? apply(event, 'redo') : Promise.resolve(null);
   }, [apply]);
 
+  const undoWhenAvailable = useCallback(async (
+    waitMs = CHECKLIST_HISTORY_PROJECTION_WAIT_MS,
+  ) => {
+    if (pendingRef.current || historyRequestPendingRef.current) return null;
+    const expectedAction = pendingForwardActionsRef.current.at(-1) ?? null;
+    const expectedEventId = expectedAction === null
+      ? cursorRef.current.undo.at(-1)?.id ?? null
+      : null;
+    if (expectedAction === null && expectedEventId === null) return null;
+
+    historyRequestPendingRef.current = true;
+    setProjectionWaitPending(true);
+    try {
+      const deadline = Date.now() + Math.max(0, waitMs);
+      while (true) {
+        const expectedEvent = expectedAction === null
+          ? cursorRef.current.undo.at(-1) ?? null
+          : cursorRef.current.undo.find(
+            ({ action_id }) => action_id === expectedAction.actionId,
+          ) ?? null;
+        const cursorEvent = cursorRef.current.undo.at(-1) ?? null;
+        if (
+          expectedEvent !== null
+          && cursorEvent?.id === expectedEvent.id
+          && (
+            expectedAction !== null
+            || expectedEvent.id === expectedEventId
+          )
+        ) {
+          return await apply(expectedEvent, 'undo');
+        }
+        if (Date.now() >= deadline) {
+          if (expectedAction !== null) removeForwardAction(expectedAction.actionId);
+          return null;
+        }
+        await refreshChecklistHistoryProjection(historyRefreshRef.current);
+      }
+    } finally {
+      historyRequestPendingRef.current = false;
+      setProjectionWaitPending(false);
+    }
+  }, [apply, removeForwardAction]);
+
+  const redoWhenAvailable = useCallback(async (
+    waitMs = CHECKLIST_HISTORY_PROJECTION_WAIT_MS,
+  ) => {
+    if (
+      pendingRef.current
+      || historyRequestPendingRef.current
+      || pendingForwardActionsRef.current.length > 0
+    ) return null;
+    const expectedEventId = cursorRef.current.redo.at(-1)?.id ?? null;
+    if (expectedEventId === null) return null;
+
+    historyRequestPendingRef.current = true;
+    setProjectionWaitPending(true);
+    try {
+      const deadline = Date.now() + Math.max(0, waitMs);
+      while (true) {
+        const event = cursorRef.current.redo.at(-1) ?? null;
+        if (event?.id === expectedEventId) return await apply(event, 'redo');
+        if (Date.now() >= deadline) return null;
+        await refreshChecklistHistoryProjection(historyRefreshRef.current);
+      }
+    } finally {
+      historyRequestPendingRef.current = false;
+      setProjectionWaitPending(false);
+    }
+  }, [apply]);
+
   return {
     event: cursorRef.current.undo.at(-1) ?? null,
     redoEvent: cursorRef.current.redo.at(-1) ?? null,
-    available: cursorRef.current.undo.length > 0 && !pendingRef.current,
-    redoAvailable: cursorRef.current.redo.length > 0 && !pendingRef.current,
-    pending: pendingRef.current,
+    available: (pendingForwardActions.length > 0 || cursorRef.current.undo.length > 0)
+      && !pending
+      && !projectionWaitPending,
+    redoAvailable: pendingForwardActions.length === 0
+      && cursorRef.current.redo.length > 0
+      && !pending
+      && !projectionWaitPending,
+    pending: pending || projectionWaitPending,
+    forwardActionPending: pendingForwardActions.length > 0,
     loading: query.isLoading,
     error: query.error,
     undo,
     redo,
+    undoWhenAvailable,
+    redoWhenAvailable,
+    registerForwardAction,
+    hasPendingForwardAction,
   };
+}
+
+async function refreshChecklistHistoryProjection(
+  refreshHistory: ((signal?: AbortSignal) => Promise<void>) | undefined,
+): Promise<void> {
+  await new Promise<void>((resolve) => {
+    globalThis.setTimeout(resolve, CHECKLIST_HISTORY_PROJECTION_POLL_MS);
+  });
+  await refreshHistory?.();
 }
 
 function replayChecklistHistory(
