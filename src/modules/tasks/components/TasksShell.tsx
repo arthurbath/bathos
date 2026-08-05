@@ -74,8 +74,10 @@ import {
 } from '@/modules/tasks/components/taskIconography';
 import { TaskEmptyState } from '@/modules/tasks/components/TaskEmptyState';
 import {
+  addTaskCalendarDays,
   formatTaskCompactCalendarDayOffset,
   formatTaskDateControlLabel,
+  formatTaskMonthDay,
   formatTaskRelativeCalendarDate,
   isTaskCalendarDate,
   taskCalendarDateInTimeZone,
@@ -96,6 +98,7 @@ import {
 } from '@/modules/tasks/components/taskHorizonPresentation';
 import {
   requestTaskStartPickerAdvance,
+  requestTaskStartPickerClose,
   requestTaskStartPickerFocusHorizon,
   requestTaskStartPickerOpen,
   requestTaskRowTemporalPickerOpen,
@@ -428,7 +431,7 @@ function alignOpenedTaskToVisibleContent(
   });
 }
 
-function focusTaskNotesAtStart(taskId: string): boolean {
+function focusTaskNotesAtEnd(taskId: string): boolean {
   const notes = document.getElementById(`task-notes-${taskId}`);
   if (!(notes instanceof HTMLElement)) return false;
   notes.focus({ preventScroll: true });
@@ -436,7 +439,7 @@ function focusTaskNotesAtStart(taskId: string): boolean {
   if (selection === null) return true;
   const range = document.createRange();
   range.selectNodeContents(notes);
-  range.collapse(true);
+  range.collapse(false);
   selection.removeAllRanges();
   selection.addRange(range);
   return true;
@@ -1063,6 +1066,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const taskEditorAutosaveRef = useRef<{
     taskId: string;
     flush: () => Promise<void>;
+    hasMeaningfulContent: () => boolean;
   } | null>(null);
   const macLikePlatform = useMemo(
     () => getDeclaredNativePlatform() === 'macos'
@@ -1244,9 +1248,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const creationInput = getTaskCreationInput(draft);
     const created = await createTask({
       ...creationInput,
-      title: allowEmptyTitle && !creationInput.title.trim()
-        ? 'New Task'
-        : creationInput.title,
+      title: creationInput.title,
     });
     let next: TaskCreationDraft = {
       ...draft,
@@ -1385,8 +1387,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const registerTaskEditorAutosave = useCallback((
     taskId: string,
     flush: () => Promise<void>,
+    hasMeaningfulContent: () => boolean,
   ) => {
-    taskEditorAutosaveRef.current = { taskId, flush };
+    taskEditorAutosaveRef.current = { taskId, flush, hasMeaningfulContent };
   }, []);
 
   const closeOpenRecurrencePrototype = useCallback(async (): Promise<boolean> => {
@@ -1431,6 +1434,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return false;
       }
     }
+    if (
+      currentTaskId === NEW_TASK_DRAFT_ID
+      && autosave?.hasMeaningfulContent()
+      && creationDraftRef.current?.persistedTaskId === null
+    ) {
+      try {
+        await persistCreationDraft(creationDraftRef.current, true);
+      } catch {
+        return false;
+      }
+    }
     if (selectedTaskIdRef.current !== currentTaskId) return false;
     if (taskEditorAutosaveRef.current === autosave) taskEditorAutosaveRef.current = null;
     const closingTaskRect = currentTaskId !== null && currentTaskId !== NEW_TASK_DRAFT_ID
@@ -1454,11 +1468,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       && deferredCompletionTaskIdsRef.current.has(NEW_TASK_DRAFT_ID);
     const completingCurrentTask = currentTaskId !== null
       && deferredCompletionTaskIdsRef.current.has(currentTaskId);
+    const trashingEmptyCurrentTask = currentTaskId !== null
+      && currentTaskId !== NEW_TASK_DRAFT_ID
+      && autosave !== null
+      && !autosave.hasMeaningfulContent();
     const currentTask = currentTaskId === null || closingCreationDraft
       ? undefined
       : latestTaskMetadataRef.current.get(currentTaskId)
         ?? projectedTasksRef.current.find((task) => task.id === currentTaskId);
-    const closingDeparture = currentTask === undefined || completingCurrentTask
+    const closingDeparture = currentTask === undefined
+      || completingCurrentTask
+      || trashingEmptyCurrentTask
       ? null
       : classifyTaskDeparture({
           wasRendered: true,
@@ -1481,6 +1501,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const shouldSettleBeforeProjection = currentTaskId !== null && (
       closingCreationDraft
       || completingCurrentTask
+      || trashingEmptyCurrentTask
       || closingDeparture !== null
       || taskPlacementChanged(currentTask, retainedTaskPlacementRef.current)
     );
@@ -1496,8 +1517,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setClosingTaskId(
       shouldSettleBeforeProjection && !closingCreationDraft ? currentTaskId : null,
     );
-    if (currentTaskId !== null && !cancellingNativeQuickEntry) {
+    if (
+      currentTaskId !== null
+      && !cancellingNativeQuickEntry
+      && !trashingEmptyCurrentTask
+    ) {
       finalizeDeferredCompletion(currentTaskId);
+    }
+    if (trashingEmptyCurrentTask) {
+      try {
+        await transitionTask(currentTaskId, 'delete');
+      } catch (deleteError) {
+        showTaskError('Empty Task Could Not Be Removed', deleteError);
+      }
     }
     if (closingCreationDraft && !nativeQuickEntry) {
       await waitForTaskMotion(TASK_EDITOR_EXPANSION_DURATION_MS);
@@ -1551,6 +1583,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     finalizeDeferredCompletion,
     finishCreationDraft,
     planningDate,
+    persistCreationDraft,
     nativeQuickEntry,
     taskListView,
     taskQuickFilter,
@@ -2109,11 +2142,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const controller = toast({
         title: (
           <span className="flex items-center gap-2">
-            <TASK_ICONS.Reminder className="h-4 w-4" aria-hidden="true" />
+            <TASK_ICONS.Reminder className="h-3 w-3" aria-hidden="true" />
             Reminder
           </span>
         ),
-        description: item.title,
+        description: `${formatReminderToastTime(
+          item.resolved_at,
+          reminders.planningTimeZone,
+        )}: ${item.title}`,
         variant: 'info',
         duration: Number.POSITIVE_INFINITY,
         onOpenChange: (open) => {
@@ -2131,6 +2167,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     reminderPresentationMode,
     reminderToastRetrySequence,
     reminders.dueItems,
+    reminders.planningTimeZone,
   ]);
 
   useEffect(() => {
@@ -3084,6 +3121,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'clear-start') {
+        const activeStartPicker = document.querySelector<HTMLElement>(
+          '[data-task-start-picker]',
+        );
+        if (activeStartPicker) requestTaskStartPickerClose(activeStartPicker);
         void runDirectStartShortcut('anytime');
         return;
       }
@@ -3108,6 +3149,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       }
       if (command === 'focus-reminder') {
         void openTaskCommandField('reminder');
+        return;
+      }
+      if (command === 'focus-notes') {
+        const target = getTaskCommandTargets()[0];
+        if (target) focusTaskNotesAtEnd(target.id);
         return;
       }
       if (command === 'start-selection') {
@@ -3658,6 +3704,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const taskDragPlacement = taskDropIndicator?.targetTaskId === task.id
       ? taskDropIndicator.placement
       : null;
+    const upcomingStartDate = view === 'upcoming'
+      && task.start_date !== null
+      && isTaskCalendarDate(task.start_date)
+      && task.start_date > addTaskCalendarDays(planningDate, 7)
+      ? task.start_date
+      : null;
     return (
       <TaskRow
         key={task.id}
@@ -3871,6 +3923,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           updateTaskDropIndicator(null);
         }}
         planningDate={planningDate}
+        upcomingStartDate={upcomingStartDate}
         todayMarker={(searchRow?.route ?? view) === 'anytime'
           ? getTaskTodayMembershipSection(task, planningDate) ?? undefined
           : undefined}
@@ -6543,6 +6596,7 @@ function TaskRow({
   onTaskDragOver,
   onTaskDragEnd,
   planningDate,
+  upcomingStartDate,
   todayMarker,
   todayMarkerContext,
   reminder,
@@ -6575,7 +6629,11 @@ function TaskRow({
   onRestoreTaskFocus: (taskId: string | null) => void;
   onClearTaskFocus: () => void;
   onMoveFocus: (direction: -1 | 1, wrap: boolean) => void;
-  onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
+  onRegisterAutosave: (
+    taskId: string,
+    flush: () => Promise<void>,
+    hasMeaningfulContent: () => boolean,
+  ) => void;
   completionRequested: boolean;
   onToggleDeferredCompletion: () => void;
   reserveTerminalMutation: () => TaskForwardMutationReservation | undefined;
@@ -6592,6 +6650,7 @@ function TaskRow({
   onTaskDragOver: (placement: 'before' | 'after') => void;
   onTaskDragEnd: () => void;
   planningDate: string;
+  upcomingStartDate?: string | null;
   todayMarker?: TodayTaskSection;
   todayMarkerContext: 'Today' | 'Day Horizon';
   reminder: TaskReminder | null;
@@ -7401,6 +7460,7 @@ function TaskRow({
           </span>
           {(
             areaLabel
+            || upcomingStartDate
             || todayMarker
             || hasChecklistItems
             || task.notes.length > 0
@@ -7419,6 +7479,16 @@ function TaskRow({
                   data-task-metadata-kind="area"
                 >
                   {areaLabel}
+                </span>
+              ) : null}
+              {upcomingStartDate ? (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1"
+                  aria-label={`Start ${formatTaskMonthDay(upcomingStartDate)}`}
+                  data-task-metadata-kind="start"
+                >
+                  <TASK_ICONS.Start className="h-3.5 w-3.5" aria-hidden="true" />
+                  {formatTaskMonthDay(upcomingStartDate)}
                 </span>
               ) : null}
               {todayMarker && TodayMarkerIcon && todayMarkerPresentation ? (
@@ -7701,7 +7771,7 @@ function TaskRow({
                 </Button>
                 <Button
                   type="button"
-                  disabled={pending || visibleTitle.trim().length === 0}
+                  disabled={pending}
                   onClick={() => void onCloseEditor()}
                 >
                   Save
@@ -7826,7 +7896,11 @@ function TaskEditor({
     ambiguityChoice: 'earlier' | 'later';
   }) => Promise<void>;
   onCancelReminder: () => Promise<void>;
-  onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
+  onRegisterAutosave: (
+    taskId: string,
+    flush: () => Promise<void>,
+    hasMeaningfulContent: () => boolean,
+  ) => void;
   onTitleChange: (title: string) => void;
   showTemporalFields?: boolean;
   quickEntry?: boolean;
@@ -7970,12 +8044,22 @@ function TaskEditor({
     checklistFlushRef.current = flush;
   }, []);
 
+  const hasMeaningfulContentRef = useRef(false);
+  hasMeaningfulContentRef.current = title.trim().length > 0
+    || notes.trim().length > 0
+    || primaryLink.trim().length > 0
+    || checklistContentPresent;
+  const hasMeaningfulContent = useCallback(
+    () => hasMeaningfulContentRef.current,
+    [],
+  );
+
   useLayoutEffect(() => {
-    onRegisterAutosave(task.id, flushAutosave);
+    onRegisterAutosave(task.id, flushAutosave, hasMeaningfulContent);
     return () => {
       void flushAutosave().catch(() => undefined);
     };
-  }, [flushAutosave, onRegisterAutosave, task.id]);
+  }, [flushAutosave, hasMeaningfulContent, onRegisterAutosave, task.id]);
 
   const persistReminder = useCallback((localTime: string) => {
     const pendingTextPatch = takePendingTextPatch();
@@ -8139,9 +8223,7 @@ function TaskEditor({
       onTitleChange={(nextTitle) => {
         setTitle(nextTitle);
         onTitleChange(nextTitle);
-        const normalizedTitle = nextTitle.trim();
-        if (normalizedTitle) scheduleTextPatch({ title: normalizedTitle });
-        else removePendingTextField('title');
+        scheduleTextPatch({ title: nextTitle.trim() });
       }}
       onNotesChange={(nextNotes) => {
         setNotes(nextNotes);
@@ -8169,19 +8251,6 @@ function TaskEditor({
       titleAutoFocus={task.id === NEW_TASK_DRAFT_ID}
       titleClassName={cn(nativeSummaryCaptureActive && 'border-ring ring-2 ring-ring/65')}
       onTitlePointerDown={() => setNativeSummaryCaptureActive(false)}
-      onTitleKeyDown={(event) => {
-        if (
-          event.key !== 'ArrowRight'
-          || event.shiftKey
-          || event.metaKey
-          || event.ctrlKey
-          || event.altKey
-          || event.nativeEvent.isComposing
-          || event.currentTarget.selectionStart !== event.currentTarget.value.length
-          || event.currentTarget.selectionEnd !== event.currentTarget.value.length
-        ) return;
-        if (focusTaskNotesAtStart(task.id)) event.preventDefault();
-      }}
       titleOverlay={nativeSummaryCaptureActive ? (
         <span
           aria-hidden="true"
@@ -8297,6 +8366,16 @@ function formatReminderRowTime(reminder: TaskReminder): string {
     formatTaskReminderTimeDisplay(reminder.local_time)?.toUpperCase()
     ?? reminder.local_time.slice(0, 5)
   );
+}
+
+function formatReminderToastTime(value: string, timeZone: string): string {
+  const instant = new Date(value);
+  if (Number.isNaN(instant.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(instant).toUpperCase();
 }
 
 function getTaskViewLabel(view: TaskShellView): string {

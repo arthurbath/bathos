@@ -104,6 +104,7 @@ describe('getTaskKeyboardCommand', () => {
       r: 'clear-start',
       t: 'cycle-horizon',
       y: 'focus-reminder',
+      n: 'focus-notes',
       a: 'capture',
       s: 'open-next',
       d: 'open-deadline',
@@ -147,7 +148,7 @@ describe('getTaskKeyboardCommand', () => {
   });
 
   it('leaves former Windows Control+Shift task chords unbound', () => {
-    for (const key of ['q', 'w', 'e', 'r', 't', 'y', 'a', 's', 'd', 'f', 'g', 'x', 'c', 'v', 'b']) {
+    for (const key of ['q', 'w', 'e', 'r', 't', 'y', 'a', 's', 'd', 'f', 'g', 'n', 'x', 'c', 'v', 'b']) {
       expect(getTaskKeyboardCommand(
         gesture({ key, ctrlKey: true, shiftKey: true }),
         false,
@@ -174,7 +175,7 @@ describe('getTaskKeyboardCommand', () => {
     expect(getTaskKeyboardCommand(
       gesture({ key: 'n', altKey: true, shiftKey: true }),
       false,
-    )).toBeNull();
+    )).toBe('focus-notes');
     expect(getTaskKeyboardCommand(
       gesture({ key: '1', ctrlKey: true, altKey: true }),
       false,
@@ -189,6 +190,7 @@ describe('isTaskNativeQuickEntryMetadataCommand', () => {
       'clear-start',
       'cycle-horizon',
       'focus-reminder',
+      'focus-notes',
       'open-deadline',
       'cycle-actionability',
       'set-someday',

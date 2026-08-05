@@ -1178,9 +1178,6 @@ function normalizeEditablePatch(patch: EditableTaskPatch): EditableTaskPatch {
 
 function normalizeTitle(title: string): string {
   const normalized = title.trim();
-  if (!normalized) {
-    throw new InvalidTaskMutationError('A task summary is required');
-  }
   if (Array.from(normalized).length > 500) {
     throw new InvalidTaskMutationError('A task summary cannot exceed 500 characters');
   }

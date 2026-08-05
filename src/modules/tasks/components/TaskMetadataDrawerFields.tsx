@@ -155,6 +155,57 @@ export function TaskMetadataDrawerFields({
         />
         {titleOverlay}
       </div>
+      {temporalFields}
+      <div
+        data-task-editor-identity-grid
+        className={cn('grid gap-3', areas.length > 0 ? 'grid-cols-2' : 'grid-cols-1')}
+      >
+        {areas.length > 0 ? (
+          <div className="min-w-0">
+            <Select
+              value={areaId ?? 'none'}
+              onValueChange={(value) => onAreaChange(value === 'none' ? null : value)}
+              disabled={areasLoading}
+            >
+              <SelectTrigger
+                id={`task-organization-${editorId}`}
+                aria-label="Area"
+                decoration={<TASK_ICONS.Area />}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent data-task-editor-owned-surface="true">
+                <SelectItem value="none">No Area</SelectItem>
+                {areas.map((area) => (
+                  <SelectItem key={area.id} value={area.id}>{area.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        <div className="min-w-0">
+          <Select
+            value={actionability}
+            onValueChange={(value) => onActionabilityChange(
+              value as TaskTodo['actionability'],
+            )}
+          >
+            <SelectTrigger
+              id={`task-actionability-${editorId}`}
+              aria-label="Actionability"
+              decoration={<ActionabilityIcon />}
+              decorationClassName={actionability === 'actionable' ? undefined : 'text-admin'}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent data-task-editor-owned-surface="true">
+              <SelectItem value="actionable">Ready</SelectItem>
+              <SelectItem value="rechecking">Rechecking</SelectItem>
+              <SelectItem value="waiting">Waiting</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       <Suspense fallback={<div className="min-h-16" aria-label="Loading Task Notes" />}>
         <TaskMarkdownNotes
           id={`task-notes-${editorId}`}
@@ -238,57 +289,6 @@ export function TaskMetadataDrawerFields({
             className="pointer-events-none absolute inset-y-2 left-1/2 w-px bg-[hsl(var(--grid-sticky-line)/0.35)]"
           />
         ) : null}
-      </div>
-      {temporalFields}
-      <div
-        data-task-editor-identity-grid
-        className={cn('grid gap-3', areas.length > 0 ? 'grid-cols-2' : 'grid-cols-1')}
-      >
-        {areas.length > 0 ? (
-          <div className="min-w-0">
-            <Select
-              value={areaId ?? 'none'}
-              onValueChange={(value) => onAreaChange(value === 'none' ? null : value)}
-              disabled={areasLoading}
-            >
-              <SelectTrigger
-                id={`task-organization-${editorId}`}
-                aria-label="Area"
-                decoration={<TASK_ICONS.Area />}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent data-task-editor-owned-surface="true">
-                <SelectItem value="none">No Area</SelectItem>
-                {areas.map((area) => (
-                  <SelectItem key={area.id} value={area.id}>{area.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-        <div className="min-w-0">
-          <Select
-            value={actionability}
-            onValueChange={(value) => onActionabilityChange(
-              value as TaskTodo['actionability'],
-            )}
-          >
-            <SelectTrigger
-              id={`task-actionability-${editorId}`}
-              aria-label="Actionability"
-              decoration={<ActionabilityIcon />}
-              decorationClassName={actionability === 'actionable' ? undefined : 'text-admin'}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent data-task-editor-owned-surface="true">
-              <SelectItem value="actionable">Ready</SelectItem>
-              <SelectItem value="rechecking">Rechecking</SelectItem>
-              <SelectItem value="waiting">Waiting</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
     </div>
   );

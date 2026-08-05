@@ -142,6 +142,14 @@ export function formatTaskDateControlLabel(
   return formatTaskCalendarDate(value, locale, true);
 }
 
+export function formatTaskMonthDay(
+  value: string,
+  locale?: string,
+): string {
+  if (!isTaskCalendarDate(value)) return value;
+  return formatTaskCalendarDate(value, locale, false);
+}
+
 function formatTaskCalendarDate(
   value: string,
   locale: string | undefined,

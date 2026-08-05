@@ -344,6 +344,20 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('INSERT INTO tasks_todos');
   });
 
+  it('preserves a blank Summary so other task content can carry the task', async () => {
+    const { repository, transaction } = createHarness(null);
+
+    await expect(repository.createTask({
+      ownerId: 'owner-a',
+      title: '   ',
+      notes: 'The task is described in Notes.',
+    })).resolves.toMatchObject({
+      title: '',
+      notes: 'The task is described in Notes.',
+    });
+    expect(transaction.execute).toHaveBeenCalledOnce();
+  });
+
   it('places ordinary captures in active Today Next without a Start Date', async () => {
     const { repository } = createHarness(null);
 

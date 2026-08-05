@@ -59,6 +59,7 @@ import type {
 } from '@/modules/tasks/types/tasks';
 import {
   TASK_START_PICKER_ADVANCE_EVENT,
+  TASK_START_PICKER_CLOSE_EVENT,
   TASK_START_PICKER_FOCUS_HORIZON_EVENT,
   TASK_START_PICKER_OPEN_EVENT,
   type TaskStartPickerFocusTarget,
@@ -842,6 +843,14 @@ export function TaskStartPickerField({
   const [open, setOpen] = useState(false);
   const [focusTarget, setFocusTarget] = useState<TaskStartPickerFocusTarget>('start');
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const handleClose = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === props.task.id) setOpen(false);
+    };
+    window.addEventListener(TASK_START_PICKER_CLOSE_EVENT, handleClose);
+    return () => window.removeEventListener(TASK_START_PICKER_CLOSE_EVENT, handleClose);
+  }, [props.task.id]);
   const tabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const summary = useMemo(
     () => getStartSummary(
