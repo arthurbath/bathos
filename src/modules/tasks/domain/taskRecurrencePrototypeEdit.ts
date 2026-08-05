@@ -4,6 +4,7 @@ import type {
   TaskRecurrencePrototypeSnapshot,
   TaskRecurrenceRevision,
 } from '@/modules/tasks/types/tasks';
+import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 
 export type RecurrencePrototypeMetadataPatch = {
   root?: Partial<TaskRecurrencePrototypeSnapshot['root']>;
@@ -19,17 +20,19 @@ export function buildRecurrencePrototypeEditInput(
   return {
     definition,
     revision,
-    name: root.title.trim() || definition.name,
     ruleMode: revision.rule_mode,
     frequency: revision.frequency,
     intervalCount: revision.interval_count,
-    scheduleDate: revision.start_date,
+    nextStartDate: revision.date_basis === 'deadline' && revision.deadline_after_start_days !== null
+      ? addTaskCalendarDays(revision.start_date, -revision.deadline_after_start_days)
+      : revision.start_date,
+    dateBasis: revision.date_basis,
     ruleConfig: revision.rule_config,
     endMode: revision.end_mode,
     endAfterCount: revision.end_after_count,
     endOnDate: revision.end_on_date,
     reminderLocalTime: revision.reminder_local_time,
-    deadlineOffsetDays: revision.deadline_offset_days,
+    deadlineAfterStartDays: revision.deadline_after_start_days,
     prototypeSnapshot: { ...revision.prototype_snapshot, root },
     ...('targetAreaId' in patch ? { targetAreaId: patch.targetAreaId } : {}),
   };

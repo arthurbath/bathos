@@ -65,6 +65,35 @@ function Harness({ onChange }: { onChange: (values: string[]) => void }) {
 }
 
 describe("MultiSelectFilter interaction contract", () => {
+  it("uses an explicit selected summary without changing option labels", async () => {
+    const onChange = vi.fn();
+    const { container, root } = mount(
+      <MultiSelectFilter
+        label="Months"
+        options={[
+          { value: "1", label: "January" },
+          { value: "2", label: "February" },
+        ]}
+        selectedValues={["1", "2"]}
+        selectedSummary="Jan, Feb"
+        onSelectedValuesChange={onChange}
+        showBulkActions={false}
+      />,
+    );
+    try {
+      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Months"]')!;
+      expect(trigger).toHaveTextContent('Jan, Feb');
+      expect(trigger).not.toHaveTextContent('2 Months');
+
+      await openWithEnter(trigger);
+      const options = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'));
+      expect(options[0]).toHaveTextContent('January');
+      expect(options[1]).toHaveTextContent('February');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it("clears every selection with Delete from the closed trigger", async () => {
     const onChange = vi.fn();
     const { container, root } = mount(<Harness onChange={onChange} />);

@@ -6,12 +6,15 @@ import {
   taskActorTypes,
   taskEntryChannels,
   taskRecurrenceFrequencies,
+  taskRecurrenceDateBases,
+  taskRecurrenceDayTypes,
   taskRecurrenceEndModes,
   taskRecurrenceMissedPolicies,
   taskRecurrenceOccurrenceOrigins,
   taskRecurrenceRuleModes,
   taskRecurrenceStatuses,
   type TaskRecurrenceDefinition,
+  type TaskRecurrenceDateBasis,
   type TaskRecurrenceEndMode,
   type TaskRecurrenceFrequency,
   type TaskRecurrenceMissedPolicy,
@@ -52,17 +55,17 @@ export type TaskRecurrenceEvaluationResult = {
 
 export type TaskRecurrenceCreateFromTaskInput = {
   taskId: string;
-  name: string;
   ruleMode: TaskRecurrenceRuleMode;
   frequency: TaskRecurrenceFrequency;
   intervalCount: number;
-  scheduleDate: string;
+  nextStartDate: string;
+  dateBasis: TaskRecurrenceDateBasis;
   ruleConfig: TaskRecurrenceRuleConfig;
   endMode: TaskRecurrenceEndMode;
   endAfterCount?: number | null;
   endOnDate?: string | null;
   reminderLocalTime?: string | null;
-  deadlineOffsetDays?: number | null;
+  deadlineAfterStartDays?: number | null;
   mutationId?: string;
 };
 
@@ -73,17 +76,17 @@ export type TaskRecurrenceCreateFromTaskResult = TaskRecurrenceSaveResult & {
 export type TaskRecurrenceEditInput = {
   definition: TaskRecurrenceDefinition;
   revision: TaskRecurrenceRevision;
-  name: string;
   ruleMode: TaskRecurrenceRuleMode;
   frequency: TaskRecurrenceFrequency;
   intervalCount: number;
-  scheduleDate: string;
+  nextStartDate: string;
+  dateBasis: TaskRecurrenceDateBasis;
   ruleConfig: TaskRecurrenceRuleConfig;
   endMode: TaskRecurrenceEndMode;
   endAfterCount?: number | null;
   endOnDate?: string | null;
   reminderLocalTime?: string | null;
-  deadlineOffsetDays?: number | null;
+  deadlineAfterStartDays?: number | null;
   prototypeSnapshot?: TaskRecurrencePrototypeSnapshot;
   targetAreaId?: string | null;
   mutationId?: string;
@@ -107,11 +110,10 @@ export class TaskRecurrenceService {
   async createFromTask(
     input: TaskRecurrenceCreateFromTaskInput,
   ): Promise<TaskRecurrenceCreateFromTaskResult> {
-    const name = input.name.trim();
     if (
-      !name
-      || !isTaskCalendarDate(input.scheduleDate)
+      !isTaskCalendarDate(input.nextStartDate)
       || input.intervalCount < 1
+      || (input.dateBasis === 'deadline' && input.deadlineAfterStartDays == null)
       || (
         input.endMode === 'after'
         && (!Number.isInteger(input.endAfterCount) || Number(input.endAfterCount) < 1)
@@ -123,19 +125,19 @@ export class TaskRecurrenceService {
     ) {
       throw new InvalidTaskRecurrenceError('A valid recurrence definition is required');
     }
-    const { data, error } = await this.client.rpc('tasks_create_recurrence_from_task', {
+    const { data, error } = await this.client.rpc('tasks_create_recurrence_from_task_v2', {
       _task_id: input.taskId,
-      _name: name,
       _rule_mode: input.ruleMode,
       _frequency: input.frequency,
       _interval_count: input.intervalCount,
-      _schedule_date: input.scheduleDate,
-      _rule_config: input.ruleConfig as unknown as Database['public']['Functions']['tasks_create_recurrence_from_task']['Args']['_rule_config'],
+      _next_start_date: input.nextStartDate,
+      _date_basis: input.dateBasis,
+      _rule_config: input.ruleConfig as unknown as Database['public']['Functions']['tasks_create_recurrence_from_task_v2']['Args']['_rule_config'],
       _end_mode: input.endMode,
       _end_after_count: input.endMode === 'after' ? input.endAfterCount ?? null : null,
       _end_on_date: input.endMode === 'on_date' ? input.endOnDate ?? null : null,
       _reminder_local_time: input.reminderLocalTime ?? null,
-      _deadline_offset_days: input.deadlineOffsetDays ?? null,
+      _deadline_after_start_days: input.deadlineAfterStartDays ?? null,
       _mutation_id: input.mutationId ?? crypto.randomUUID(),
       _mutation_channel: 'web',
       _actor_type: 'user',
@@ -157,11 +159,10 @@ export class TaskRecurrenceService {
   }
 
   async edit(input: TaskRecurrenceEditInput): Promise<TaskRecurrenceSaveResult> {
-    const name = input.name.trim();
     if (
-      !name
-      || !isTaskCalendarDate(input.scheduleDate)
+      !isTaskCalendarDate(input.nextStartDate)
       || input.intervalCount < 1
+      || (input.dateBasis === 'deadline' && input.deadlineAfterStartDays == null)
       || (
         input.endMode === 'after'
         && (!Number.isInteger(input.endAfterCount) || Number(input.endAfterCount) < 1)
@@ -173,28 +174,28 @@ export class TaskRecurrenceService {
     ) {
       throw new InvalidTaskRecurrenceError('A valid recurrence definition is required');
     }
-    const { data, error } = await this.client.rpc('tasks_edit_recurrence', {
+    const { data, error } = await this.client.rpc('tasks_edit_recurrence_v2', {
       _recurrence_id: input.definition.id,
       _expected_record_revision: input.definition.record_revision,
-      _name: name,
       _rule_mode: input.ruleMode,
       _frequency: input.frequency,
       _interval_count: input.intervalCount,
-      _start_date: input.scheduleDate,
+      _next_start_date: input.nextStartDate,
+      _date_basis: input.dateBasis,
       _planning_timezone: input.revision.planning_timezone,
       _missed_policy: input.revision.missed_policy,
       _catch_up_limit: input.revision.catch_up_limit,
       _target_area_id: (input.targetAreaId === undefined
         ? input.revision.target_area_id
         : input.targetAreaId) as unknown as string,
-      _rule_config: input.ruleConfig as unknown as Database['public']['Functions']['tasks_edit_recurrence']['Args']['_rule_config'],
+      _rule_config: input.ruleConfig as unknown as Database['public']['Functions']['tasks_edit_recurrence_v2']['Args']['_rule_config'],
       _end_mode: input.endMode,
       _end_after_count: input.endMode === 'after' ? input.endAfterCount ?? null : null,
       _end_on_date: input.endMode === 'on_date' ? input.endOnDate ?? null : null,
       _reminder_local_time: input.reminderLocalTime ?? null,
-      _deadline_offset_days: input.deadlineOffsetDays ?? null,
+      _deadline_after_start_days: input.deadlineAfterStartDays ?? null,
       _prototype_snapshot: (input.prototypeSnapshot
-        ?? input.revision.prototype_snapshot) as unknown as Database['public']['Functions']['tasks_edit_recurrence']['Args']['_prototype_snapshot'],
+        ?? input.revision.prototype_snapshot) as unknown as Database['public']['Functions']['tasks_edit_recurrence_v2']['Args']['_prototype_snapshot'],
       _mutation_id: input.mutationId ?? crypto.randomUUID(),
       _mutation_channel: 'web',
       _actor_type: 'user',
@@ -365,6 +366,18 @@ export function parseTaskRecurrenceRevision(
       taskRecurrenceEndModes,
       'recurrence end mode',
     ),
+    date_basis: requireEnum(
+      record.date_basis
+        ?? (record.deadline_offset_days === null || record.deadline_offset_days === undefined
+          ? 'start'
+          : 'deadline'),
+      taskRecurrenceDateBases,
+      'recurrence date basis',
+    ),
+    deadline_after_start_days: parseNullableInteger(
+      record.deadline_after_start_days ?? record.deadline_offset_days,
+      'recurrence deadline offset',
+    ),
     rule_config: parseRuleConfig(record.rule_config ?? {}),
     prototype_snapshot: parseTaskRecurrencePrototypeSnapshot(record.prototype_snapshot),
   } as TaskRecurrenceRevision;
@@ -491,6 +504,7 @@ function parseRuleConfig(value: unknown): TaskRecurrenceRuleConfig {
     throw new InvalidTaskRecurrenceError('Recurrence weekdays are invalid');
   }
   return {
+    ...(record.version === 2 ? { version: 2 as const } : {}),
     ...(Array.isArray(weekdays) ? { weekdays: weekdays.map(Number) } : {}),
     ...(
       record.monthly_kind === 'day_of_month'
@@ -513,8 +527,20 @@ function parseRuleConfig(value: unknown): TaskRecurrenceRuleConfig {
       ? { ordinal: Number(record.ordinal) as -1 | 1 | 2 | 3 | 4 | 5 }
       : {}),
     ...(Number.isInteger(record.weekday) ? { weekday: Number(record.weekday) } : {}),
-    ...(record.day_type === 'weekday' || record.day_type === 'weekend_day'
-      ? { day_type: record.day_type }
+    ...(typeof record.day_type === 'string' && taskRecurrenceDayTypes.includes(
+      record.day_type as (typeof taskRecurrenceDayTypes)[number],
+    )
+      ? { day_type: record.day_type as (typeof taskRecurrenceDayTypes)[number] }
+      : {}),
+    ...(
+      record.position === 'last'
+      || (Number.isInteger(record.position) && Number(record.position) >= 1 && Number(record.position) <= 31)
+        ? { position: record.position as number | 'last' }
+        : {}
+    ),
+    ...(Array.isArray(record.months)
+      && record.months.every((month) => Number.isInteger(month) && Number(month) >= 1 && Number(month) <= 12)
+      ? { months: [...new Set(record.months.map(Number))].sort((left, right) => left - right) }
       : {}),
   };
 }

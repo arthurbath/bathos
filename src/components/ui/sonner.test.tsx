@@ -1,4 +1,6 @@
 import { render } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { showSonnerErrorToast, Toaster } from "@/components/ui/sonner";
@@ -38,6 +40,15 @@ describe("showSonnerErrorToast", () => {
       }),
       {},
     );
+  });
+
+  it("keeps network and system toasts above modal backdrops", () => {
+    const stylesheet = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
+    const sonnerRule = stylesheet.match(
+      /\.bathos-sonner-toaster\[data-sonner-toaster\]\s*\{[^}]*z-index:\s*(\d+)/u,
+    );
+
+    expect(Number(sonnerRule?.[1])).toBeGreaterThan(34);
   });
 
   it("applies the shared content-proportional duration", () => {

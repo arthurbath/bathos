@@ -252,15 +252,39 @@ export type TaskRecurrenceDefinition = Omit<
 
 export type TaskRecurrenceRevision = Omit<
   TaskRecurrenceRevisionRow,
-  'rule_mode' | 'frequency' | 'missed_policy' | 'end_mode' | 'prototype_snapshot'
+  | 'rule_mode'
+  | 'frequency'
+  | 'missed_policy'
+  | 'end_mode'
+  | 'prototype_snapshot'
+  | 'date_basis'
 > & {
   rule_mode: TaskRecurrenceRuleMode;
   frequency: TaskRecurrenceFrequency;
   missed_policy: TaskRecurrenceMissedPolicy;
   end_mode: TaskRecurrenceEndMode;
+  date_basis: TaskRecurrenceDateBasis;
   rule_config: TaskRecurrenceRuleConfig;
   prototype_snapshot: TaskRecurrencePrototypeSnapshot;
 };
+
+export const taskRecurrenceDateBases = ['start', 'deadline'] as const;
+export type TaskRecurrenceDateBasis = (typeof taskRecurrenceDateBases)[number];
+
+export const taskRecurrenceDayTypes = [
+  'day',
+  'weekday',
+  'weekend_day',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+] as const;
+export type TaskRecurrenceDayType = (typeof taskRecurrenceDayTypes)[number];
+export type TaskRecurrencePosition = number | 'last';
 
 export type TaskRecurrenceOccurrence = Omit<
   TaskRecurrenceOccurrenceRow,
@@ -271,6 +295,7 @@ export type TaskRecurrenceOccurrence = Omit<
 };
 
 export type TaskRecurrenceRuleConfig = {
+  version?: 2;
   weekdays?: number[];
   monthly_kind?:
     | 'day_of_month'
@@ -282,7 +307,9 @@ export type TaskRecurrenceRuleConfig = {
   month_day?: number;
   ordinal?: -1 | 1 | 2 | 3 | 4 | 5;
   weekday?: number;
-  day_type?: 'weekday' | 'weekend_day';
+  day_type?: TaskRecurrenceDayType;
+  position?: TaskRecurrencePosition;
+  months?: number[];
 };
 
 export type TaskRecurrenceEvaluation = TaskRecurrenceEvaluationRow;

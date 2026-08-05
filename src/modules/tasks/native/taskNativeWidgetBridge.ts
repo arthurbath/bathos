@@ -11,6 +11,7 @@ import {
   getTaskUpcomingDate,
   getTaskUpcomingGroup,
 } from '@/modules/tasks/domain/taskUpcoming';
+import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import type {
   TaskActionability,
   TaskArea,
@@ -475,9 +476,14 @@ function toTaskNativeWidgetRecurrencePrototype({
   return {
     id: definition.id,
     summary: prototype.title.trim().slice(0, 500),
-    deadline: revision.deadline_offset_days === null
+    deadline: (revision.deadline_after_start_days ?? revision.deadline_offset_days) === null
       ? null
-      : definition.next_occurrence_date,
+      : revision.date_basis === 'start' && definition.next_occurrence_date
+        ? addTaskCalendarDays(
+            definition.next_occurrence_date,
+            revision.deadline_after_start_days ?? revision.deadline_offset_days ?? 0,
+          )
+        : definition.next_occurrence_date,
     todaySection: null,
     actionability: prototype.actionability,
     terminalState: null,

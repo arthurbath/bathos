@@ -157,6 +157,8 @@ export function taskRecurrenceRevisionFixture(
     frequency: 'daily',
     interval_count: 1,
     start_date: '2026-07-20',
+    date_basis: 'start',
+    deadline_after_start_days: null,
     planning_timezone: 'America/Los_Angeles',
     missed_policy: 'latest',
     catch_up_limit: 30,

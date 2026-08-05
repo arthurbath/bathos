@@ -53,6 +53,8 @@ const revision = {
   frequency: 'weekly',
   interval_count: 1,
   start_date: '2026-07-20',
+  date_basis: 'start',
+  deadline_after_start_days: null,
   planning_timezone: 'America/Los_Angeles',
   missed_policy: 'latest',
   catch_up_limit: 50,
@@ -191,6 +193,8 @@ describe('TaskRecurrenceService', () => {
           end_on_date: null,
           reminder_local_time: '09:30:00',
           deadline_offset_days: 2,
+          deadline_after_start_days: 2,
+          date_basis: 'deadline',
         },
         occurrence: adoptedOccurrence,
       },
@@ -200,16 +204,16 @@ describe('TaskRecurrenceService', () => {
 
     await expect(service.createFromTask({
       taskId: adoptedOccurrence.root_id,
-      name: definition.name,
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      scheduleDate: '2026-07-27',
+      nextStartDate: '2026-07-27',
+      dateBasis: 'deadline',
       ruleConfig: { weekdays: [1, 3] },
       endMode: 'after',
       endAfterCount: 5,
       reminderLocalTime: '09:30',
-      deadlineOffsetDays: 2,
+      deadlineAfterStartDays: 2,
       mutationId: definition.client_mutation_id,
     })).resolves.toMatchObject({
       outcome: 'accepted',
@@ -220,16 +224,19 @@ describe('TaskRecurrenceService', () => {
       revision: {
         end_mode: 'after',
         end_after_count: 5,
-        deadline_offset_days: 2,
+        date_basis: 'deadline',
+        deadline_after_start_days: 2,
       },
     });
     expect(rpc).toHaveBeenCalledWith(
-      'tasks_create_recurrence_from_task',
+      'tasks_create_recurrence_from_task_v2',
       expect.objectContaining({
         _task_id: adoptedOccurrence.root_id,
         _rule_config: { weekdays: [1, 3] },
         _reminder_local_time: '09:30',
-        _deadline_offset_days: 2,
+        _next_start_date: '2026-07-27',
+        _date_basis: 'deadline',
+        _deadline_after_start_days: 2,
       }),
     );
   });
@@ -248,11 +255,11 @@ describe('TaskRecurrenceService', () => {
 
     await expect(service.createFromTask({
       taskId: '80000000-0000-4000-8000-000000000001',
-      name: definition.name,
       ruleMode: 'calendar',
       frequency: 'monthly',
       intervalCount: 1,
-      scheduleDate: '2026-08-03',
+      nextStartDate: '2026-08-03',
+      dateBasis: 'start',
       ruleConfig: { monthly_kind: 'day_of_month', month_day: 3 },
       endMode: 'never',
       mutationId: definition.client_mutation_id,
@@ -303,16 +310,16 @@ describe('TaskRecurrenceService', () => {
     await expect(service.edit({
       definition: currentDefinition,
       revision: currentRevision,
-      name: definition.name,
       ruleMode: 'after_completion',
       frequency: 'weekly',
       intervalCount: 1,
-      scheduleDate: '2026-08-03',
+      nextStartDate: '2026-08-03',
+      dateBasis: 'deadline',
       ruleConfig: {},
       endMode: 'after',
       endAfterCount: 12,
       reminderLocalTime: '09:30',
-      deadlineOffsetDays: 2,
+      deadlineAfterStartDays: 2,
       mutationId: '90000000-0000-4000-8000-000000000001',
     })).resolves.toMatchObject({
       outcome: 'accepted',
@@ -323,12 +330,14 @@ describe('TaskRecurrenceService', () => {
         start_date: '2026-08-03',
       },
     });
-    expect(rpc).toHaveBeenCalledWith('tasks_edit_recurrence', expect.objectContaining({
+    expect(rpc).toHaveBeenCalledWith('tasks_edit_recurrence_v2', expect.objectContaining({
       _recurrence_id: definition.id,
       _expected_record_revision: 1,
       _prototype_snapshot: revision.prototype_snapshot,
       _rule_mode: 'after_completion',
-      _start_date: '2026-08-03',
+      _next_start_date: '2026-08-03',
+      _date_basis: 'deadline',
+      _deadline_after_start_days: 2,
       _end_mode: 'after',
       _end_after_count: 12,
     }));
@@ -360,11 +369,11 @@ describe('TaskRecurrenceService', () => {
     const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
     await expect(service.createFromTask({
       taskId: '80000000-0000-4000-8000-000000000001',
-      name: '',
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 0,
-      scheduleDate: 'not-a-date',
+      nextStartDate: 'not-a-date',
+      dateBasis: 'start',
       ruleConfig: {},
       endMode: 'never',
     })).rejects.toBeInstanceOf(InvalidTaskRecurrenceError);

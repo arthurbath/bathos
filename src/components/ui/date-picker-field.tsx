@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { format } from 'date-fns';
 import { CalendarIcon, X } from 'lucide-react';
+import type { Matcher } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { ControlDecoration } from '@/components/ui/control-decoration';
@@ -45,6 +46,7 @@ interface DatePickerFieldProps extends Omit<React.ButtonHTMLAttributes<HTMLButto
   displayValue?: string;
   popoverAlign?: 'start' | 'center' | 'end';
   minDate?: string;
+  isDateDisabled?: (date: Date) => boolean;
   todayDate?: string;
   clearable?: boolean;
   clearEnabled?: boolean;
@@ -61,6 +63,7 @@ export interface DatePickerPanelProps {
   onRequestClose: () => void;
   onTabExit?: (backwards: boolean) => void;
   minDate?: string;
+  isDateDisabled?: (date: Date) => boolean;
   todayDate?: string;
   clearable?: boolean;
   clearEnabled?: boolean;
@@ -75,6 +78,7 @@ export function DatePickerPanel({
   onRequestClose,
   onTabExit,
   minDate,
+  isDateDisabled,
   todayDate,
   clearable = false,
   clearEnabled,
@@ -96,6 +100,12 @@ export function DatePickerPanel({
   const [focusRequestKey, setFocusRequestKey] = React.useState(0);
   const panelRef = React.useRef<HTMLDivElement | null>(null);
   const clearButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const disabledDateMatchers: Matcher[] = [];
+  if (minimumDate) disabledDateMatchers.push({ before: minimumDate });
+  if (isDateDisabled) disabledDateMatchers.push(isDateDisabled);
+  const disabledDates = disabledDateMatchers.length > 0
+    ? disabledDateMatchers
+    : undefined;
 
   React.useEffect(() => {
     if (!active) return;
@@ -169,7 +179,7 @@ export function DatePickerPanel({
       <Calendar
         mode="single"
         selected={selectedDate}
-        disabled={minimumDate ? { before: minimumDate } : undefined}
+        disabled={disabledDates}
         fromDate={minimumDate}
         month={visibleMonth}
         today={calendarToday}
@@ -220,6 +230,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   displayValue,
   popoverAlign = 'start',
   minDate,
+  isDateDisabled,
   todayDate,
   clearable = false,
   clearEnabled,
@@ -256,7 +267,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
           variant="outline"
           disabled={disabled}
           className={cn(
-            'h-10 w-full justify-start rounded-md border-input bg-background px-3 py-2 text-left text-base font-normal text-foreground md:text-sm',
+            'h-10 w-full justify-start rounded-md border-input bg-background px-3 py-2 text-left text-sm font-normal text-foreground',
             !selectedDate && 'text-muted-foreground',
             className,
           )}
@@ -314,6 +325,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
           value={value}
           onValueChange={onValueChange}
           minDate={minDate}
+          isDateDisabled={isDateDisabled}
           todayDate={todayDate}
           clearable={clearable}
           clearEnabled={clearEnabled}

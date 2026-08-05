@@ -146,6 +146,8 @@ describe('taskNativeWidgetBridge', () => {
         revision: taskRecurrenceRevisionFixture({
           recurrence_id: recurrenceId,
           name: 'Repeating Prototype',
+          date_basis: 'start',
+          deadline_after_start_days: 6,
           prototype_snapshot: {
             version: 2,
             kind: 'todo',
@@ -204,6 +206,7 @@ describe('taskNativeWidgetBridge', () => {
         id: recurrenceId,
         summary: 'Repeating Prototype',
         upcomingDate: '2026-08-31',
+        deadline: '2026-09-06',
         isRecurrenceProjection: true,
       }),
     ]);

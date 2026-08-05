@@ -353,8 +353,8 @@ SELECT is(
     WHERE task_id = 'd4000000-0000-4000-8000-000000000022'
       AND result_revision = 2
   ),
-  'move:system:native',
-  'records rollover as one system-authored move history event'
+  'move:automation:native',
+  'records rollover as one automation-authored move history event'
 );
 
 SELECT set_config(

@@ -95,11 +95,11 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     const planningDate = planningDateInTimeZone('America/Los_Angeles');
     const recurrence = await recurrenceService.createFromTask({
       taskId: recurrenceSource.id,
-      name: 'Offline Recurrence',
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      scheduleDate: planningDate,
+      nextStartDate: planningDate,
+      dateBasis: 'start',
       ruleConfig: {},
       endMode: 'never',
     });

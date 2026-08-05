@@ -1724,6 +1724,8 @@ export type Database = {
           catch_up_limit: number
           client_mutation_id: string
           created_at: string
+          date_basis: string
+          deadline_after_start_days: number | null
           deadline_offset_days: number | null
           end_after_count: number | null
           end_mode: string
@@ -1748,6 +1750,8 @@ export type Database = {
           catch_up_limit?: number
           client_mutation_id: string
           created_at?: string
+          date_basis?: string
+          deadline_after_start_days?: number | null
           deadline_offset_days?: number | null
           end_after_count?: number | null
           end_mode?: string
@@ -1772,6 +1776,8 @@ export type Database = {
           catch_up_limit?: number
           client_mutation_id?: string
           created_at?: string
+          date_basis?: string
+          deadline_after_start_days?: number | null
           deadline_offset_days?: number | null
           end_after_count?: number | null
           end_mode?: string
@@ -2643,6 +2649,26 @@ export type Database = {
         }
         Returns: Json
       }
+      tasks_create_recurrence_from_task_v2: {
+        Args: {
+          _actor_type?: string
+          _date_basis: string
+          _deadline_after_start_days: number | null
+          _end_after_count: number | null
+          _end_mode: string
+          _end_on_date: string | null
+          _frequency: string
+          _interval_count: number
+          _mutation_channel?: string
+          _mutation_id: string
+          _next_start_date: string
+          _reminder_local_time: string | null
+          _rule_config: Json
+          _rule_mode: string
+          _task_id: string
+        }
+        Returns: Json
+      }
       tasks_edit_recurrence: {
         Args: {
           _actor_type?: string
@@ -2666,6 +2692,32 @@ export type Database = {
           _rule_mode: string
           _start_date: string
           _target_area_id: string
+        }
+        Returns: Json
+      }
+      tasks_edit_recurrence_v2: {
+        Args: {
+          _actor_type?: string
+          _catch_up_limit: number
+          _date_basis: string
+          _deadline_after_start_days: number | null
+          _end_after_count: number | null
+          _end_mode: string
+          _end_on_date: string | null
+          _expected_record_revision: number
+          _frequency: string
+          _interval_count: number
+          _missed_policy: string
+          _mutation_channel?: string
+          _mutation_id: string
+          _next_start_date: string
+          _planning_timezone: string
+          _prototype_snapshot: Json
+          _recurrence_id: string
+          _reminder_local_time: string | null
+          _rule_config: Json
+          _rule_mode: string
+          _target_area_id: string | null
         }
         Returns: Json
       }

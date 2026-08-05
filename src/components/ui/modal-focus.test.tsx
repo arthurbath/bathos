@@ -542,7 +542,7 @@ describe("Modal focus conventions", () => {
     }
   });
 
-  it("applies visual viewport sizing and no-animation mobile classes to dialog content", async () => {
+  it("squares edge-to-edge mobile dialogs while retaining inset rounded corners", async () => {
     setWindowVisualViewport(412, 24);
     const { container, root } = mount(<DialogViewportHarness />);
     try {
@@ -555,7 +555,8 @@ describe("Modal focus conventions", () => {
         expect(content?.style.getPropertyValue("--bathos-modal-vv-height")).toBe("412px");
         expect(content?.style.getPropertyValue("--bathos-modal-vv-top")).toBe("24px");
         expect(content?.className).toContain("rounded-lg");
-        expect(content?.className).not.toContain("rounded-none");
+        expect(content?.className).toContain("max-sm:rounded-none");
+        expect(content?.className).toContain("max-sm:border-0");
         expect(content?.className).toContain("max-sm:!animate-none");
         expect(content?.className).toContain("max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))]");
         expect(content?.className).toContain("max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))]");
@@ -636,6 +637,9 @@ describe("Modal focus conventions", () => {
 
       const content = document.querySelector<HTMLElement>('[data-testid="alert-content"]');
       expect(content).not.toBeNull();
+      expect(content?.className).toContain("rounded-lg");
+      expect(content?.className).toContain("max-sm:rounded-none");
+      expect(content?.className).toContain("max-sm:border-0");
       await dispatchCommandEnter(content!);
 
       await waitForCondition(() => {

@@ -162,8 +162,8 @@ SELECT is(
     FROM public.tasks_history_events
     WHERE task_id = 'd5000000-0000-4000-8000-000000000020'
       AND result_revision = 2),
-  'move:system:native',
-  'records deadline activation as a system-authored native move'
+  'move:automation:native',
+  'records deadline activation as an automation-authored native move'
 );
 
 SELECT set_config(

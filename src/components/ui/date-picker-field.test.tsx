@@ -150,6 +150,8 @@ describe('DatePickerField', () => {
       const trigger = container.querySelector('#shared-date') as HTMLButtonElement | null;
       expect(trigger?.tagName).toBe('BUTTON');
       expect(trigger?.textContent).toContain('Mar 2, 2026');
+      expect(trigger).toHaveClass('text-sm');
+      expect(trigger).not.toHaveClass('text-base');
 
       act(() => {
         trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -374,6 +376,34 @@ describe('DatePickerField', () => {
       )).find((button) => button.textContent?.trim() === '22'
         && !button.className.includes('day-outside'));
       expect(dayTwentyTwo).toBeDisabled();
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('disables dates rejected by a field-specific rule', async () => {
+    const { container, root } = mount(
+      <DatePickerField
+        id="restricted-date"
+        value="2026-07-23"
+        isDateDisabled={(date) => date.getDate() !== 23}
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>('#restricted-date')?.click();
+      });
+      await flushUi();
+      const dayTwentyTwo = document.body.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-07-22"]',
+      );
+      const dayTwentyThree = document.body.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-07-23"]',
+      );
+      expect(dayTwentyTwo).toBeDisabled();
+      expect(dayTwentyThree).toBeEnabled();
     } finally {
       unmount(root, container);
     }

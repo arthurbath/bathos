@@ -22,7 +22,7 @@ const AlertDialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-[34] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
@@ -52,7 +52,7 @@ const AlertDialogContent = React.forwardRef<
         className={cn(
           "fixed left-[50%] top-[50%] z-50 max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
           className,
-          "grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:!animate-none max-sm:!duration-0 max-sm:!transition-none max-sm:data-[state=closed]:!animate-none max-sm:data-[state=open]:!animate-none",
+          "grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg max-sm:rounded-none max-sm:border-0 max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:!animate-none max-sm:!duration-0 max-sm:!transition-none max-sm:data-[state=closed]:!animate-none max-sm:data-[state=open]:!animate-none",
         )}
         style={viewportStyle}
         {...props}

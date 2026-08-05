@@ -5,6 +5,7 @@ Task selection mode currently layers its fixed action bar above the shared toast
 ## What Changes
 
 - Place the Tasks selection-mode bar below the shared toast layer.
+- Place shared Dialog and AlertDialog backdrops below both toast systems while retaining modal content above the toast stack.
 - Preserve the existing mobile navigation layer above the toast stack.
 - Add regression coverage for the intended stacking order.
 
@@ -16,10 +17,10 @@ None.
 
 ### Modified Capabilities
 
-- `platform-visual-foundations`: Require shared toasts to layer above fixed in-content action surfaces such as the Tasks selection-mode bar while remaining below mobile navigation.
+- `platform-visual-foundations`: Require shared toasts to layer above fixed in-content action surfaces and modal backdrops while remaining below modal content and mobile navigation.
 - `personal-tasks-module`: Require the fixed selection-mode bar to remain below shared toast notifications.
 
 ## Impact
 
-- Affects the Tasks selection-mode toolbar styling and shared visual-layer contract.
+- Affects the Tasks selection-mode toolbar styling, shared Dialog and AlertDialog backdrops, and shared visual-layer contract.
 - No database, Supabase, native-companion, routing, or dependency changes.

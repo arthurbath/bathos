@@ -29,6 +29,7 @@ interface MultiSelectFilterProps<TValue extends string> {
   noneLabel?: string;
   showBulkActions?: boolean;
   deferSelectionUntilClose?: boolean;
+  selectedSummary?: string;
   triggerProps?: Record<string, unknown>;
   onRestoreTriggerFocus?: () => void;
 }
@@ -44,6 +45,7 @@ export function MultiSelectFilter<TValue extends string>({
   noneLabel,
   showBulkActions = true,
   deferSelectionUntilClose = false,
+  selectedSummary,
   triggerProps,
   onRestoreTriggerFocus,
 }: MultiSelectFilterProps<TValue>) {
@@ -59,13 +61,13 @@ export function MultiSelectFilter<TValue extends string>({
   const selectedCount = options.filter((option) => committedSelectedSet.has(option.value)).length;
   const allSelected = selectedCount === options.length;
   const noneSelected = selectedCount === 0;
-  const summary = allSelected
+  const summary = selectedSummary ?? (allSelected
     ? (allLabel ?? `All ${label}`)
       : noneSelected
         ? (noneLabel ?? `No ${label}`)
         : selectedCount === 1
         ? options.find((option) => committedSelectedSet.has(option.value))?.label ?? label
-        : `${selectedCount} ${label}`;
+        : `${selectedCount} ${label}`);
 
   useEffect(() => {
     if (!open) {

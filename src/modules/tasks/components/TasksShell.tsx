@@ -143,6 +143,10 @@ import {
   type TaskForwardMutationReservation,
 } from '@/modules/tasks/hooks/useTaskUndo';
 import { useTaskChecklistUndo } from '@/modules/tasks/hooks/useTaskChecklistUndo';
+import {
+  TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+  type TaskChecklistForwardMutationDetail,
+} from '@/modules/tasks/hooks/taskChecklistForwardMutationEvents';
 import { useTaskReminders } from '@/modules/tasks/hooks/useTaskReminders';
 import { useTaskRecurrences } from '@/modules/tasks/hooks/useTaskRecurrences';
 import type { TaskWebPushModel } from '@/modules/tasks/hooks/useTaskWebPush';
@@ -722,15 +726,28 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     registerForwardMutation(task);
   }, [invalidateCrossStreamRedo, registerForwardMutation]);
   useEffect(() => {
+    const handleChecklistForwardMutation = (event: Event) => {
+      const detail = (event as CustomEvent<TaskChecklistForwardMutationDetail>).detail;
+      if (
+        detail?.schemaVersion !== 1
+        || !detail.actionId
+        || !detail.occurredAt
+      ) return;
+      invalidateCrossStreamRedo();
+      checklistUndo.registerForwardAction({
+        actionId: detail.actionId,
+        occurredAt: detail.occurredAt,
+      });
+    };
     globalThis.addEventListener(
-      'bathos:task-checklist-forward-mutation',
-      invalidateCrossStreamRedo,
+      TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+      handleChecklistForwardMutation,
     );
     return () => globalThis.removeEventListener(
-      'bathos:task-checklist-forward-mutation',
-      invalidateCrossStreamRedo,
+      TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+      handleChecklistForwardMutation,
     );
-  }, [invalidateCrossStreamRedo]);
+  }, [checklistUndo, invalidateCrossStreamRedo]);
   const {
     tasks: projectedTasks,
     loading,
@@ -1167,8 +1184,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       await flushOpenTaskEditor();
       const taskEventTime = taskUndoEvent?.occurred_at ?? '';
       const checklistEventTime = checklistUndo.event?.occurred_at ?? '';
-      if (!taskForwardMutationPending && checklistEventTime > taskEventTime) {
-        const event = await checklistUndo.undo();
+      if (
+        !taskForwardMutationPending
+        && (
+          checklistUndo.hasPendingForwardAction()
+          || checklistEventTime > taskEventTime
+        )
+      ) {
+        const event = await checklistUndo.undoWhenAvailable();
         if (event === null) showTaskHistoryBoundaryToast('undo');
         else {
           setHistoryRedoInvalidated(false);
@@ -1212,7 +1235,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       }
       const routed = historyRouteRef.current.at(-1) ?? null;
       if (routed === 'checklist') {
-        const event = await checklistUndo.redo();
+        const event = await checklistUndo.redoWhenAvailable();
         if (event === null) showTaskHistoryBoundaryToast('redo');
         else historyRouteRef.current.pop();
         return;
@@ -1226,7 +1249,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const taskEventTime = taskRedoEvent?.occurred_at ?? '';
       const checklistEventTime = checklistUndo.redoEvent?.occurred_at ?? '';
       if (checklistEventTime > taskEventTime) {
-        const event = await checklistUndo.redo();
+        const event = await checklistUndo.redoWhenAvailable();
         if (event === null) showTaskHistoryBoundaryToast('redo');
         return;
       }
@@ -5279,7 +5302,7 @@ function TaskBulkToolbar({
     <section
       aria-label="Task Selection"
       data-task-bulk-selection-surface
-      className="fixed bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.25rem)] left-1/2 z-[34] flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-wrap items-center gap-2 rounded-md border border-info/40 bg-background p-3 md:bottom-6"
+      className="fixed bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.25rem)] left-1/2 z-[33] flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-wrap items-center gap-2 rounded-md border border-info/40 bg-background p-3 md:bottom-6"
     >
       <p className="mr-auto text-sm font-medium text-foreground" aria-live="polite">
         {selectedCount} {selectedCount === 1 ? 'Task' : 'Tasks'}

@@ -31,6 +31,9 @@ import { TASK_CLIPBOARD_KIND } from '@/modules/tasks/domain/taskClipboard';
 import { TASK_CLIPBOARD_MIME_TYPE } from '@/modules/tasks/domain/taskClipboardRepresentations';
 import { NEW_TASK_DRAFT_ID } from '@/modules/tasks/domain/taskCreationDraft';
 import {
+  TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+} from '@/modules/tasks/hooks/taskChecklistForwardMutationEvents';
+import {
   UnsafeTaskRedoError,
 } from '@/modules/tasks/domain/taskHistory';
 
@@ -57,6 +60,7 @@ const mockTaskHierarchy = vi.fn();
 const mockTaskDeletedHierarchyRoots = vi.fn();
 const mockTaskReminders = vi.fn();
 const mockTaskUndo = vi.fn();
+const mockTaskChecklistUndo = vi.fn();
 const mockTaskRecurrences = vi.fn();
 const mockTaskChecklist = vi.fn();
 const mockPrepareForSignOut = vi.fn();
@@ -160,6 +164,10 @@ vi.mock('@/modules/tasks/hooks/useTaskReminders', () => ({
 
 vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
   useTaskUndo: (...args: unknown[]) => mockTaskUndo(...args),
+}));
+
+vi.mock('@/modules/tasks/hooks/useTaskChecklistUndo', () => ({
+  useTaskChecklistUndo: (...args: unknown[]) => mockTaskChecklistUndo(...args),
 }));
 
 vi.mock('@/modules/tasks/hooks/useTaskRecurrences', () => ({
@@ -685,6 +693,22 @@ describe('TasksShell', () => {
       redoWhenAvailable: vi.fn().mockResolvedValue(null),
       reserveForwardMutation: vi.fn(),
       registerForwardMutation: vi.fn(),
+    });
+    mockTaskChecklistUndo.mockReset().mockReturnValue({
+      available: false,
+      redoAvailable: false,
+      pending: false,
+      loading: false,
+      error: null,
+      event: null,
+      redoEvent: null,
+      forwardActionPending: false,
+      undo: vi.fn().mockResolvedValue(null),
+      redo: vi.fn().mockResolvedValue(null),
+      undoWhenAvailable: vi.fn().mockResolvedValue(null),
+      redoWhenAvailable: vi.fn().mockResolvedValue(null),
+      registerForwardAction: vi.fn(),
+      hasPendingForwardAction: vi.fn(() => false),
     });
     mockTaskSearch.mockReset().mockReturnValue({
       tasks: [task],
@@ -3318,6 +3342,80 @@ describe('TasksShell', () => {
       await waitFor(() => expect(container.querySelector(
         '[data-task-history-pending]',
       )).toBeNull());
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('registers an accepted checklist action and routes immediate undo and redo through checklist history', async () => {
+    const taskUndo = vi.fn().mockResolvedValue(task);
+    mockTaskUndo.mockReturnValue({
+      available: true,
+      redoAvailable: false,
+      pending: false,
+      loading: false,
+      error: null,
+      event: { id: 'older-task-event', occurred_at: '2026-07-20T17:00:00.000Z' },
+      redoEvent: null,
+      forwardMutationPending: false,
+      undo: vi.fn(),
+      redo: vi.fn(),
+      undoWhenAvailable: taskUndo,
+      redoWhenAvailable: vi.fn().mockResolvedValue(null),
+      reserveForwardMutation: vi.fn(),
+      registerForwardMutation: vi.fn(),
+    });
+    const registerForwardAction = vi.fn();
+    const checklistUndo = vi.fn().mockResolvedValue({ id: 'checklist-event' });
+    const checklistRedo = vi.fn().mockResolvedValue({ id: 'checklist-event' });
+    mockTaskChecklistUndo.mockReturnValue({
+      available: true,
+      redoAvailable: true,
+      pending: false,
+      loading: false,
+      error: null,
+      event: null,
+      redoEvent: null,
+      forwardActionPending: true,
+      undo: vi.fn(),
+      redo: vi.fn(),
+      undoWhenAvailable: checklistUndo,
+      redoWhenAvailable: checklistRedo,
+      registerForwardAction,
+      hasPendingForwardAction: vi.fn(() => true),
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new CustomEvent(TASK_CHECKLIST_FORWARD_MUTATION_EVENT, {
+          detail: {
+            schemaVersion: 1,
+            actionId: 'accepted-checklist-action',
+            occurredAt: '2026-07-20T18:00:00.000Z',
+          },
+        }));
+      });
+      expect(registerForwardAction).toHaveBeenCalledWith({
+        actionId: 'accepted-checklist-action',
+        occurredAt: '2026-07-20T18:00:00.000Z',
+      });
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Undo Last Task Change"]',
+        )?.click();
+      });
+      await waitFor(() => expect(checklistUndo).toHaveBeenCalledOnce());
+      expect(taskUndo).not.toHaveBeenCalled();
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Redo Last Task Change"]',
+        )?.click();
+      });
+      await waitFor(() => expect(checklistRedo).toHaveBeenCalledOnce());
     } finally {
       cleanup(root, container);
     }
@@ -12127,6 +12225,8 @@ describe('TasksShell', () => {
       rule_mode: 'calendar',
       frequency: 'monthly',
       start_date: '2026-08-04',
+      date_basis: 'deadline',
+      deadline_after_start_days: 3,
       rule_config: { monthly_kind: 'day_of_month', month_day: 1 },
       deadline_offset_days: 3,
       target_area_id: 'area-work',
@@ -12295,14 +12395,16 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 400));
       });
       expect(editRecurrence).toHaveBeenCalledWith(expect.objectContaining({
-        name: 'Quarterly Review Updated',
         ruleMode: revision.rule_mode,
         frequency: revision.frequency,
-        deadlineOffsetDays: revision.deadline_offset_days,
+        nextStartDate: '2026-08-01',
+        dateBasis: 'deadline',
+        deadlineAfterStartDays: 3,
         prototypeSnapshot: expect.objectContaining({
           root: expect.objectContaining({ title: 'Quarterly Review Updated' }),
         }),
       }));
+      expect(editRecurrence.mock.calls.at(-1)?.[0]).not.toHaveProperty('name');
 
       const prototypeChecklistToggle = editor.querySelector<HTMLButtonElement>(
         'button[aria-label="Complete Prepare packet"]',

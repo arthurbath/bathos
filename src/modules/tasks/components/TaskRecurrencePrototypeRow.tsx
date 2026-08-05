@@ -41,6 +41,7 @@ import type {
   TaskRecurrenceSaveResult,
 } from '@/modules/tasks/data/taskRecurrenceService';
 import {
+  addTaskCalendarDays,
   formatTaskCompactCalendarDayOffset,
   formatTaskRelativeCalendarDate,
 } from '@/modules/tasks/domain/taskDates';
@@ -559,9 +560,12 @@ function RecurrencePrototypeMetadata({
 }) {
   const prototype = revision.prototype_snapshot.root;
   const areaLabel = areas.find(({ id }) => id === revision.target_area_id)?.title ?? null;
-  const deadline = revision.deadline_offset_days !== null
-    ? definition.next_occurrence_date
-    : null;
+  const deadlineOffset = revision.deadline_after_start_days ?? revision.deadline_offset_days;
+  const deadline = deadlineOffset === null || definition.next_occurrence_date === null
+    ? null
+    : revision.date_basis === 'start'
+      ? addTaskCalendarDays(definition.next_occurrence_date, deadlineOffset)
+      : definition.next_occurrence_date;
   const hasMetadata = waiting
     || areaLabel !== null
     || prototype.actionability !== 'actionable'

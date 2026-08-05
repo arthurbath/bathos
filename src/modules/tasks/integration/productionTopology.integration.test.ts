@@ -167,11 +167,11 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     const recurrencePlanningDate = planningDateInTimeZone('America/Los_Angeles');
     const recurrence = await recurrenceService.createFromTask({
       taskId,
-      name: 'Synthetic Topology Recurrence',
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      scheduleDate: recurrencePlanningDate,
+      nextStartDate: recurrencePlanningDate,
+      dateBasis: 'start',
       ruleConfig: {},
       endMode: 'never',
     });
@@ -380,16 +380,16 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       owner.id,
     ).createFromTask({
       taskId: recurrenceTask.task.id,
-      name: 'Synthetic Rich Recurrence',
       ruleMode: 'calendar',
       frequency: 'daily',
       intervalCount: 1,
-      scheduleDate: planningDateInTimeZone('America/Los_Angeles'),
+      nextStartDate: planningDateInTimeZone('America/Los_Angeles'),
+      dateBasis: 'start',
       ruleConfig: {},
       endMode: 'after',
       endAfterCount: 2,
       reminderLocalTime: '09:30',
-      deadlineOffsetDays: 2,
+      deadlineAfterStartDays: 2,
     });
     expect(recurrence.outcome).toBe('accepted');
     if (recurrence.occurrence === null) {

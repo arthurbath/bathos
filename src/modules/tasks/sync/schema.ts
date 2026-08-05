@@ -251,6 +251,8 @@ const taskRecurrenceRevisions = new Table(
     end_on_date: column.text,
     reminder_local_time: column.text,
     deadline_offset_days: column.integer,
+    date_basis: column.text,
+    deadline_after_start_days: column.integer,
     prototype_snapshot: column.text,
     target_area_id: column.text,
     client_mutation_id: column.text,

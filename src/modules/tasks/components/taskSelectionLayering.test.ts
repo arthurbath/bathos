@@ -16,19 +16,25 @@ function readLayer(source: string, marker: string): number {
 }
 
 describe('task selection stacking', () => {
-  it('keeps toasts above selection controls and below mobile navigation', () => {
+  it('keeps modal backdrops and toasts above selection controls without covering modal content or mobile navigation', () => {
     const tasksSource = readSource('src/modules/tasks/components/TasksShell.tsx');
     const toastSource = readSource('src/components/ui/toast.tsx');
+    const dialogSource = readSource('src/components/ui/dialog.tsx');
+    const alertDialogSource = readSource('src/components/ui/alert-dialog.tsx');
     const navigationSource = readSource('src/platform/components/MobileBottomNav.tsx');
 
     const selectionLayer = readLayer(tasksSource, 'aria-label="Task Selection"');
+    const dialogBackdropLayer = readLayer(dialogSource, 'DialogOverlay');
+    const alertDialogBackdropLayer = readLayer(alertDialogSource, 'AlertDialogOverlay');
     const toastLayer = readLayer(toastSource, 'bathos-toast-viewport');
     const navigationLayer = readLayer(
       navigationSource,
       'bottom-[var(--mobile-bottom-nav-bottom-offset)]',
     );
 
-    expect(selectionLayer).toBeLessThan(toastLayer);
+    expect(selectionLayer).toBeLessThan(dialogBackdropLayer);
+    expect(alertDialogBackdropLayer).toBe(dialogBackdropLayer);
+    expect(dialogBackdropLayer).toBeLessThan(toastLayer);
     expect(toastLayer).toBeLessThan(navigationLayer);
   });
 });

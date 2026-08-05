@@ -98,6 +98,13 @@ export function addTaskCalendarDays(value: string, days: number): string {
   ].join('-');
 }
 
+export function differenceInTaskCalendarDays(laterDate: string, earlierDate: string): number {
+  if (!isTaskCalendarDate(laterDate) || !isTaskCalendarDate(earlierDate)) {
+    throw new InvalidTaskCalendarRangeError('Two valid calendar dates are required');
+  }
+  return calendarEpochDay(laterDate) - calendarEpochDay(earlierDate);
+}
+
 export function formatTaskRelativeCalendarDate(
   value: string,
   planningDate: string,

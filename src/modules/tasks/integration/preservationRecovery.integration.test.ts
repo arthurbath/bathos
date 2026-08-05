@@ -222,11 +222,11 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     const planningDate = planningDateInTimeZone('America/Los_Angeles');
     const recurrence = await recurrenceService.createFromTask({
       taskId: primary.id,
-      name: 'Preservation Recurrence',
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      scheduleDate: planningDate,
+      nextStartDate: planningDate,
+      dateBasis: 'start',
       ruleConfig: {},
       endMode: 'never',
     });

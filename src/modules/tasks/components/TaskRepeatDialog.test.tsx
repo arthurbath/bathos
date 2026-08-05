@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 
 import {
   taskRecurrenceDefinitionFixture,
@@ -156,12 +157,12 @@ describe('TaskRepeatDialog', () => {
 
       expect(createFromTask).toHaveBeenCalledWith(expect.objectContaining({
         taskId: task.id,
-        name: task.title,
         ruleMode: 'calendar',
         frequency: 'weekly',
         intervalCount: 1,
-        scheduleDate: '2026-08-03',
-        ruleConfig: { weekdays: [1] },
+        nextStartDate: '2026-08-03',
+        dateBasis: 'start',
+        ruleConfig: { version: 2, weekdays: [1] },
         endMode: 'never',
       }));
       expect(evaluate).not.toHaveBeenCalled();
@@ -175,7 +176,7 @@ describe('TaskRepeatDialog', () => {
     const task = taskTodoFixture({ id: 'task-after', title: 'Water Plants' });
     const { container, root } = renderDialog(task);
     try {
-      await selectBathosOption('Repeat', 'After Completion');
+      await selectBathosOption('Repeat Type', 'After Completion');
       await act(async () => {
         document.querySelector<HTMLButtonElement>(
           `button[form="task-repeat-form-${task.id}"]`,
@@ -188,6 +189,301 @@ describe('TaskRepeatDialog', () => {
         frequency: 'weekly',
       }));
       expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('asks about deadlines before presenting the basis-specific date fields', async () => {
+    const task = taskTodoFixture({
+      id: 'task-deadline-flow',
+      title: 'Plan Event',
+      start_date: '2026-08-03',
+      deadline: null,
+    });
+    const { container, root } = renderDialog(task);
+    try {
+      const deadlineToggle = document.querySelector<HTMLButtonElement>(
+        '[role="switch"][aria-label="Tasks Have Deadlines"]',
+      );
+      expect(deadlineToggle).toBeTruthy();
+      expect(document.body).toHaveTextContent('Next Starts');
+      expect(document.querySelector('[aria-label="Next Date Type"]')).toBeNull();
+
+      await act(async () => deadlineToggle?.click());
+
+      expect(document.querySelector('[aria-label="Next Date Type"]')).toBeTruthy();
+      expect(document.body).toHaveTextContent('With Deadlines');
+      expect(document.body).toHaveTextContent('Days After');
+      expect(document.body).not.toHaveTextContent('Next Deadline');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('normalizes an empty or invalid deadline offset to zero on blur', async () => {
+    const task = taskTodoFixture({
+      id: 'task-offset-normalization',
+      title: 'Plan Event',
+      start_date: '2026-08-03',
+      deadline: '2026-08-05',
+    });
+    const { container, root } = renderDialog(task);
+    try {
+      const offset = document.querySelector<HTMLInputElement>(
+        'input[aria-label="Days After Start"]',
+      )!;
+      await act(async () => {
+        offset.focus();
+        setInput(offset, 'not-a-number');
+        offset.blur();
+      });
+      expect(offset).toHaveValue('0');
+
+      await act(async () => {
+        offset.focus();
+        setInput(offset, '');
+        offset.blur();
+      });
+      expect(offset).toHaveValue('0');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('presents compact and tablet weekday labels from the same controls', () => {
+    const { container, root } = renderDialog(taskTodoFixture({ start_date: '2026-08-03' }));
+    try {
+      const monday = document.querySelector<HTMLButtonElement>('[aria-label="Monday"]')!;
+      expect(monday.querySelector('.md\\:hidden')).toHaveTextContent('M');
+      expect(monday.querySelector('.md\\:inline')).toHaveTextContent('Mon');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('allows temporary interval edits and normalizes invalid values to one on blur', async () => {
+    const task = taskTodoFixture({ id: 'task-interval-edit', start_date: '2026-08-03' });
+    const { container, root } = renderDialog(task);
+    try {
+      const interval = document.querySelector<HTMLInputElement>(
+        'input[aria-label="Repeat Interval"]',
+      )!;
+
+      await act(async () => {
+        interval.focus();
+        setInput(interval, '');
+      });
+      expect(interval).toHaveValue(null);
+
+      await act(async () => interval.blur());
+      expect(interval).toHaveValue(1);
+
+      await act(async () => {
+        interval.focus();
+        setInput(interval, '-4');
+        interval.blur();
+      });
+      expect(interval).toHaveValue(1);
+
+      await act(async () => {
+        interval.focus();
+        setInput(interval, '12');
+        interval.blur();
+        document.querySelector<HTMLButtonElement>(
+          `button[form="task-repeat-form-${task.id}"]`,
+        )?.click();
+        await Promise.resolve();
+      });
+
+      expect(createFromTask).toHaveBeenCalledWith(expect.objectContaining({
+        intervalCount: 12,
+      }));
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('presents scheduled cadence as tightly grouped phrasal controls', async () => {
+    const { container, root } = renderDialog(taskTodoFixture({ start_date: '2026-08-03' }));
+    try {
+      const cadencePhrase = document.querySelector<HTMLElement>('[data-task-repeat-cadence-phrase]')!;
+      const monday = document.querySelector<HTMLButtonElement>('[aria-label="Monday"]')!;
+      const tuesday = document.querySelector<HTMLButtonElement>('[aria-label="Tuesday"]')!;
+      expect(cadencePhrase).toHaveClass('space-y-2');
+      expect(cadencePhrase).toHaveTextContent('Repeat');
+      expect(document.querySelector('[aria-label="Repeat Type"]')).toHaveTextContent('On a Schedule');
+      expect(cadencePhrase).toHaveTextContent('Every');
+      expect(cadencePhrase).toHaveTextContent('On');
+      expect(monday).toHaveAttribute('aria-pressed', 'true');
+      expect(monday).toHaveClass('bg-success');
+      expect(tuesday).toHaveAttribute('aria-pressed', 'false');
+      expect(tuesday).not.toHaveClass('bg-success');
+      expect(monday).toHaveClass('w-full');
+      expect(monday).not.toHaveClass('md:w-14');
+
+      await selectBathosOption('Frequency', 'Month');
+      expect(cadencePhrase).toHaveTextContent('On the');
+
+      await selectBathosOption('Frequency', 'Year');
+      expect(cadencePhrase).toHaveTextContent('In');
+      expect(cadencePhrase).toHaveTextContent('On the');
+      expect(document.querySelector('[aria-label="Months"]')).toHaveTextContent('Aug');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('groups the two deadline sentence rows more tightly than major concepts', () => {
+    const { container, root } = renderDialog(taskTodoFixture({
+      start_date: '2026-08-03',
+      deadline: '2026-08-05',
+    }));
+    try {
+      const datePhrase = document.querySelector<HTMLElement>('[data-task-repeat-date-phrase]')!;
+      expect(datePhrase).toHaveClass('space-y-2');
+      expect(datePhrase).toHaveTextContent('Next');
+      expect(datePhrase).toHaveTextContent('With Deadlines');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('summarizes yearly months with short names and an ellipsis after seven', () => {
+    const recurrence = {
+      definition: taskRecurrenceDefinitionFixture(),
+      revision: taskRecurrenceRevisionFixture({
+        frequency: 'yearly',
+        start_date: '2026-01-05',
+        rule_config: {
+          version: 2,
+          months: [1, 2, 3, 4, 5, 6, 7, 8],
+          position: 5,
+          day_type: 'day',
+        },
+      }),
+    };
+    const { container, root } = renderDialog(taskTodoFixture({ start_date: '2026-01-05' }), recurrence);
+    try {
+      const trigger = document.querySelector<HTMLButtonElement>('[aria-label="Months"]')!;
+      expect(trigger).toHaveTextContent('Jan, Feb, Mar, Apr, May, Jun, Jul, ...');
+      expect(trigger).not.toHaveTextContent('8 Months');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('uses the Start picker reminder field and hour-menu paradigms', async () => {
+    const user = userEvent.setup();
+    const { container, root } = renderDialog(taskTodoFixture({ start_date: '2026-08-03' }));
+    try {
+      const toggle = document.querySelector<HTMLButtonElement>(
+        '[role="switch"][aria-label="Tasks Have Reminders"]',
+      );
+      expect(toggle).toBeTruthy();
+      await act(async () => toggle?.click());
+
+      const input = document.querySelector<HTMLInputElement>('[aria-label="Reminder Time"]');
+      const hourButton = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Choose Reminder Hour"]',
+      );
+      expect(input).toHaveValue('12:00 pm');
+      expect(input?.closest('[data-slot="input-group"]')).toBeTruthy();
+      expect(hourButton).toBeTruthy();
+
+      await user.click(hourButton!);
+      expect(document.body.querySelectorAll('[role="menuitemradio"]')).toHaveLength(24);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('disables reminders when a committed reminder value is empty or unparseable', async () => {
+    const user = userEvent.setup();
+    const { container, root } = renderDialog(taskTodoFixture({ start_date: '2026-08-03' }));
+    try {
+      const enableReminders = async () => {
+        await user.click(document.querySelector<HTMLButtonElement>(
+          '[role="switch"][aria-label="Tasks Have Reminders"]',
+        )!);
+      };
+
+      await enableReminders();
+      let input = document.querySelector<HTMLInputElement>('[aria-label="Reminder Time"]')!;
+      await user.clear(input);
+      await user.tab();
+
+      expect(document.querySelector('[role="switch"][aria-label="Tasks Have Reminders"]'))
+        .toHaveAttribute('aria-checked', 'false');
+      expect(document.querySelector('[aria-label="Reminder Time"]')).toBeNull();
+
+      await enableReminders();
+      input = document.querySelector<HTMLInputElement>('[aria-label="Reminder Time"]')!;
+      await user.clear(input);
+      await user.type(input, 'not remotely a time{Enter}');
+
+      expect(document.querySelector('[role="switch"][aria-label="Tasks Have Reminders"]'))
+        .toHaveAttribute('aria-checked', 'false');
+      expect(document.querySelector('[aria-label="Reminder Time"]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('balances repeat modal body padding above and below its content', () => {
+    const { container, root } = renderDialog(taskTodoFixture({ start_date: '2026-08-03' }));
+    try {
+      const body = document.querySelector<HTMLElement>('[data-dialog-body="true"]')!;
+      expect(body).toHaveClass('pt-[25px]');
+      expect(body).toHaveClass('pb-[25px]');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('allows only configured weekdays in a scheduled repeat anchor picker', async () => {
+    const task = taskTodoFixture({
+      id: 'task-weekday-picker',
+      title: 'Monday Planning',
+      start_date: '2026-08-03',
+      deadline: null,
+    });
+    const { container, root } = renderDialog(task);
+    try {
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>('[aria-label="Next Start"]')?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(document.body.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-08-03"]',
+      )).toBeEnabled();
+      expect(document.body.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-08-04"]',
+      )).toBeDisabled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('allows any otherwise legal date for an after-completion anchor', async () => {
+    const task = taskTodoFixture({
+      id: 'task-after-picker',
+      title: 'Water Plants',
+      start_date: '2026-08-03',
+      deadline: null,
+    });
+    const { container, root } = renderDialog(task);
+    try {
+      await selectBathosOption('Repeat Type', 'After Completion');
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>('[aria-label="Next Start"]')?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(document.body.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-08-04"]',
+      )).toBeEnabled();
     } finally {
       cleanup(root, container);
     }
@@ -218,8 +514,8 @@ describe('TaskRepeatDialog', () => {
         await Promise.resolve();
       });
       expect(document.body).toHaveTextContent('Edit Repeat');
-      expect(document.body).toHaveTextContent('Next Occurrence');
-      expect(document.body).not.toHaveTextContent('Next Start');
+      expect(document.body).toHaveTextContent('Next Start');
+      expect(document.querySelector('[data-task-repeat-summary]')).toHaveTextContent(task.title);
       expect(document.body).not.toHaveTextContent('Ends');
       expect(document.querySelector('input[aria-label="Summary"]')).toBeNull();
       expect(document.querySelector('[aria-label="Prototype Content"]')).toBeNull();
@@ -236,11 +532,11 @@ describe('TaskRepeatDialog', () => {
       expect(edit).toHaveBeenCalledWith(expect.objectContaining({
         definition,
         revision,
-        name: definition.name,
         ruleMode: 'after_completion',
         frequency: 'monthly',
         intervalCount: 2,
-        scheduleDate: '2026-08-15',
+        nextStartDate: '2026-08-15',
+        dateBasis: 'start',
         endMode: 'never',
         endAfterCount: null,
         endOnDate: null,
@@ -265,22 +561,21 @@ describe('TaskRepeatDialog', () => {
     try {
       expect(document.querySelectorAll('[role="combobox"]').length).toBeGreaterThanOrEqual(2);
 
-      await selectBathosOption('Frequency', 'Months');
-      await selectBathosOption('Monthly Pattern', 'Day-Type Position');
-      await selectBathosOption('Monthly Ordinal', 'Last');
-      await selectBathosOption('Monthly Day Type', 'Weekend Day');
+      await selectBathosOption('Frequency', 'Month');
+      await selectBathosOption('Ordinal', 'Last');
+      await selectBathosOption('Day Type', 'Weekend Day');
 
       const offset = document.querySelector<HTMLInputElement>(
-        'input[aria-label="Start Days Earlier"]',
+        'input[aria-label="Days After Start"]',
       )!;
       await act(async () => setInput(offset, '7'));
 
-      const preview = document.querySelector('[aria-label="Next Three Occurrences"]')!;
+      const preview = document.querySelector('[aria-label="Next Occurrences"]')!;
       expect(preview.querySelectorAll('li')).toHaveLength(3);
       expect(preview).toHaveTextContent('Start');
       expect(preview).toHaveTextContent('Deadline');
-      expect(preview).toHaveTextContent('Aug 23, 2026');
-      expect(preview).toHaveTextContent('Aug 30, 2026');
+      expect(preview).toHaveTextContent('2026 Sep 27');
+      expect(preview).toHaveTextContent('2026 Oct 4');
 
       await act(async () => {
         document.querySelector<HTMLButtonElement>(
@@ -290,14 +585,15 @@ describe('TaskRepeatDialog', () => {
       });
 
       expect(createFromTask).toHaveBeenCalledWith(expect.objectContaining({
-        scheduleDate: '2026-08-30',
+        nextStartDate: '2026-09-27',
+        dateBasis: 'start',
         frequency: 'monthly',
         ruleConfig: {
-          monthly_kind: 'ordinal_day_type',
-          ordinal: -1,
+          version: 2,
+          position: 'last',
           day_type: 'weekend_day',
         },
-        deadlineOffsetDays: 7,
+        deadlineAfterStartDays: 7,
       }));
     } finally {
       cleanup(root, container);
@@ -308,21 +604,19 @@ describe('TaskRepeatDialog', () => {
     const task = taskTodoFixture({
       id: 'task-yearly-repeat',
       title: 'Annual Review',
-      start_date: '2026-01-01',
+      start_date: '2026-05-10',
       deadline: null,
     });
     const { container, root } = renderDialog(task);
     try {
-      await selectBathosOption('Frequency', 'Years');
-      await selectBathosOption('Yearly Pattern', 'Weekday Position');
-      await selectBathosOption('Yearly Month', 'May');
-      await selectBathosOption('Yearly Ordinal', 'Second');
-      await selectBathosOption('Yearly Weekday', 'Sunday');
+      await selectBathosOption('Frequency', 'Year');
+      await selectBathosOption('Ordinal', '2nd');
+      await selectBathosOption('Day Type', 'Sunday');
 
-      const preview = document.querySelector('[aria-label="Next Three Occurrences"]')!;
-      expect(preview).toHaveTextContent('May 9, 2027');
-      expect(preview).toHaveTextContent('May 14, 2028');
-      expect(preview).toHaveTextContent('May 13, 2029');
+      const preview = document.querySelector('[aria-label="Next Occurrences"]')!;
+      expect(preview).toHaveTextContent('2027 Jul 11');
+      expect(preview).toHaveTextContent('2028 Jul 9');
+      expect(preview).toHaveTextContent('2029 Jul 8');
 
       await act(async () => {
         document.querySelector<HTMLButtonElement>(
@@ -332,13 +626,14 @@ describe('TaskRepeatDialog', () => {
       });
 
       expect(createFromTask).toHaveBeenCalledWith(expect.objectContaining({
-        scheduleDate: '2027-05-09',
+        nextStartDate: '2027-07-11',
+        dateBasis: 'start',
         frequency: 'yearly',
         ruleConfig: {
-          yearly_kind: 'ordinal_weekday',
-          month: 5,
-          ordinal: 2,
-          weekday: 7,
+          version: 2,
+          months: [7],
+          position: 2,
+          day_type: 'sunday',
         },
       }));
     } finally {
@@ -356,9 +651,14 @@ describe('TaskRepeatDialog', () => {
     const { container, root } = renderDialog(task);
     try {
       const offset = document.querySelector<HTMLInputElement>(
-        'input[aria-label="Start Days Earlier"]',
+        'input[aria-label="Days After Start"]',
       )!;
       await act(async () => setInput(offset, '7'));
+      await selectBathosOption('Next Date Type', 'Due');
+      expect(document.querySelector('[aria-label="Next Deadline"]')).toBeTruthy();
+      expect(document.body).toHaveTextContent('And Starts');
+      expect(document.body).toHaveTextContent('Days Prior');
+      expect(document.body).not.toHaveTextContent('With Deadlines');
       await act(async () => {
         document.querySelector<HTMLButtonElement>(
           `button[form="task-repeat-form-${task.id}"]`,
@@ -367,8 +667,9 @@ describe('TaskRepeatDialog', () => {
       });
 
       expect(createFromTask).toHaveBeenCalledWith(expect.objectContaining({
-        scheduleDate: '2026-08-03',
-        deadlineOffsetDays: 7,
+        nextStartDate: '2026-08-01',
+        dateBasis: 'deadline',
+        deadlineAfterStartDays: 7,
       }));
     } finally {
       cleanup(root, container);
@@ -395,16 +696,18 @@ describe('TaskRepeatDialog', () => {
         start_date: '2026-08-09',
         rule_config: { weekdays: [7] },
         deadline_offset_days: 6,
+        deadline_after_start_days: 6,
+        date_basis: 'deadline',
       }),
     };
     const { container, root } = renderDialog(task, recurrence, '2026-08-03');
     try {
-      const preview = document.querySelector('[aria-label="Next Three Occurrences"]')!;
+      const preview = document.querySelector('[aria-label="Next Occurrences"]')!;
       expect(preview.querySelectorAll('li')).toHaveLength(3);
       expect(preview).not.toHaveTextContent('Start Today');
-      expect(preview).toHaveTextContent('Start Aug 10, 2026');
-      expect(preview).toHaveTextContent('Start Aug 17, 2026');
-      expect(preview).toHaveTextContent('Start Aug 24, 2026');
+      expect(preview).toHaveTextContent('Start 2026 Aug 10');
+      expect(preview).toHaveTextContent('Start 2026 Aug 17');
+      expect(preview).toHaveTextContent('Start 2026 Aug 24');
     } finally {
       cleanup(root, container);
     }

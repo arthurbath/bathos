@@ -73,7 +73,11 @@ describe('useTaskRecurrences', () => {
       createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(),
     };
     definitionRows = [stale];
-    revisionRows = [taskRecurrenceRevisionFixture({ deadline_offset_days: 4 })];
+    revisionRows = [taskRecurrenceRevisionFixture({
+      date_basis: 'deadline',
+      deadline_offset_days: 4,
+      deadline_after_start_days: 4,
+    })];
     occurrenceRows = [taskRecurrenceOccurrenceFixture()];
     mocks.useTasksRuntime.mockReturnValue({ mode: 'connected', planningTimeZone, recurrenceService });
 
@@ -295,7 +299,9 @@ describe('useTaskRecurrences', () => {
     const revision = taskRecurrenceRevisionFixture({
       recurrence_id: definition.id,
       rule_mode: 'after_completion',
+      date_basis: 'deadline',
       deadline_offset_days: 3,
+      deadline_after_start_days: 3,
     });
     definitionRows = [definition];
     revisionRows = [revision];
@@ -322,7 +328,9 @@ describe('useTaskRecurrences', () => {
     revisionRows = [taskRecurrenceRevisionFixture({
       recurrence_id: definition.id,
       rule_mode: 'after_completion',
+      date_basis: 'deadline',
       deadline_offset_days: 3,
+      deadline_after_start_days: 3,
     })];
     mocks.useTasksRuntime.mockReturnValue({
       mode: 'local', planningTimeZone,

@@ -13,6 +13,12 @@ BathOS SHALL present every shared toast system from the bottom of the viewport w
 - **THEN** the toast remains visually layered above the selection-mode bar
 - **AND** the mobile navigation remains layered above the toast stack when it is present
 
+#### Scenario: Present a toast while a modal is open
+- **WHEN** an application toast or network/system error toast appears while a shared Dialog or AlertDialog is open
+- **THEN** the toast remains visually above the modal backdrop
+- **AND** modal content remains visually above the toast stack
+- **AND** mobile navigation remains visually above the toast stack when present
+
 #### Scenario: Present a toast on a wider view
 - **WHEN** a toast appears at a tablet or desktop width
 - **THEN** the toast stack appears at the bottom-right aligned with the inner right edge of the shared bounded content area

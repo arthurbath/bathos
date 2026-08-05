@@ -5,9 +5,13 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { AlarmClock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { DatePickerField } from '@/components/ui/date-picker-field';
+import {
+  DatePickerField,
+  toDatePickerFieldValue,
+} from '@/components/ui/date-picker-field';
 import {
   Dialog,
   DialogBody,
@@ -18,6 +22,21 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -26,19 +45,33 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
-import { getTaskRecurrencePreviewDates } from '@/modules/tasks/domain/taskRecurrenceDates';
+import { cn } from '@/lib/utils';
+import {
+  getTaskRecurrenceDatePair,
+  getTaskRecurrencePreviewDates,
+  isTaskRecurrenceAnchorDate,
+} from '@/modules/tasks/domain/taskRecurrenceDates';
 import {
   addTaskCalendarDays,
-  formatTaskDateControlLabel,
+  differenceInTaskCalendarDays,
 } from '@/modules/tasks/domain/taskDates';
+import {
+  formatTaskReminderTimeDisplay,
+  listTaskReminderHourOptions,
+  resolveTaskReminderTimeInput,
+} from '@/modules/tasks/domain/taskReminderTimeInput';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type {
   TaskRecurrenceEditInput,
   TaskRecurrenceSaveResult,
 } from '@/modules/tasks/data/taskRecurrenceService';
 import type {
+  TaskRecurrenceDateBasis,
+  TaskRecurrenceDayType,
   TaskRecurrenceDefinition,
   TaskRecurrenceFrequency,
+  TaskRecurrencePosition,
   TaskRecurrenceRevision,
   TaskRecurrenceRuleConfig,
   TaskRecurrenceRuleMode,
@@ -46,52 +79,42 @@ import type {
 } from '@/modules/tasks/types/tasks';
 
 const weekdayLabels = [
-  [1, 'M'],
-  [2, 'T'],
-  [3, 'W'],
-  [4, 'T'],
-  [5, 'F'],
-  [6, 'S'],
-  [7, 'S'],
-] as const;
-
-const weekdays = [
-  [1, 'Monday'],
-  [2, 'Tuesday'],
-  [3, 'Wednesday'],
-  [4, 'Thursday'],
-  [5, 'Friday'],
-  [6, 'Saturday'],
-  [7, 'Sunday'],
-] as const;
-
-const monthlyOrdinals = [
-  [1, 'First'],
-  [2, 'Second'],
-  [3, 'Third'],
-  [4, 'Fourth'],
-  [5, 'Fifth'],
-  [-1, 'Last'],
+  [1, 'M', 'Mon', 'Monday'],
+  [2, 'T', 'Tue', 'Tuesday'],
+  [3, 'W', 'Wed', 'Wednesday'],
+  [4, 'T', 'Thu', 'Thursday'],
+  [5, 'F', 'Fri', 'Friday'],
+  [6, 'S', 'Sat', 'Saturday'],
+  [7, 'S', 'Sun', 'Sunday'],
 ] as const;
 
 const months = [
-  [1, 'January'],
-  [2, 'February'],
-  [3, 'March'],
-  [4, 'April'],
-  [5, 'May'],
-  [6, 'June'],
-  [7, 'July'],
-  [8, 'August'],
-  [9, 'September'],
-  [10, 'October'],
-  [11, 'November'],
-  [12, 'December'],
+  [1, 'January', 'Jan'],
+  [2, 'February', 'Feb'],
+  [3, 'March', 'Mar'],
+  [4, 'April', 'Apr'],
+  [5, 'May', 'May'],
+  [6, 'June', 'Jun'],
+  [7, 'July', 'Jul'],
+  [8, 'August', 'Aug'],
+  [9, 'September', 'Sep'],
+  [10, 'October', 'Oct'],
+  [11, 'November', 'Nov'],
+  [12, 'December', 'Dec'],
 ] as const;
 
-type MonthlyPattern = 'date' | 'weekday_position' | 'day_type_position';
-type MonthlyOrdinal = -1 | 1 | 2 | 3 | 4 | 5;
-type YearlyPattern = 'date' | 'last_day' | 'weekday_position';
+const dayTypes: Array<[TaskRecurrenceDayType, string]> = [
+  ['day', 'Day'],
+  ['weekday', 'Weekday'],
+  ['weekend_day', 'Weekend Day'],
+  ['monday', 'Monday'],
+  ['tuesday', 'Tuesday'],
+  ['wednesday', 'Wednesday'],
+  ['thursday', 'Thursday'],
+  ['friday', 'Friday'],
+  ['saturday', 'Saturday'],
+  ['sunday', 'Sunday'],
+];
 
 export function TaskRepeatDialog({
   task,
@@ -113,230 +136,212 @@ export function TaskRepeatDialog({
 }) {
   const { mode, recurrenceService } = useTasksRuntime();
   const editing = definition !== null && revision !== null;
-  const requestedInitialScheduleDate = revision?.start_date
-    ?? task?.deadline
-    ?? task?.start_date
-    ?? planningDate;
-  const initialScheduleDate = requestedInitialScheduleDate < planningDate
-    ? planningDate
-    : requestedInitialScheduleDate;
-  const [name, setName] = useState(definition?.name ?? task?.title ?? '');
+  const initialBasis = recurrenceBasis(revision);
+  const initialOffset = revision?.deadline_after_start_days
+    ?? revision?.deadline_offset_days
+    ?? taskDeadlineAfterStartDays(task);
+  const initialHasDeadline = revision
+    ? (revision.deadline_after_start_days ?? revision.deadline_offset_days) !== null
+    : task?.deadline != null;
+  const initialMinimumAnchor = initialBasis === 'deadline' && initialHasDeadline
+    ? addTaskCalendarDays(planningDate, initialOffset)
+    : planningDate;
+  const initialAnchor = clampToPlanningDate(
+    revision?.start_date ?? task?.start_date ?? planningDate,
+    initialMinimumAnchor,
+  );
+
   const [ruleMode, setRuleMode] = useState<TaskRecurrenceRuleMode>('calendar');
   const [frequency, setFrequency] = useState<TaskRecurrenceFrequency>('weekly');
-  const [intervalCount, setIntervalCount] = useState(1);
-  const [scheduleDate, setScheduleDate] = useState(initialScheduleDate);
+  const [intervalCountInput, setIntervalCountInput] = useState('1');
+  const [anchorDate, setAnchorDate] = useState(initialAnchor);
+  const [dateBasis, setDateBasis] = useState<TaskRecurrenceDateBasis>(initialBasis);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([
-    isoWeekday(initialScheduleDate),
+    isoWeekday(initialAnchor),
   ]);
-  const [monthlyPattern, setMonthlyPattern] = useState<MonthlyPattern>('date');
-  const [monthlyDate, setMonthlyDate] = useState<number | 'last'>(
-    Number(initialScheduleDate.slice(8, 10)),
+  const [position, setPosition] = useState<TaskRecurrencePosition>(
+    Number(initialAnchor.slice(8, 10)),
   );
-  const [monthlyOrdinal, setMonthlyOrdinal] = useState<MonthlyOrdinal>(
-    ordinalInMonth(initialScheduleDate),
-  );
-  const [monthlyWeekday, setMonthlyWeekday] = useState(isoWeekday(initialScheduleDate));
-  const [monthlyDayType, setMonthlyDayType] = useState<'weekday' | 'weekend_day'>(
-    'weekday',
-  );
-  const [yearlyPattern, setYearlyPattern] = useState<YearlyPattern>('date');
-  const [yearlyMonth, setYearlyMonth] = useState(Number(initialScheduleDate.slice(5, 7)));
-  const [yearlyDate, setYearlyDate] = useState(Number(initialScheduleDate.slice(8, 10)));
-  const [yearlyOrdinal, setYearlyOrdinal] = useState<MonthlyOrdinal>(
-    ordinalInMonth(initialScheduleDate),
-  );
-  const [yearlyWeekday, setYearlyWeekday] = useState(isoWeekday(initialScheduleDate));
+  const [dayType, setDayType] = useState<TaskRecurrenceDayType>('day');
+  const [selectedMonths, setSelectedMonths] = useState<number[]>([
+    Number(initialAnchor.slice(5, 7)),
+  ]);
+  const [addDeadline, setAddDeadline] = useState(initialHasDeadline);
+  const [deadlineOffsetInput, setDeadlineOffsetInput] = useState(String(initialOffset));
   const [addReminder, setAddReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState('12:00');
-  const [addDeadline, setAddDeadline] = useState(task?.deadline != null);
-  const [deadlineOffsetDays, setDeadlineOffsetDays] = useState(0);
+  const [reminderInput, setReminderInput] = useState('12:00 pm');
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    const requestedDate = revision?.start_date
-      ?? task?.deadline
-      ?? task?.start_date
-      ?? planningDate;
-    const date = requestedDate < planningDate ? planningDate : requestedDate;
-    const config = recurrenceRuleConfigRecord(revision?.rule_config);
-    const monthlyKind = config.monthly_kind;
-    const yearlyKind = config.yearly_kind;
-    setName(definition?.name ?? task?.title ?? '');
+    const basis = recurrenceBasis(revision);
+    const offset = revision?.deadline_after_start_days
+      ?? revision?.deadline_offset_days
+      ?? taskDeadlineAfterStartDays(task);
+    const hasDeadline = revision
+      ? (revision.deadline_after_start_days ?? revision.deadline_offset_days) !== null
+      : task?.deadline != null;
+    const minimumAnchor = basis === 'deadline' && hasDeadline
+      ? addTaskCalendarDays(planningDate, offset)
+      : planningDate;
+    const date = clampToPlanningDate(
+      revision?.start_date ?? task?.start_date ?? planningDate,
+      minimumAnchor,
+    );
+    const normalized = normalizeRuleForEditor(revision?.rule_config, date);
     setRuleMode(revision?.rule_mode ?? 'calendar');
     setFrequency(revision?.frequency ?? 'weekly');
-    setIntervalCount(revision?.interval_count ?? 1);
-    setScheduleDate(date);
-    setSelectedWeekdays(
-      Array.isArray(config.weekdays)
-        ? config.weekdays.filter((day): day is number => (
-            typeof day === 'number' && day >= 1 && day <= 7
-          ))
-        : [isoWeekday(date)],
-    );
-    setMonthlyPattern(
-      monthlyKind === 'ordinal_weekday'
-        ? 'weekday_position'
-        : monthlyKind === 'ordinal_day_type'
-          ? 'day_type_position'
-          : 'date',
-    );
-    setMonthlyDate(
-      monthlyKind === 'last_day'
-        ? 'last'
-        : typeof config.month_day === 'number'
-          ? config.month_day
-          : Number(date.slice(8, 10)),
-    );
-    setMonthlyOrdinal(recurrenceOrdinal(config.ordinal, date));
-    setMonthlyWeekday(recurrenceWeekday(config.weekday, date));
-    setMonthlyDayType(config.day_type === 'weekend_day' ? 'weekend_day' : 'weekday');
-    setYearlyPattern(
-      yearlyKind === 'ordinal_weekday'
-        ? 'weekday_position'
-        : yearlyKind === 'last_day'
-          ? 'last_day'
-          : 'date',
-    );
-    setYearlyMonth(
-      typeof config.month === 'number' ? config.month : Number(date.slice(5, 7)),
-    );
-    setYearlyDate(
-      typeof config.month_day === 'number'
-        ? config.month_day
-        : Number(date.slice(8, 10)),
-    );
-    setYearlyOrdinal(recurrenceOrdinal(config.ordinal, date));
-    setYearlyWeekday(recurrenceWeekday(config.weekday, date));
+    setIntervalCountInput(String(revision?.interval_count ?? 1));
+    setAnchorDate(date);
+    setDateBasis(basis);
+    setSelectedWeekdays(normalized.weekdays);
+    setPosition(normalized.position);
+    setDayType(normalized.dayType);
+    setSelectedMonths(normalized.months);
+    setAddDeadline(hasDeadline);
+    setDeadlineOffsetInput(String(offset));
     setAddReminder(revision?.reminder_local_time !== null && revision !== null);
-    setReminderTime(revision?.reminder_local_time?.slice(0, 5) ?? '12:00');
-    setAddDeadline(revision
-      ? revision.deadline_offset_days !== null
-      : task?.deadline != null);
-    setDeadlineOffsetDays(revision?.deadline_offset_days ?? 0);
+    const nextReminderTime = revision?.reminder_local_time?.slice(0, 5) ?? '12:00';
+    setReminderTime(nextReminderTime);
+    setReminderInput(formatTaskReminderTimeDisplay(nextReminderTime) ?? '12:00 pm');
     setPending(false);
-  }, [definition, open, planningDate, revision, task]);
+  }, [open, planningDate, revision, task]);
 
-  const ruleConfig = useMemo<TaskRecurrenceRuleConfig>(() => (
-    frequency === 'weekly'
-      ? { weekdays: selectedWeekdays }
-      : frequency === 'monthly'
-        ? monthlyPattern === 'date'
-          ? monthlyDate === 'last'
-            ? { monthly_kind: 'last_day' }
-            : { monthly_kind: 'day_of_month', month_day: monthlyDate }
-          : monthlyPattern === 'weekday_position'
-            ? {
-                monthly_kind: 'ordinal_weekday',
-                ordinal: monthlyOrdinal,
-                weekday: monthlyWeekday,
-              }
-            : {
-                monthly_kind: 'ordinal_day_type',
-                ordinal: monthlyOrdinal,
-                day_type: monthlyDayType,
-              }
-        : frequency === 'yearly'
-          ? yearlyPattern === 'date'
-            ? {
-                yearly_kind: 'fixed_date',
-                month: yearlyMonth,
-                month_day: yearlyDate,
-              }
-            : yearlyPattern === 'last_day'
-              ? {
-                  yearly_kind: 'last_day',
-                  month: yearlyMonth,
-                }
-              : {
-                  yearly_kind: 'ordinal_weekday',
-                  month: yearlyMonth,
-                  ordinal: yearlyOrdinal,
-                  weekday: yearlyWeekday,
-                }
-        : {}
-  ), [
-    frequency,
-    monthlyDate,
-    monthlyDayType,
-    monthlyOrdinal,
-    monthlyPattern,
-    monthlyWeekday,
-    selectedWeekdays,
-    yearlyDate,
-    yearlyMonth,
-    yearlyOrdinal,
-    yearlyPattern,
-    yearlyWeekday,
-  ]);
-  const preview = getTaskRecurrencePreviewDates({
-    startDate: scheduleDate,
-    frequency,
-    intervalCount,
-    ruleConfig,
-    endMode: 'never',
-    endAfterCount: null,
-    endOnDate: null,
-    afterDateExclusive: editing
-      ? addTaskCalendarDays(planningDate, addDeadline ? deadlineOffsetDays : 0)
-      : null,
-    limit: 3,
-  });
-  const alignedCadenceDate = useMemo(() => (
-    ruleMode === 'calendar' && (frequency === 'monthly' || frequency === 'yearly')
-      ? getTaskRecurrencePreviewDates({
-          startDate: scheduleDate,
-          frequency,
-          intervalCount,
-          ruleConfig,
-          limit: 1,
-        })[0] ?? null
-      : null
-  ), [frequency, intervalCount, ruleConfig, ruleMode, scheduleDate]);
-  const effectiveScheduleDate = alignedCadenceDate ?? scheduleDate;
+  const maximumPosition = maxPositionForDayType(dayType);
+  useEffect(() => {
+    if (position !== 'last' && position > maximumPosition) {
+      setPosition(maximumPosition);
+    }
+  }, [maximumPosition, position]);
+
+  const ruleConfig = useMemo<TaskRecurrenceRuleConfig>(() => {
+    if (frequency === 'weekly') {
+      return { version: 2, weekdays: selectedWeekdays };
+    }
+    if (frequency === 'monthly') {
+      return { version: 2, position, day_type: dayType };
+    }
+    if (frequency === 'yearly') {
+      return { version: 2, months: selectedMonths, position, day_type: dayType };
+    }
+    return { version: 2 };
+  }, [dayType, frequency, position, selectedMonths, selectedWeekdays]);
+
+  const intervalCount = normalizeRepeatInterval(intervalCountInput);
+  const deadlineAfterStartDays = normalizeDayOffset(deadlineOffsetInput);
+  const offset = addDeadline ? deadlineAfterStartDays : null;
+  const minimumAnchorDate = dateBasis === 'deadline' && offset !== null
+    ? addTaskCalendarDays(planningDate, offset)
+    : planningDate;
+  const previewSeedAnchor = anchorDate < minimumAnchorDate
+    ? minimumAnchorDate
+    : anchorDate;
+  const previewAnchors = ruleMode === 'after_completion'
+    ? [previewSeedAnchor]
+    : getTaskRecurrencePreviewDates({
+        startDate: previewSeedAnchor,
+        frequency,
+        intervalCount,
+        ruleConfig,
+        endMode: 'never',
+        afterDateExclusive: editing ? minimumAnchorDate : null,
+        limit: 3,
+      });
+  const previewPairs = previewAnchors
+    .map((anchor) => getTaskRecurrenceDatePair(anchor, dateBasis, offset))
+    .filter((pair): pair is NonNullable<typeof pair> => pair !== null);
+  const alignedAnchor = previewAnchors[0] ?? anchorDate;
+  const alignedNextStart = previewPairs[0]?.startDate ?? anchorDate;
+
+  useEffect(() => {
+    if (
+      ruleMode === 'calendar'
+      && alignedAnchor !== anchorDate
+    ) {
+      setAnchorDate(alignedAnchor);
+    }
+  }, [alignedAnchor, anchorDate, ruleMode]);
+
+  const changeDeadlinePresence = (checked: boolean) => {
+    setAddDeadline(checked);
+    setDateBasis('start');
+  };
+
+  const changeDateBasis = (basis: TaskRecurrenceDateBasis) => {
+    if (basis === dateBasis) return;
+    setDateBasis(basis);
+  };
+
+  const isAnchorDateDisabled = (date: Date): boolean => {
+    if (ruleMode === 'after_completion' || frequency === 'daily') return false;
+    return !isTaskRecurrenceAnchorDate(
+      toDatePickerFieldValue(date),
+      frequency,
+      ruleConfig,
+    );
+  };
+
+  const reminderHourOptions = useMemo(
+    () => listTaskReminderHourOptions({ today: false, timeZone: 'UTC' }),
+    [],
+  );
+
+  const changeReminderPresence = (checked: boolean) => {
+    setAddReminder(checked);
+    if (!checked) return;
+    const nextTime = reminderTime || '12:00';
+    setReminderTime(nextTime);
+    setReminderInput(formatTaskReminderTimeDisplay(nextTime) ?? '12:00 pm');
+  };
+
+  const commitReminderInput = () => {
+    const resolved = resolveTaskReminderTimeInput(reminderInput, {
+      today: false,
+      timeZone: 'UTC',
+    });
+    if (!resolved) {
+      setReminderTime('');
+      setReminderInput('');
+      setAddReminder(false);
+      return;
+    }
+    setReminderTime(resolved.localTime);
+    setReminderInput(resolved.displayTime);
+  };
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    const normalizedName = editing ? definition.name : name.trim();
     if (
       pending
       || mode !== 'connected'
-      || !normalizedName
-      || effectiveScheduleDate < planningDate
+      || alignedNextStart < planningDate
+      || (frequency === 'yearly' && selectedMonths.length === 0)
+      || (dateBasis === 'deadline' && !addDeadline)
     ) return;
     setPending(true);
     try {
+      const common = {
+        ruleMode,
+        frequency,
+        intervalCount,
+        nextStartDate: alignedNextStart,
+        dateBasis,
+        ruleConfig,
+        endMode: 'never' as const,
+        endAfterCount: null,
+        endOnDate: null,
+        reminderLocalTime: addReminder ? reminderTime : null,
+        deadlineAfterStartDays: offset,
+      };
       const result = editing
         ? await (onEdit ?? recurrenceService.edit.bind(recurrenceService))({
             definition,
             revision,
-            name: normalizedName,
-            ruleMode,
-            frequency,
-            intervalCount,
-            scheduleDate: effectiveScheduleDate,
-            ruleConfig,
-            endMode: 'never',
-            endAfterCount: null,
-            endOnDate: null,
-            reminderLocalTime: addReminder ? reminderTime : null,
-            deadlineOffsetDays: addDeadline ? deadlineOffsetDays : null,
+            ...common,
           })
         : task
-          ? await recurrenceService.createFromTask({
-              taskId: task.id,
-              name: normalizedName,
-              ruleMode,
-              frequency,
-              intervalCount,
-              scheduleDate: effectiveScheduleDate,
-              ruleConfig,
-              endMode: 'never',
-              endAfterCount: null,
-              endOnDate: null,
-              reminderLocalTime: addReminder ? reminderTime : null,
-              deadlineOffsetDays: addDeadline ? deadlineOffsetDays : null,
-            })
+          ? await recurrenceService.createFromTask({ taskId: task.id, ...common })
           : null;
       if (!result) throw new Error('The recurrence is unavailable');
       if (
@@ -359,373 +364,300 @@ export function TaskRepeatDialog({
     }
   };
 
+  const formId = `task-repeat-form-${task?.id ?? definition?.id ?? 'unavailable'}`;
+  const summary = task?.title ?? revision?.prototype_snapshot.root.title ?? definition?.name ?? 'New Task';
+  const selectedMonthSummary = formatSelectedMonthSummary(selectedMonths);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
-        <DialogHeader><DialogTitle>{editing ? 'Edit Repeat' : 'Repeat Task'}</DialogTitle></DialogHeader>
-        <DialogBody>
-          <form
-            id={`task-repeat-form-${task?.id ?? definition?.id ?? 'unavailable'}`}
-            onSubmit={save}
-            className="space-y-4"
-          >
-            {!editing ? (
-              <label className="space-y-1 text-sm">
-                <span>Repeat Name</span>
-                <Input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Repeat Name"
-                  aria-label="Repeat Name"
-                />
-              </label>
-            ) : null}
-            <div className="grid grid-cols-[auto_1fr] items-center gap-3">
-              <span className="text-sm font-medium">Repeat</span>
-              <Select
-                value={ruleMode}
-                onValueChange={(value) => setRuleMode(value as TaskRecurrenceRuleMode)}
-              >
-                <SelectTrigger aria-label="Repeat">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="after_completion">After Completion</SelectItem>
-                  <SelectItem value="calendar">On a Schedule</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="rounded-md bg-foreground/[0.04] p-4">
+        <DialogHeader>
+          <DialogTitle>{editing ? 'Edit Repeat' : 'Repeat Task'}</DialogTitle>
+          <p className="text-sm text-muted-foreground" data-task-repeat-summary>{summary}</p>
+        </DialogHeader>
+        <DialogBody className="pt-[25px]">
+          <form id={formId} onSubmit={save} className="space-y-5">
+            <div className="space-y-2" data-task-repeat-cadence-phrase>
+              <div className="grid grid-cols-[auto_1fr] items-center gap-2">
+                <span className="text-sm">Repeat</span>
+                <Select
+                  value={ruleMode}
+                  onValueChange={(value) => setRuleMode(value as TaskRecurrenceRuleMode)}
+                >
+                  <SelectTrigger className="w-full" aria-label="Repeat Type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="after_completion">After Completion</SelectItem>
+                    <SelectItem value="calendar">On a Schedule</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="grid grid-cols-[auto_5rem_1fr] items-center gap-2">
                 <span className="text-sm">Every</span>
                 <Input
                   type="number"
                   min={1}
                   max={1000}
-                  value={intervalCount}
-                  onChange={(event) => setIntervalCount(Math.max(1, Number(event.target.value)))}
+                  value={intervalCountInput}
+                  aria-label="Repeat Interval"
+                  onChange={(event) => setIntervalCountInput(event.target.value)}
+                  onBlur={() => setIntervalCountInput(String(intervalCount))}
                 />
                 <Select
                   value={frequency}
                   onValueChange={(value) => setFrequency(value as TaskRecurrenceFrequency)}
                 >
-                  <SelectTrigger aria-label="Frequency">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger aria-label="Frequency"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="daily">Days</SelectItem>
-                    <SelectItem value="weekly">Weeks</SelectItem>
-                    <SelectItem value="monthly">Months</SelectItem>
-                    <SelectItem value="yearly">Years</SelectItem>
+                    <SelectItem value="daily">{intervalCount === 1 ? 'Day' : 'Days'}</SelectItem>
+                    <SelectItem value="weekly">{intervalCount === 1 ? 'Week' : 'Weeks'}</SelectItem>
+                    <SelectItem value="monthly">{intervalCount === 1 ? 'Month' : 'Months'}</SelectItem>
+                    <SelectItem value="yearly">{intervalCount === 1 ? 'Year' : 'Years'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
               {ruleMode === 'calendar' && frequency === 'weekly' ? (
-                <div className="mt-3 flex justify-between gap-1" aria-label="Repeat Weekdays">
-                  {weekdayLabels.map(([day, label], index) => (
-                    <Button
-                      key={day}
-                      type="button"
-                      variant={selectedWeekdays.includes(day) ? 'outline-success' : 'outline'}
-                      size="icon"
-                      className="h-9 w-9"
-                      aria-label={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][index]}
-                      aria-pressed={selectedWeekdays.includes(day)}
-                      onClick={() => setSelectedWeekdays((current) => (
-                        current.includes(day)
-                          ? current.length === 1 ? current : current.filter((value) => value !== day)
-                          : [...current, day].sort()
-                      ))}
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-              ) : null}
-              {ruleMode === 'calendar' && frequency === 'monthly' ? (
-                <div className="mt-3 grid gap-3" data-task-monthly-cadence>
-                  <div className="grid grid-cols-[auto_1fr] items-center gap-3">
-                    <span className="text-sm">On</span>
-                    <Select
-                      value={monthlyPattern}
-                      onValueChange={(value) => setMonthlyPattern(value as MonthlyPattern)}
-                    >
-                      <SelectTrigger aria-label="Monthly Pattern">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="date">Calendar Date</SelectItem>
-                        <SelectItem value="last_day">Last Day</SelectItem>
-                        <SelectItem value="weekday_position">Weekday Position</SelectItem>
-                        <SelectItem value="day_type_position">Day-Type Position</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {monthlyPattern === 'date' ? (
-                    <Select
-                      value={String(monthlyDate)}
-                      onValueChange={(value) => setMonthlyDate(
-                        value === 'last' ? 'last' : Number(value),
-                      )}
-                    >
-                      <SelectTrigger aria-label="Monthly Date">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
-                          <SelectItem key={day} value={String(day)}>
-                            {ordinalNumber(day)}
-                          </SelectItem>
+                <div className="flex items-center gap-2" aria-label="Repeat Weekdays">
+                  <span className="shrink-0 text-sm">On</span>
+                  <div className="grid min-w-0 flex-1 grid-cols-7 gap-1">
+                    {weekdayLabels.map(([day, compactLabel, wideLabel, fullLabel]) => (
+                      <Button
+                        key={day}
+                        type="button"
+                        variant={selectedWeekdays.includes(day) ? 'success' : 'outline'}
+                        size="icon"
+                        className="h-9 w-full min-w-0"
+                        aria-label={fullLabel}
+                        aria-pressed={selectedWeekdays.includes(day)}
+                        onClick={() => setSelectedWeekdays((current) => (
+                          current.includes(day)
+                            ? current.length === 1 ? current : current.filter((value) => value !== day)
+                            : [...current, day].sort((left, right) => left - right)
                         ))}
-                        <SelectItem value="last">Last Day</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <Select
-                        value={String(monthlyOrdinal)}
-                        onValueChange={(value) => setMonthlyOrdinal(Number(value) as MonthlyOrdinal)}
                       >
-                        <SelectTrigger aria-label="Monthly Ordinal">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {monthlyOrdinals.map(([ordinal, label]) => (
-                            <SelectItem key={ordinal} value={String(ordinal)}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {monthlyPattern === 'weekday_position' ? (
-                        <Select
-                          value={String(monthlyWeekday)}
-                          onValueChange={(value) => setMonthlyWeekday(Number(value))}
-                        >
-                          <SelectTrigger aria-label="Monthly Weekday">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {weekdays.map(([day, label]) => (
-                              <SelectItem key={day} value={String(day)}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Select
-                          value={monthlyDayType}
-                          onValueChange={(value) => setMonthlyDayType(
-                            value as 'weekday' | 'weekend_day',
-                          )}
-                        >
-                          <SelectTrigger aria-label="Monthly Day Type">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="weekday">Weekday</SelectItem>
-                            <SelectItem value="weekend_day">Weekend Day</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  )}
+                        <span className="md:hidden">{compactLabel}</span>
+                        <span className="hidden md:inline">{wideLabel}</span>
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               ) : null}
+
               {ruleMode === 'calendar' && frequency === 'yearly' ? (
-                <div className="mt-3 grid gap-3" data-task-yearly-cadence>
-                  <div className="grid grid-cols-[auto_1fr] items-center gap-3">
-                    <span className="text-sm">On</span>
-                    <Select
-                      value={yearlyPattern}
-                      onValueChange={(value) => setYearlyPattern(value as YearlyPattern)}
-                    >
-                      <SelectTrigger aria-label="Yearly Pattern">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="date">Calendar Date</SelectItem>
-                        <SelectItem value="weekday_position">Weekday Position</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select
-                      value={String(yearlyMonth)}
-                      onValueChange={(value) => setYearlyMonth(Number(value))}
-                    >
-                      <SelectTrigger aria-label="Yearly Month">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {months.map(([month, label]) => (
-                          <SelectItem key={month} value={String(month)}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {yearlyPattern === 'date' ? (
-                      <Select
-                        value={String(yearlyDate)}
-                        onValueChange={(value) => setYearlyDate(Number(value))}
-                      >
-                        <SelectTrigger aria-label="Yearly Date">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
-                            <SelectItem key={day} value={String(day)}>
-                              {ordinalNumber(day)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : yearlyPattern === 'last_day' ? (
-                      <div
-                        className="flex min-h-10 items-center px-3 text-sm text-muted-foreground"
-                        aria-label="Yearly Last Day"
-                      >
-                        Last Day
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        <Select
-                          value={String(yearlyOrdinal)}
-                          onValueChange={(value) => setYearlyOrdinal(Number(value) as MonthlyOrdinal)}
-                        >
-                          <SelectTrigger aria-label="Yearly Ordinal">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {monthlyOrdinals.map(([ordinal, label]) => (
-                              <SelectItem key={ordinal} value={String(ordinal)}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={String(yearlyWeekday)}
-                          onValueChange={(value) => setYearlyWeekday(Number(value))}
-                        >
-                          <SelectTrigger aria-label="Yearly Weekday">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {weekdays.map(([day, label]) => (
-                              <SelectItem key={day} value={String(day)}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+                  <span className="text-sm">In</span>
+                  <MultiSelectFilter
+                    label="Months"
+                    options={months.map(([month, label]) => ({ value: String(month), label }))}
+                    selectedValues={selectedMonths.map(String)}
+                    selectedSummary={selectedMonthSummary}
+                    onSelectedValuesChange={(values) => {
+                      if (values.length > 0) setSelectedMonths(values.map(Number));
+                    }}
+                    triggerClassName="h-10 w-full"
+                    showBulkActions={false}
+                    deferSelectionUntilClose
+                  />
+                </div>
+              ) : null}
+
+              {ruleMode === 'calendar' && (frequency === 'monthly' || frequency === 'yearly') ? (
+                <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
+                  <span className="text-sm">On the</span>
+                  <Select
+                    value={String(position)}
+                    onValueChange={(value) => setPosition(value === 'last' ? 'last' : Number(value))}
+                  >
+                    <SelectTrigger aria-label="Ordinal"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: maximumPosition }, (_, index) => index + 1).map((value) => (
+                        <SelectItem key={value} value={String(value)}>{ordinalNumber(value)}</SelectItem>
+                      ))}
+                      <SelectItem value="last">Last</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={dayType}
+                    onValueChange={(value) => setDayType(value as TaskRecurrenceDayType)}
+                  >
+                    <SelectTrigger aria-label="Day Type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {dayTypes.map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               ) : null}
             </div>
-            <div>
-              <label className="space-y-1 text-sm">
-                <span>
-                  {ruleMode === 'after_completion'
-                    ? 'Next Occurrence'
-                    : addDeadline
-                      ? 'Next Deadline'
-                      : 'Next Start'}
-                </span>
-                <DatePickerField
-                  value={effectiveScheduleDate}
-                  onValueChange={setScheduleDate}
-                  todayDate={planningDate}
-                  minDate={planningDate}
-                />
-              </label>
-            </div>
-            {ruleMode === 'calendar' && preview.length > 0 ? (
+
+            <OptionSwitch
+              label="Tasks Have Deadlines"
+              checked={addDeadline}
+              onCheckedChange={changeDeadlinePresence}
+              className="!mt-7"
+            />
+
+            <div className="space-y-2" data-task-repeat-date-phrase>
               <div
-                className="space-y-1 text-sm text-muted-foreground"
-                aria-label="Next Three Occurrences"
+                className={addDeadline
+                  ? 'grid grid-cols-[auto_7rem_minmax(0,1fr)] items-center gap-2'
+                  : 'grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2'}
               >
+                <span className="text-sm">{addDeadline ? 'Next' : 'Next Starts'}</span>
+                {addDeadline ? (
+                  <Select
+                    value={dateBasis}
+                    onValueChange={(value) => changeDateBasis(value as TaskRecurrenceDateBasis)}
+                  >
+                    <SelectTrigger className="w-full" aria-label="Next Date Type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="start">Starts</SelectItem>
+                      <SelectItem value="deadline">Due</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : null}
+                <DatePickerField
+                  aria-label={dateBasis === 'deadline' ? 'Next Deadline' : 'Next Start'}
+                  value={alignedAnchor}
+                  onValueChange={setAnchorDate}
+                  todayDate={planningDate}
+                  minDate={minimumAnchorDate}
+                  isDateDisabled={isAnchorDateDisabled}
+                />
+              </div>
+
+              {addDeadline ? (
+                <label className="grid grid-cols-[auto_5rem_auto] items-center justify-start gap-2 text-sm">
+                  <span>{dateBasis === 'deadline' ? 'And Starts' : 'With Deadlines'}</span>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={deadlineOffsetInput}
+                    aria-label={dateBasis === 'deadline' ? 'Days Before Deadline' : 'Days After Start'}
+                    onChange={(event) => setDeadlineOffsetInput(event.target.value)}
+                    onBlur={() => setDeadlineOffsetInput(String(normalizeDayOffset(deadlineOffsetInput)))}
+                  />
+                  <span>{dateBasis === 'deadline' ? 'Days Prior' : 'Days After'}</span>
+                </label>
+              ) : null}
+            </div>
+
+            {previewPairs.length > 0 ? (
+              <div className="space-y-1 text-sm text-muted-foreground" aria-label="Next Occurrences">
                 <span className="font-medium text-foreground">Next</span>
                 <ol className="space-y-1">
-                  {preview.map((date) => (
-                    <li key={date}>
-                      {addDeadline ? (
+                  {previewPairs.map((pair) => (
+                    <li key={`${pair.startDate}:${pair.deadline ?? ''}`}>
+                      <span className="text-foreground">Start</span>{' '}
+                      {formatRepeatPreviewDate(pair.startDate)}
+                      {pair.deadline ? (
                         <>
-                          <span className="text-foreground">Start</span>{' '}
-                          {formatTaskDateControlLabel(
-                            addTaskCalendarDays(date, -deadlineOffsetDays),
-                            planningDate,
-                          )}
                           <span aria-hidden="true"> · </span>
                           <span className="text-foreground">Deadline</span>{' '}
-                          {formatTaskDateControlLabel(date, planningDate)}
+                          {formatRepeatPreviewDate(pair.deadline)}
                         </>
-                      ) : (
-                        <>
-                          <span className="text-foreground">Start</span>{' '}
-                          {formatTaskDateControlLabel(date, planningDate)}
-                        </>
-                      )}
+                      ) : null}
                     </li>
                   ))}
                 </ol>
               </div>
             ) : null}
+
             <OptionSwitch
-              label="Add Reminders"
+              label="Tasks Have Reminders"
               checked={addReminder}
-              onCheckedChange={setAddReminder}
+              onCheckedChange={changeReminderPresence}
             >
               {addReminder ? (
-                <Input
-                  type="time"
-                  value={reminderTime}
-                  aria-label="Reminder Time"
-                  onChange={(event) => setReminderTime(event.target.value)}
-                />
-              ) : null}
-            </OptionSwitch>
-            <OptionSwitch
-              label="Add Deadlines"
-              checked={addDeadline}
-              onCheckedChange={setAddDeadline}
-            >
-              {addDeadline ? (
-                <label className="flex items-center gap-2 text-sm">
-                  <span>Start</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    className="w-20"
-                    value={deadlineOffsetDays}
-                    aria-label="Start Days Earlier"
-                    onChange={(event) => setDeadlineOffsetDays(
-                      Math.max(0, Number(event.target.value)),
-                    )}
+                <InputGroup className="h-10 min-w-48 flex-1">
+                  <InputGroupInput
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    value={reminderInput}
+                    placeholder="No Reminder"
+                    aria-label="Reminder Time"
+                    decoration={<TASK_ICONS.Reminder />}
+                    className="h-10 py-2 text-sm"
+                    onChange={(event) => setReminderInput(event.target.value)}
+                    onBlur={commitReminderInput}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter') return;
+                      event.preventDefault();
+                      commitReminderInput();
+                    }}
                   />
-                  <span>Days Earlier</span>
-                </label>
+                  <InputGroupAddon align="inline-end" className="h-full gap-0 p-0">
+                    {reminderInput.length > 0 ? (
+                      <InputGroupButton
+                        size="icon-xs"
+                        aria-label="Clear Reminder"
+                        className="h-full w-7 rounded-none bg-transparent text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setReminderTime('');
+                          setReminderInput('');
+                          setAddReminder(false);
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden />
+                      </InputGroupButton>
+                    ) : null}
+                    <DropdownMenu modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <InputGroupButton
+                          size="icon-sm"
+                          aria-label="Choose Reminder Hour"
+                          className="h-full w-10 rounded-none rounded-r-md border-0 border-l border-input bg-transparent text-foreground"
+                        >
+                          <AlarmClock aria-hidden />
+                        </InputGroupButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+                        <DropdownMenuGroup>
+                          <DropdownMenuRadioGroup
+                            value={reminderTime}
+                            onValueChange={(localTime) => {
+                              setReminderTime(localTime);
+                              setReminderInput(
+                                formatTaskReminderTimeDisplay(localTime) ?? reminderInput,
+                              );
+                            }}
+                          >
+                            {reminderHourOptions.map((option) => (
+                              <DropdownMenuRadioItem key={option.localTime} value={option.localTime}>
+                                {option.displayTime}
+                              </DropdownMenuRadioItem>
+                            ))}
+                          </DropdownMenuRadioGroup>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </InputGroupAddon>
+                </InputGroup>
               ) : null}
             </OptionSwitch>
           </form>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             type="submit"
-            form={`task-repeat-form-${task?.id ?? definition?.id ?? 'unavailable'}`}
+            form={formId}
             data-bathos-form-submit="true"
             disabled={
               pending
               || mode !== 'connected'
-              || !name.trim()
-              || effectiveScheduleDate < planningDate
+              || alignedNextStart < planningDate
+              || (frequency === 'yearly' && selectedMonths.length === 0)
+              || (dateBasis === 'deadline' && !addDeadline)
             }
           >
             Save
@@ -736,23 +668,87 @@ export function TaskRepeatDialog({
   );
 }
 
-function recurrenceRuleConfigRecord(
-  value: TaskRecurrenceRuleConfig | null | undefined,
-): Record<string, unknown> {
-  return value && !Array.isArray(value) ? value as Record<string, unknown> : {};
+function normalizeRuleForEditor(
+  config: TaskRecurrenceRuleConfig | null | undefined,
+  date: string,
+): {
+  weekdays: number[];
+  position: TaskRecurrencePosition;
+  dayType: TaskRecurrenceDayType;
+  months: number[];
+} {
+  if (config?.version === 2) {
+    return {
+      weekdays: normalizeWeekdays(config.weekdays, date),
+      position: config.position ?? Number(date.slice(8, 10)),
+      dayType: config.day_type ?? 'day',
+      months: normalizeMonths(config.months, date),
+    };
+  }
+  let dayType: TaskRecurrenceDayType = 'day';
+  let position: TaskRecurrencePosition = config?.month_day ?? Number(date.slice(8, 10));
+  if (config?.monthly_kind === 'last_day' || config?.yearly_kind === 'last_day') {
+    position = 'last';
+  } else if (config?.monthly_kind === 'ordinal_day_type') {
+    position = config.ordinal === -1 ? 'last' : config.ordinal ?? 1;
+    dayType = config.day_type === 'weekend_day' ? 'weekend_day' : 'weekday';
+  } else if (config?.monthly_kind === 'ordinal_weekday' || config?.yearly_kind === 'ordinal_weekday') {
+    position = config.ordinal === -1 ? 'last' : config.ordinal ?? 1;
+    dayType = weekdayDayType(config.weekday ?? isoWeekday(date));
+  }
+  return {
+    weekdays: normalizeWeekdays(config?.weekdays, date),
+    position,
+    dayType,
+    months: normalizeMonths(config?.months ?? (config?.month ? [config.month] : undefined), date),
+  };
 }
 
-function recurrenceOrdinal(value: unknown, date: string): MonthlyOrdinal {
-  return value === -1 || value === 1 || value === 2 || value === 3
-    || value === 4 || value === 5
-    ? value
-    : ordinalInMonth(date);
+function recurrenceBasis(revision: TaskRecurrenceRevision | null): TaskRecurrenceDateBasis {
+  return revision?.date_basis
+    ?? (revision?.deadline_offset_days !== null && revision ? 'deadline' : 'start');
 }
 
-function recurrenceWeekday(value: unknown, date: string): number {
-  return typeof value === 'number' && value >= 1 && value <= 7
-    ? value
-    : isoWeekday(date);
+function taskDeadlineAfterStartDays(task: TaskTodo | null): number {
+  if (task?.start_date === null || task?.start_date === undefined || task.deadline === null) {
+    return 0;
+  }
+  return Math.max(0, differenceInTaskCalendarDays(task.deadline, task.start_date));
+}
+
+function normalizeWeekdays(values: number[] | undefined, date: string): number[] {
+  const normalized = [...new Set((values ?? []).filter((value) => value >= 1 && value <= 7))]
+    .sort((left, right) => left - right);
+  return normalized.length > 0 ? normalized : [isoWeekday(date)];
+}
+
+function normalizeMonths(values: number[] | undefined, date: string): number[] {
+  const normalized = [...new Set((values ?? []).filter((value) => value >= 1 && value <= 12))]
+    .sort((left, right) => left - right);
+  return normalized.length > 0 ? normalized : [Number(date.slice(5, 7))];
+}
+
+function formatSelectedMonthSummary(selectedMonths: number[]): string {
+  const selectedLabels = months
+    .filter(([month]) => selectedMonths.includes(month))
+    .map(([, , shortLabel]) => shortLabel);
+  if (selectedLabels.length >= 8) {
+    return `${selectedLabels.slice(0, 7).join(', ')}, ...`;
+  }
+  return selectedLabels.join(', ');
+}
+
+function maxPositionForDayType(dayType: TaskRecurrenceDayType): number {
+  if (dayType === 'day') return 31;
+  if (dayType === 'weekday') return 23;
+  if (dayType === 'weekend_day') return 10;
+  return 5;
+}
+
+function weekdayDayType(weekday: number): TaskRecurrenceDayType {
+  return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][
+    Math.min(Math.max(weekday, 1), 7) - 1
+  ] as TaskRecurrenceDayType;
 }
 
 function OptionSwitch({
@@ -760,38 +756,60 @@ function OptionSwitch({
   checked,
   onCheckedChange,
   children,
+  className,
 }: {
   label: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   children?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        aria-label={label}
-      />
+    <div className={cn('flex flex-wrap items-center gap-3', className)}>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={label} />
       <span className="text-sm">{label}</span>
       {children}
     </div>
   );
 }
 
+function normalizeDayOffset(value: string): number {
+  const normalized = Number(value.trim());
+  return Number.isSafeInteger(normalized) && normalized >= 0 ? normalized : 0;
+}
+
+function normalizeRepeatInterval(value: string): number {
+  const normalized = Number(value.trim());
+  return Number.isSafeInteger(normalized) && normalized >= 1 && normalized <= 1000
+    ? normalized
+    : 1;
+}
+
+function formatRepeatPreviewDate(value: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+  if (
+    !Number.isInteger(year)
+    || !Number.isInteger(month)
+    || !Number.isInteger(day)
+    || month < 1
+    || month > 12
+    || day < 1
+    || day > 31
+  ) return value;
+  const monthLabel = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+  return `${year} ${monthLabel} ${day}`;
+}
+
+function clampToPlanningDate(value: string, planningDate: string): string {
+  return value < planningDate ? planningDate : value;
+}
+
 function isoWeekday(value: string): number {
   const day = new Date(`${value}T00:00:00.000Z`).getUTCDay();
   return day === 0 ? 7 : day;
-}
-
-function ordinalInMonth(value: string): -1 | 1 | 2 | 3 | 4 | 5 {
-  const day = Number(value.slice(8, 10));
-  const ordinal = Math.ceil(day / 7) as 1 | 2 | 3 | 4 | 5;
-  const nextSameWeekday = day + 7;
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return nextSameWeekday > lastDay ? -1 : ordinal;
 }
 
 function ordinalNumber(value: number): string {

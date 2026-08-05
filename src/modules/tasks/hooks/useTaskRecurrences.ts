@@ -216,10 +216,13 @@ export function useTaskRecurrences(ownerId: string) {
     for (const definition of definitions) {
       const revision = revisions.get(definition.id);
       const throughDate = planningDate;
-      const spawnDate = definition.next_occurrence_date && revision?.deadline_offset_days
+      const recurrenceOffset = revision?.deadline_after_start_days ?? revision?.deadline_offset_days;
+      const spawnDate = definition.next_occurrence_date
+        && revision?.date_basis === 'deadline'
+        && recurrenceOffset
         ? addTaskCalendarDays(
             definition.next_occurrence_date,
-            -revision.deadline_offset_days,
+            -recurrenceOffset,
           )
         : definition.next_occurrence_date;
       const key = `${definition.id}:${throughDate}`;
@@ -386,10 +389,11 @@ export function useTaskRecurrences(ownerId: string) {
         || definition.next_occurrence_date === null
       ) return [];
 
-      const scheduledDate = revision.deadline_offset_days
+      const recurrenceOffset = revision.deadline_after_start_days ?? revision.deadline_offset_days;
+      const scheduledDate = revision.date_basis === 'deadline' && recurrenceOffset
         ? addTaskCalendarDays(
             definition.next_occurrence_date,
-            -revision.deadline_offset_days,
+            -recurrenceOffset,
           )
         : definition.next_occurrence_date;
       return scheduledDate > planningDate
