@@ -57,6 +57,7 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 |---|---|---|
 | AddTask | `Plus` | Add a task |
 | AddArea | `Plus` | Add an area |
+| DragHandle | `GripVertical` | Immediately reorder a task or checklist item from its dedicated grip |
 | MultiSelect | `Lasso` | Enter task multi-selection mode |
 | Undo | `Undo2` | Undo the latest Tasks change |
 | Redo | `Redo2` | Redo the next undone Tasks change |

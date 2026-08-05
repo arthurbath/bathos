@@ -27,6 +27,10 @@ import {
   type TaskChecklistEditorItem,
 } from '@/modules/tasks/components/TaskChecklistEditor';
 import { TaskMetadataDrawerFields } from '@/modules/tasks/components/TaskMetadataDrawerFields';
+import {
+  TaskImmediateDragHandle,
+} from '@/modules/tasks/components/TaskImmediateDragHandle';
+import { useTaskImmediateDragTarget } from '@/modules/tasks/components/TaskImmediateDragTarget';
 import { TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS } from '@/modules/tasks/components/taskPlanningStyles';
 import {
   TASK_ICONS,
@@ -76,6 +80,7 @@ type PrototypeRowSharedProps = {
   onMoveFocus?: (direction: -1 | 1) => void;
   onActivate?: () => void;
   macControlClickSelection?: boolean;
+  showDragHandles?: boolean;
 };
 
 export function WaitingRecurrenceRow({
@@ -102,6 +107,7 @@ export function CalendarRecurrencePrototypeRow({
   onDragStart,
   onDragOver,
   onDragEnd,
+  onImmediateDrop,
   bulkSelection,
   onSelect,
   ...props
@@ -111,6 +117,7 @@ export function CalendarRecurrencePrototypeRow({
   onDragStart?: () => void;
   onDragOver?: (placement: 'before' | 'after') => void;
   onDragEnd?: () => void;
+  onImmediateDrop?: () => void;
   bulkSelection?: {
     selected: boolean;
     onToggle: (event: MouseEvent<HTMLElement>) => void;
@@ -125,6 +132,7 @@ export function CalendarRecurrencePrototypeRow({
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
+      onImmediateDrop={onImmediateDrop}
       bulkSelection={bulkSelection}
       onSelect={onSelect}
     />
@@ -150,12 +158,14 @@ function RecurrencePrototypeRow({
   onMoveFocus,
   onActivate,
   macControlClickSelection = false,
+  showDragHandles = false,
   waiting = false,
   onGoToInstance,
   dragPlacement = null,
   onDragStart,
   onDragOver,
   onDragEnd,
+  onImmediateDrop,
   bulkSelection,
   onSelect,
 }: PrototypeRowSharedProps & {
@@ -166,6 +176,7 @@ function RecurrencePrototypeRow({
   onDragStart?: () => void;
   onDragOver?: (placement: 'before' | 'after') => void;
   onDragEnd?: () => void;
+  onImmediateDrop?: () => void;
   bulkSelection?: {
     selected: boolean;
     onToggle: (event: MouseEvent<HTMLElement>) => void;
@@ -175,6 +186,7 @@ function RecurrencePrototypeRow({
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [visibleTitle, setVisibleTitle] = useState(definition.name);
   const rowRef = useRef<HTMLElement>(null);
+  const summaryRowRef = useRef<HTMLDivElement>(null);
   const actionMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const editorFlushRef = useRef<() => Promise<void>>(async () => undefined);
@@ -230,11 +242,11 @@ function RecurrencePrototypeRow({
     setRepeatOpen(true);
   };
 
-  const closeEditor = async () => {
+  const closeEditor = useCallback(async () => {
     await editorFlushRef.current();
     await saveQueueRef.current;
     await onEditorOpenChange(false);
-  };
+  }, [onEditorOpenChange]);
 
   const deletePrototype = async () => {
     try {
@@ -253,6 +265,21 @@ function RecurrencePrototypeRow({
   };
 
   const draggable = !waiting && onDragStart && onDragOver && onDragEnd;
+  const beginDrag = useCallback(() => {
+    suppressClickUntilRef.current = Date.now() + 1_000;
+    if (editorOpen) void closeEditor();
+    onDragStart?.();
+  }, [closeEditor, editorOpen, onDragStart]);
+  const handleImmediateTarget = useCallback((point: { clientY: number }) => {
+    const bounds = summaryRowRef.current?.getBoundingClientRect();
+    if (!bounds || !onDragOver) return;
+    onDragOver(point.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
+  }, [onDragOver]);
+  useTaskImmediateDragTarget(
+    draggable && showDragHandles ? 'tasks' : null,
+    rowRef,
+    draggable && showDragHandles ? handleImmediateTarget : null,
+  );
   const handleMacControlSelectionMouseDown = (event: MouseEvent<HTMLElement>) => {
     if (
       !macControlClickSelection
@@ -332,7 +359,7 @@ function RecurrencePrototypeRow({
           className={TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS}
           data-task-open-highlight-surface
         >
-        <div className="flex h-11 items-center gap-2 px-1 pr-1.5">
+        <div ref={summaryRowRef} className="flex h-11 items-center gap-2 px-1 pr-1.5">
           {bulkSelection ? (
             <button
               type="button"
@@ -391,9 +418,7 @@ function RecurrencePrototypeRow({
               event.dataTransfer.effectAllowed = 'move';
               event.dataTransfer.setData('application/x-bathos-recurrence-id', definition.id);
               event.dataTransfer.setData('text/plain', definition.id);
-              suppressClickUntilRef.current = Date.now() + 1_000;
-              if (editorOpen) void closeEditor();
-              onDragStart();
+              beginDrag();
             } : undefined}
             onDragEnd={draggable ? () => {
               suppressClickUntilRef.current = Date.now() + 250;
@@ -468,6 +493,19 @@ function RecurrencePrototypeRow({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu> : null}
+          {draggable && showDragHandles ? (
+            <TaskImmediateDragHandle
+              label={`Reorder ${visibleTitle}`}
+              scope="tasks"
+              previewRef={summaryRowRef}
+              onStart={beginDrag}
+              onDrop={() => {
+                if (onImmediateDrop) onImmediateDrop();
+                else onDragEnd?.();
+              }}
+              onCancel={onDragEnd}
+            />
+          ) : null}
         </div>
         {editorOpen ? (
           <SharedRecurrencePrototypeEditor
@@ -481,6 +519,7 @@ function RecurrencePrototypeRow({
               onRegisterEditorFlush(definition.id, flush);
             }}
             onEditRepeat={() => void openRepeatEditor()}
+            showDragHandles={showDragHandles}
           />
         ) : null}
         </div>
@@ -612,6 +651,7 @@ function SharedRecurrencePrototypeEditor({
   onTitleChange,
   onRegisterFlush,
   onEditRepeat,
+  showDragHandles,
 }: {
   definition: TaskRecurrenceDefinition;
   revision: TaskRecurrenceRevision;
@@ -620,6 +660,7 @@ function SharedRecurrencePrototypeEditor({
   onTitleChange: (title: string) => void;
   onRegisterFlush: (flush: (() => Promise<void>) | null) => void;
   onEditRepeat: () => void;
+  showDragHandles: boolean;
 }) {
   const prototype = revision.prototype_snapshot.root;
   const [title, setTitle] = useState(prototype.title);
@@ -816,6 +857,7 @@ function SharedRecurrencePrototypeEditor({
             onRegisterFlush={(nextFlush) => {
               checklistFlushRef.current = nextFlush;
             }}
+            showDragHandles={showDragHandles}
           />
         )}
         temporalFields={(

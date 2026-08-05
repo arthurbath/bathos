@@ -58,6 +58,7 @@ describe('task repository', () => {
       owner_id: 'owner-a',
       planning_timezone: 'America/Los_Angeles',
       automatic_list_sorting: false,
+      drag_handle_visibility: 'hidden',
       revision: 1,
       client_mutation_id: 'task-new',
     });
@@ -161,6 +162,32 @@ describe('task repository', () => {
     expect(transaction.execute).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE tasks_user_settings'),
       expect.arrayContaining([1, 2, 'owner-a', 'owner-a']),
+    );
+  });
+
+  it('persists the drag-handle visibility preference', async () => {
+    const settings = {
+      id: 'owner-a',
+      owner_id: 'owner-a',
+      planning_timezone: 'America/Los_Angeles',
+      automatic_list_sorting: false,
+      drag_handle_visibility: 'hidden' as const,
+      revision: 4,
+      client_mutation_id: 'mutation-settings',
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    const { repository, transaction } = createHarness(settings);
+
+    await expect(
+      repository.setDragHandleVisibility('owner-a', 'touch_only'),
+    ).resolves.toMatchObject({
+      drag_handle_visibility: 'touch_only',
+      revision: 5,
+    });
+    expect(transaction.execute).toHaveBeenCalledWith(
+      expect.stringContaining('SET drag_handle_visibility = ?'),
+      expect.arrayContaining(['touch_only', 5, 'owner-a', 'owner-a']),
     );
   });
 

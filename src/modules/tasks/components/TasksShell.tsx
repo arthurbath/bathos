@@ -74,6 +74,10 @@ import {
 } from '@/modules/tasks/components/taskIconography';
 import { TaskEmptyState } from '@/modules/tasks/components/TaskEmptyState';
 import {
+  TaskImmediateDragHandle,
+} from '@/modules/tasks/components/TaskImmediateDragHandle';
+import { useTaskImmediateDragTarget } from '@/modules/tasks/components/TaskImmediateDragTarget';
+import {
   addTaskCalendarDays,
   formatTaskCompactCalendarDayOffset,
   formatTaskDateControlLabel,
@@ -128,6 +132,8 @@ import { useTaskNativeWidgetBridge } from '@/modules/tasks/hooks/useTaskNativeWi
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
 import { useTaskQuickFilterPreference } from '@/modules/tasks/hooks/useTaskQuickFilterPreference';
 import { useTaskAutomaticListSorting } from '@/modules/tasks/hooks/useTaskAutomaticListSorting';
+import { useTaskDragHandleVisibility } from '@/modules/tasks/hooks/useTaskDragHandleVisibility';
+import { shouldShowTaskDragHandles } from '@/modules/tasks/domain/taskDragHandles';
 import {
   UnsafeTaskRedoError,
   UnsafeTaskUndoError,
@@ -662,6 +668,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setFilter: setTaskQuickFilter,
   } = useTaskQuickFilterPreference(userId);
   const automaticListSorting = useTaskAutomaticListSorting(userId);
+  const dragHandleVisibility = useTaskDragHandleVisibility(userId);
   const [taskDropIndicator, setTaskDropIndicator] = useState<TaskDropIndicator | null>(null);
   const taskDropIndicatorRef = useRef<TaskDropIndicator | null>(null);
   // Safari may withhold dataTransfer payloads during dragover, so retain the
@@ -985,6 +992,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     coarsePointer.addEventListener('change', syncTouchCapability);
     return () => coarsePointer.removeEventListener('change', syncTouchCapability);
   }, []);
+  const showDragHandles = shouldShowTaskDragHandles(
+    dragHandleVisibility.visibility,
+    touchQuickFindEnabled,
+  );
   const resetTouchQuickFindPull = useCallback(() => {
     touchQuickFindStartYRef.current = null;
     touchListBoundaryRef.current = null;
@@ -3855,6 +3866,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 ? tasks.length > 0
                 : sectionTasks.length > 1
           )}
+        showDragHandle={showDragHandles}
         dragPlacement={taskDragPlacement}
         onTaskDragStart={() => {
           const openTaskId = selectedTaskIdRef.current;
@@ -3939,6 +3951,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           activeDraggedRecurrenceIdRef.current = null;
           activeDraggedRecurrenceIdsRef.current = [];
           updateTaskDropIndicator(null);
+        }}
+        onTaskImmediateDrop={() => {
+          void commitActiveTaskDrop();
         }}
         planningDate={planningDate}
         upcomingStartDate={upcomingStartDate}
@@ -4097,10 +4112,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         }}
         draggableTask={false}
+        showDragHandle={false}
         dragPlacement={null}
         onTaskDragStart={() => undefined}
         onTaskDragOver={() => undefined}
         onTaskDragEnd={() => undefined}
+        onTaskImmediateDrop={() => undefined}
         planningDate={planningDate}
         todayMarkerContext="Today"
         reminder={null}
@@ -4644,6 +4661,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   onSignOut={handleSignOut}
                   hierarchy={hierarchy}
                   automaticListSorting={automaticListSorting}
+                  dragHandleVisibility={dragHandleVisibility}
                   webPush={reminders.webPush}
                   connected={reminders.mode === 'connected'}
                   inAppReminderStatus={reminders.claimError ? 'delayed' : 'available'}
@@ -4862,6 +4880,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       bulkMode={bulkMode}
                       bulkSelection={bulkSelection}
                       macControlClickSelection={macLikePlatform}
+                      showDragHandles={showDragHandles}
+                      onImmediateDrop={() => void commitActiveTaskDrop()}
                       onPrototypeSelect={handleRecurrencePrototypePointerSelection}
                       renderTask={renderActiveTask}
                     />
@@ -4896,6 +4916,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                                   setOpenRecurrencePrototype(open ? definition.id : null)
                                 )}
                                 onRegisterEditorFlush={registerRecurrencePrototypeEditorFlush}
+                                showDragHandles={showDragHandles}
                                 focusRequested={searchTarget?.kind === 'recurrence'
                                   && searchTarget.definitionId === definition.id}
                                 onFocusFulfilled={() => {
@@ -5470,6 +5491,7 @@ function TaskConfigView({
   onSignOut,
   hierarchy,
   automaticListSorting,
+  dragHandleVisibility,
   webPush,
   connected,
   inAppReminderStatus,
@@ -5484,6 +5506,7 @@ function TaskConfigView({
   onSignOut: () => Promise<void> | void;
   hierarchy: TaskHierarchyModel;
   automaticListSorting: ReturnType<typeof useTaskAutomaticListSorting>;
+  dragHandleVisibility: ReturnType<typeof useTaskDragHandleVisibility>;
   webPush: TaskWebPushModel | null;
   connected: boolean;
   inAppReminderStatus: 'available' | 'delayed';
@@ -5536,6 +5559,31 @@ function TaskConfigView({
                 });
               }}
             />
+          </TaskFeatureRow>
+          <TaskFeatureRow
+            title="Drag Handles"
+            description="Controls when dedicated task and checklist reorder handles are visible."
+          >
+            <Select
+              value={dragHandleVisibility.visibility}
+              disabled={dragHandleVisibility.loading || dragHandleVisibility.pending}
+              onValueChange={(visibility) => {
+                void dragHandleVisibility.setVisibility(
+                  visibility as typeof dragHandleVisibility.visibility,
+                ).catch((updateError) => {
+                  showTaskError('Drag Handles Could Not Be Updated', updateError);
+                });
+              }}
+            >
+              <SelectTrigger className="w-44" aria-label="Drag Handles">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hidden">Hidden</SelectItem>
+                <SelectItem value="always">Always</SelectItem>
+                <SelectItem value="touch_only">Touch Devices Only</SelectItem>
+              </SelectContent>
+            </Select>
           </TaskFeatureRow>
           {macNative ? (
             <TaskFeatureRow
@@ -6339,6 +6387,8 @@ function UpcomingTaskSections({
   bulkMode,
   bulkSelection,
   macControlClickSelection,
+  showDragHandles,
+  onImmediateDrop,
   onPrototypeSelect,
   renderTask,
 }: {
@@ -6385,6 +6435,8 @@ function UpcomingTaskSections({
   bulkMode: boolean;
   bulkSelection: ReadonlySet<string>;
   macControlClickSelection: boolean;
+  showDragHandles: boolean;
+  onImmediateDrop: () => void;
   onPrototypeSelect: (
     event: MouseEvent<HTMLElement>,
     definitionId: string,
@@ -6477,22 +6529,17 @@ function UpcomingTaskSections({
           ? dropIndicator.placement
           : null;
         return (
-          <section
+          <UpcomingTaskSectionDropRegion
             key={section.key}
+            sectionKey={section.key}
+            showImmediateTarget={showDragHandles}
             aria-labelledby={`tasks-${section.key.replace(':', '-')}-heading`}
-            className="relative"
-            data-task-upcoming-section={section.key}
-            data-drag-placement={sectionDropPlacement ?? undefined}
-            onDragOver={(event) => {
-              const target = event.target instanceof Element ? event.target : null;
-              if (target?.closest('[data-task-row-id]')) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = 'move';
-              const bounds = event.currentTarget.getBoundingClientRect();
+            dropPlacement={sectionDropPlacement}
+            onTarget={(clientY, bounds) => {
               onSectionDragOver(
                 section,
                 sectionDropRows,
-                event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
+                clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
               );
             }}
           >
@@ -6561,6 +6608,8 @@ function UpcomingTaskSections({
                       placement,
                     )}
                     onDragEnd={onPrototypeDragEnd}
+                    onImmediateDrop={onImmediateDrop}
+                    showDragHandles={showDragHandles}
                     bulkSelection={bulkMode ? {
                       selected: bulkSelection.has(
                         recurrenceSelectionId(row.prototype.definition.id),
@@ -6579,10 +6628,57 @@ function UpcomingTaskSections({
                   />
                 ))}
             </div>
-          </section>
+          </UpcomingTaskSectionDropRegion>
         );
       })}
     </div>
+  );
+}
+
+function UpcomingTaskSectionDropRegion({
+  sectionKey,
+  showImmediateTarget,
+  dropPlacement,
+  onTarget,
+  children,
+  ...sectionProps
+}: {
+  sectionKey: string;
+  showImmediateTarget: boolean;
+  dropPlacement: 'before' | 'after' | null;
+  onTarget: (clientY: number, bounds: DOMRect) => void;
+  children: ReactNode;
+  'aria-labelledby': string;
+}) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const handleImmediateTarget = useCallback(({ clientY }: { clientY: number }) => {
+    const bounds = sectionRef.current?.getBoundingClientRect();
+    if (bounds) onTarget(clientY, bounds);
+  }, [onTarget]);
+  useTaskImmediateDragTarget(
+    showImmediateTarget ? 'tasks' : null,
+    sectionRef,
+    showImmediateTarget ? handleImmediateTarget : null,
+  );
+
+  return (
+    <section
+      {...sectionProps}
+      ref={sectionRef}
+      className="relative"
+      data-task-upcoming-section={sectionKey}
+      data-drag-placement={dropPlacement ?? undefined}
+      onDragOver={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('[data-task-row-id]')) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        const bounds = event.currentTarget.getBoundingClientRect();
+        onTarget(event.clientY, bounds);
+      }}
+    >
+      {children}
+    </section>
   );
 }
 
@@ -6632,10 +6728,12 @@ function TaskRow({
   onUpdate,
   onComplete,
   draggableTask,
+  showDragHandle,
   dragPlacement,
   onTaskDragStart,
   onTaskDragOver,
   onTaskDragEnd,
+  onTaskImmediateDrop,
   planningDate,
   upcomingStartDate,
   todayMarker,
@@ -6687,10 +6785,12 @@ function TaskRow({
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
   onComplete: (reservation?: TaskForwardMutationReservation) => Promise<void>;
   draggableTask: boolean;
+  showDragHandle: boolean;
   dragPlacement: 'before' | 'after' | null;
   onTaskDragStart: () => void;
   onTaskDragOver: (placement: 'before' | 'after') => void;
   onTaskDragEnd: () => void;
+  onTaskImmediateDrop: () => void;
   planningDate: string;
   upcomingStartDate?: string | null;
   todayMarker?: TodayTaskSection;
@@ -6726,6 +6826,7 @@ function TaskRow({
   const [editorExpanded, setEditorExpanded] = useState(selected);
   const [visibleTitle, setVisibleTitle] = useState(task.title);
   const articleRef = useRef<HTMLElement>(null);
+  const summaryRowRef = useRef<HTMLDivElement>(null);
   const editorRegionRef = useRef<HTMLDivElement>(null);
   const editorAnimationFrameRef = useRef<number | null>(null);
   const editorRevealTimerRef = useRef<number | null>(null);
@@ -6764,6 +6865,18 @@ function TaskRow({
     || completionRequested
     || completionGraceActive
     || terminalSettling;
+
+  const handleImmediateTaskTarget = useCallback(({ clientY }: { clientY: number }) => {
+    if (!draggableTask) return;
+    const bounds = summaryRowRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    onTaskDragOver(clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
+  }, [draggableTask, onTaskDragOver]);
+  useTaskImmediateDragTarget(
+    draggableTask && showDragHandle ? 'tasks' : null,
+    articleRef,
+    draggableTask && showDragHandle ? handleImmediateTaskTarget : null,
+  );
 
   useEffect(() => {
     setVisibleTitle(task.title);
@@ -7131,15 +7244,7 @@ function TaskRow({
       window.setTimeout(() => preview.remove(), 0);
     }
   };
-  const handleSummaryDragStart = (event: DragEvent<HTMLElement>) => {
-    if (!draggableTask || pending) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('application/x-bathos-task-id', task.id);
-    event.dataTransfer.setData('text/plain', task.id);
-    setSummaryDragPreview(event);
+  const beginTaskDrag = () => {
     suppressClickUntilRef.current = Date.now() + 1_000;
     if (selected) {
       setEditorExpanded(false);
@@ -7150,6 +7255,17 @@ function TaskRow({
       });
     }
     onTaskDragStart();
+  };
+  const handleSummaryDragStart = (event: DragEvent<HTMLElement>) => {
+    if (!draggableTask || pending) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-bathos-task-id', task.id);
+    event.dataTransfer.setData('text/plain', task.id);
+    setSummaryDragPreview(event);
+    beginTaskDrag();
   };
   const handleTouchSelectionPointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
@@ -7398,6 +7514,7 @@ function TaskRow({
       </span>
       </> : null}
       <div
+        ref={summaryRowRef}
         className={`relative z-[1] flex h-11 touch-pan-y items-center gap-2 overflow-hidden pl-1 pr-1.5 ${
           touchSwipeActive ? '' : 'transition-transform duration-200 ease-out'
         }`}
@@ -7784,6 +7901,16 @@ function TaskRow({
             </DropdownMenu> : null}
           </div>
         ) : null}
+        {showDragHandle && draggableTask && !pending ? (
+          <TaskImmediateDragHandle
+            label={`Reorder ${taskLabel}`}
+            scope="tasks"
+            previewRef={summaryRowRef}
+            onStart={beginTaskDrag}
+            onDrop={onTaskImmediateDrop}
+            onCancel={onTaskDragEnd}
+          />
+        ) : null}
       </div>
       </> : null}
       {editorMounted && !bulkSelection ? (
@@ -7820,6 +7947,7 @@ function TaskRow({
               onTitleChange={setVisibleTitle}
               showTemporalFields
               quickEntry={quickEntry}
+              showDragHandles={showDragHandle}
             />
             <button
               type="button"
@@ -7951,6 +8079,7 @@ function TaskEditor({
   onTitleChange,
   showTemporalFields = true,
   quickEntry = false,
+  showDragHandles = false,
 }: {
   task: TaskTodo;
   hasChecklistItems: boolean;
@@ -7975,6 +8104,7 @@ function TaskEditor({
   onTitleChange: (title: string) => void;
   showTemporalFields?: boolean;
   quickEntry?: boolean;
+  showDragHandles?: boolean;
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
@@ -8221,6 +8351,7 @@ function TaskEditor({
           emptyActionLayout={layout}
           onContentPresenceChange={setChecklistContentPresent}
           onRegisterFlush={registerChecklistFlush}
+          showDragHandles={showDragHandles}
         />
       ) : onRequestChecklist ? (
         <button

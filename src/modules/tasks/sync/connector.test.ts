@@ -170,6 +170,7 @@ describe('task sync connector', () => {
       owner_id: 'owner-a',
       planning_timezone: 'America/Los_Angeles',
       automatic_list_sorting: false,
+      drag_handle_visibility: 'hidden',
       revision: 1,
       client_mutation_id: 'mutation-settings',
       created_at: '2026-07-20T04:00:00.000Z',

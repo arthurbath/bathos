@@ -9,12 +9,17 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { isMacLikePlatform } from '@/lib/platform';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
+import {
+  TaskImmediateDragHandle,
+} from '@/modules/tasks/components/TaskImmediateDragHandle';
+import { useTaskImmediateDragTarget } from '@/modules/tasks/components/TaskImmediateDragTarget';
 import {
   parseTaskChecklistClipboard,
   serializeTaskChecklistClipboard,
@@ -99,6 +104,7 @@ export function TaskChecklistEditor({
   emptyActionLayout = 'standalone',
   onContentPresenceChange,
   onRegisterFlush,
+  showDragHandles = false,
 }: {
   ownerId: string;
   taskId: string;
@@ -106,6 +112,7 @@ export function TaskChecklistEditor({
   emptyActionLayout?: 'paired' | 'standalone';
   onContentPresenceChange?: (present: boolean) => void;
   onRegisterFlush?: (flush: (() => Promise<void>) | null) => void;
+  showDragHandles?: boolean;
 }) {
   const checklist = useTaskChecklist(ownerId, taskId);
   return (
@@ -115,6 +122,7 @@ export function TaskChecklistEditor({
       emptyActionLayout={emptyActionLayout}
       onContentPresenceChange={onContentPresenceChange}
       onRegisterFlush={onRegisterFlush}
+      showDragHandles={showDragHandles}
     />
   );
 }
@@ -125,12 +133,14 @@ export function TaskChecklistEditorSurface({
   emptyActionLayout = 'standalone',
   onContentPresenceChange,
   onRegisterFlush,
+  showDragHandles = false,
 }: {
   controller: TaskChecklistEditorController;
   focusRequestTaskId: string;
   emptyActionLayout?: 'paired' | 'standalone';
   onContentPresenceChange?: (present: boolean) => void;
   onRegisterFlush?: (flush: (() => Promise<void>) | null) => void;
+  showDragHandles?: boolean;
 }) {
   const [draftIndex, setDraftIndex] = useState<number | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
@@ -220,6 +230,7 @@ export function TaskChecklistEditorSurface({
     setDraggedIds([]);
     setDropIndex(null);
   }, []);
+  const immediateDragScope = `task-checklist:${focusRequestTaskId}`;
 
   const requestInputFocus = useCallback((id: string, position: CaretPosition) => {
     pendingFocusRef.current = { id, position };
@@ -1007,6 +1018,15 @@ export function TaskChecklistEditorSurface({
     }
   }, [checklist, clearDragState, updateDraftIndex]);
 
+  const commitImmediateChecklistDrop = useCallback(() => {
+    const destinationIndex = dropIndexRef.current;
+    if (destinationIndex === null) {
+      clearDragState();
+      return;
+    }
+    void commitChecklistDrop(destinationIndex);
+  }, [clearDragState, commitChecklistDrop]);
+
   const handleDrop = (event: DragEvent, destinationIndex: number) => {
     event.preventDefault();
     void commitChecklistDrop(destinationIndex);
@@ -1122,6 +1142,11 @@ export function TaskChecklistEditorSurface({
         updateDropIndex(index);
       }}
       onDrop={(event) => handleDrop(event, index)}
+      showDragHandle={showDragHandles}
+      immediateDragScope={immediateDragScope}
+      onImmediateDragOver={() => updateDropIndex(index)}
+      onImmediateDrop={commitImmediateChecklistDrop}
+      onImmediateCancel={clearDragState}
     />
   );
 
@@ -1265,14 +1290,19 @@ export function TaskChecklistEditorSurface({
               updateDropIndex(index);
             }}
             onDrop={(event) => handleDrop(event, index)}
+            showDragHandle={showDragHandles}
+            immediateDragScope={immediateDragScope}
+            onImmediateDragOver={() => updateDropIndex(index)}
+            onImmediateDrop={commitImmediateChecklistDrop}
+            onImmediateCancel={clearDragState}
           />
         </Fragment>
       ))}
       {draftIndex === checklist.items.length ? renderDraft(checklist.items.length) : null}
       {checklist.items.length > 0 || draftIndex !== null ? (
-        <div
-          className="relative h-1.5"
-          data-checklist-drop-end
+        <ChecklistEndDropTarget
+          scope={showDragHandles ? immediateDragScope : null}
+          onImmediateDragOver={() => updateDropIndex(checklist.items.length)}
           onDragOver={(event) => {
             event.preventDefault();
             updateDropIndex(checklist.items.length);
@@ -1286,7 +1316,7 @@ export function TaskChecklistEditorSurface({
               aria-hidden="true"
             />
           ) : null}
-        </div>
+        </ChecklistEndDropTarget>
       ) : null}
       {checklist.items.length === 0 && draftIndex === null ? (
         <button
@@ -1340,6 +1370,11 @@ function ChecklistRow({
   onDragEnd,
   onDragOver,
   onDrop,
+  showDragHandle,
+  immediateDragScope,
+  onImmediateDragOver,
+  onImmediateDrop,
+  onImmediateCancel,
 }: {
   item: TaskChecklistEditorItem;
   title: string;
@@ -1379,7 +1414,25 @@ function ChecklistRow({
   onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  showDragHandle: boolean;
+  immediateDragScope: string;
+  onImmediateDragOver: () => void;
+  onImmediateDrop: () => void;
+  onImmediateCancel: () => void;
 }) {
+  const immediateRowRef = useRef<HTMLDivElement>(null);
+  const setRowRef = useCallback((node: HTMLDivElement | null) => {
+    immediateRowRef.current = node;
+    rowRef(node);
+  }, [rowRef]);
+  const handleImmediateTarget = useCallback(() => {
+    onImmediateDragOver();
+  }, [onImmediateDragOver]);
+  useTaskImmediateDragTarget(
+    showDragHandle ? immediateDragScope : null,
+    immediateRowRef,
+    showDragHandle ? handleImmediateTarget : null,
+  );
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;
     const input = event.currentTarget;
@@ -1488,7 +1541,7 @@ function ChecklistRow({
 
   return (
     <div
-      ref={rowRef}
+      ref={setRowRef}
       data-checklist-item-id={item.id}
       data-selected={selected ? 'true' : undefined}
       draggable
@@ -1581,6 +1634,16 @@ function ChecklistRow({
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
       />
+      {showDragHandle ? (
+        <TaskImmediateDragHandle
+          label={`Reorder ${title || 'Checklist Item'}`}
+          scope={immediateDragScope}
+          previewRef={immediateRowRef}
+          onStart={onDragStart}
+          onDrop={onImmediateDrop}
+          onCancel={onImmediateCancel}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1610,6 +1673,11 @@ function DraftChecklistRow({
   onDragEnd,
   onDragOver,
   onDrop,
+  showDragHandle,
+  immediateDragScope,
+  onImmediateDragOver,
+  onImmediateDrop,
+  onImmediateCancel,
 }: {
   title: string;
   rowRef: (node: HTMLDivElement | null) => void;
@@ -1642,7 +1710,25 @@ function DraftChecklistRow({
   onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  showDragHandle: boolean;
+  immediateDragScope: string;
+  onImmediateDragOver: () => void;
+  onImmediateDrop: () => void;
+  onImmediateCancel: () => void;
 }) {
+  const immediateRowRef = useRef<HTMLDivElement>(null);
+  const setRowRef = useCallback((node: HTMLDivElement | null) => {
+    immediateRowRef.current = node;
+    rowRef(node);
+  }, [rowRef]);
+  const handleImmediateTarget = useCallback(() => {
+    onImmediateDragOver();
+  }, [onImmediateDragOver]);
+  useTaskImmediateDragTarget(
+    showDragHandle ? immediateDragScope : null,
+    immediateRowRef,
+    showDragHandle ? handleImmediateTarget : null,
+  );
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;
     const input = event.currentTarget;
@@ -1747,7 +1833,7 @@ function DraftChecklistRow({
 
   return (
     <div
-      ref={rowRef}
+      ref={setRowRef}
       data-checklist-item-id={DRAFT_ID}
       draggable
       className="relative flex min-w-0 items-center gap-1"
@@ -1800,6 +1886,47 @@ function DraftChecklistRow({
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
       />
+      {showDragHandle ? (
+        <TaskImmediateDragHandle
+          label="Reorder New Checklist Item"
+          scope={immediateDragScope}
+          previewRef={immediateRowRef}
+          onStart={onDragStart}
+          onDrop={onImmediateDrop}
+          onCancel={onImmediateCancel}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ChecklistEndDropTarget({
+  scope,
+  onImmediateDragOver,
+  onDragOver,
+  onDrop,
+  children,
+}: {
+  scope: string | null;
+  onImmediateDragOver: () => void;
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  children: ReactNode;
+}) {
+  const targetRef = useRef<HTMLDivElement>(null);
+  const handleImmediateTarget = useCallback(() => {
+    onImmediateDragOver();
+  }, [onImmediateDragOver]);
+  useTaskImmediateDragTarget(scope, targetRef, scope ? handleImmediateTarget : null);
+  return (
+    <div
+      ref={targetRef}
+      className="relative h-1.5"
+      data-checklist-drop-end
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
+      {children}
     </div>
   );
 }

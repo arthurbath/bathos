@@ -2203,6 +2203,7 @@ export type Database = {
           automatic_list_sorting: boolean
           client_mutation_id: string
           created_at: string
+          drag_handle_visibility: string
           id: string
           owner_id: string
           planning_timezone: string
@@ -2213,6 +2214,7 @@ export type Database = {
           automatic_list_sorting?: boolean
           client_mutation_id: string
           created_at?: string
+          drag_handle_visibility?: string
           id: string
           owner_id: string
           planning_timezone: string
@@ -2223,6 +2225,7 @@ export type Database = {
           automatic_list_sorting?: boolean
           client_mutation_id?: string
           created_at?: string
+          drag_handle_visibility?: string
           id?: string
           owner_id?: string
           planning_timezone?: string

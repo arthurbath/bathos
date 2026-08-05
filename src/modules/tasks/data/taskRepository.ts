@@ -10,6 +10,7 @@ import {
   taskCalendarDateInTimeZone,
 } from '@/modules/tasks/domain/taskDates';
 import { normalizeTaskPrimaryLink } from '@/modules/tasks/domain/taskPrimaryLink';
+import type { TaskDragHandleVisibility } from '@/modules/tasks/domain/taskDragHandles';
 import {
   createTaskRedoPatch,
   createTaskUndoPatch,
@@ -338,6 +339,7 @@ export class TaskRepository {
         owner_id: ownerId,
         planning_timezone: planningTimeZone,
         automatic_list_sorting: false,
+        drag_handle_visibility: 'hidden',
         revision: 1,
         client_mutation_id: this.createId(),
         created_at: timestamp,
@@ -345,14 +347,15 @@ export class TaskRepository {
       };
       await transaction.execute(
         `INSERT INTO tasks_user_settings
-          (id, owner_id, planning_timezone, automatic_list_sorting, revision,
+          (id, owner_id, planning_timezone, automatic_list_sorting, drag_handle_visibility, revision,
            client_mutation_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           setting.id,
           setting.owner_id,
           setting.planning_timezone,
           setting.automatic_list_sorting ? 1 : 0,
+          setting.drag_handle_visibility,
           setting.revision,
           setting.client_mutation_id,
           setting.created_at,
@@ -431,6 +434,47 @@ export class TaskRepository {
          WHERE id = ? AND owner_id = ?`,
         [
           enabled ? 1 : 0,
+          updated.revision,
+          updated.client_mutation_id,
+          updated.updated_at,
+          settings.id,
+          ownerId,
+        ],
+      );
+      return updated;
+    });
+  }
+
+  async setDragHandleVisibility(
+    ownerId: string,
+    visibility: TaskDragHandleVisibility,
+  ): Promise<TaskUserSettings> {
+    assertOwner(ownerId);
+    return this.database.writeTransaction(async (transaction) => {
+      const settings = await transaction.getOptional<TaskUserSettings>(
+        'SELECT * FROM tasks_user_settings WHERE owner_id = ?',
+        [ownerId],
+      );
+      if (settings === null) {
+        throw new InvalidTaskMutationError('Task settings are unavailable');
+      }
+
+      const updated: TaskUserSettings = {
+        ...settings,
+        drag_handle_visibility: visibility,
+        revision: settings.revision + 1,
+        client_mutation_id: this.createId(),
+        updated_at: this.now(),
+      };
+      await transaction.execute(
+        `UPDATE tasks_user_settings
+         SET drag_handle_visibility = ?,
+             revision = ?,
+             client_mutation_id = ?,
+             updated_at = ?
+         WHERE id = ? AND owner_id = ?`,
+        [
+          visibility,
           updated.revision,
           updated.client_mutation_id,
           updated.updated_at,

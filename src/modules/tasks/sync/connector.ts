@@ -8,6 +8,7 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import type { TaskDragHandleVisibility } from '@/modules/tasks/domain/taskDragHandles';
 
 const supportedUploadTables = new Set([
   'tasks_todos',
@@ -752,6 +753,7 @@ function parseSettingsInsert(entry: CrudEntry): TaskSettingsInsert {
     owner_id: requireText(data.owner_id, 'owner_id'),
     planning_timezone: requireText(data.planning_timezone, 'planning_timezone'),
     automatic_list_sorting: booleanOrDefault(data.automatic_list_sorting, false),
+    drag_handle_visibility: parseTaskDragHandleVisibility(data.drag_handle_visibility),
     revision: requirePositiveInteger(data.revision, 'revision'),
     client_mutation_id: requireText(data.client_mutation_id, 'client_mutation_id'),
     created_at: requireText(data.created_at, 'created_at'),
@@ -764,6 +766,7 @@ function parseSettingsUpdate(entry: CrudEntry): TaskSettingsUpdate {
   const allowedColumns = new Set([
     'planning_timezone',
     'automatic_list_sorting',
+    'drag_handle_visibility',
     'revision',
     'client_mutation_id',
     'updated_at',
@@ -779,10 +782,21 @@ function parseSettingsUpdate(entry: CrudEntry): TaskSettingsUpdate {
   if (data.automatic_list_sorting !== undefined) {
     booleanOrDefault(data.automatic_list_sorting, false);
   }
+  if (data.drag_handle_visibility !== undefined) {
+    parseTaskDragHandleVisibility(data.drag_handle_visibility);
+  }
   requirePositiveInteger(data.revision, 'revision');
   requireText(data.client_mutation_id, 'client_mutation_id');
   requireText(data.updated_at, 'updated_at');
   return { ...data } as TaskSettingsUpdate;
+}
+
+function parseTaskDragHandleVisibility(value: unknown): TaskDragHandleVisibility {
+  const visibility = optionalText(value) ?? 'hidden';
+  if (visibility !== 'hidden' && visibility !== 'always' && visibility !== 'touch_only') {
+    throw new InvalidTasksCrudEntryError('Task drag handle visibility is invalid');
+  }
+  return visibility;
 }
 
 function parseAreaInsert(entry: CrudEntry): TaskAreaInsert {

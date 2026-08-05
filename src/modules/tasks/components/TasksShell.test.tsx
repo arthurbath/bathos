@@ -52,6 +52,7 @@ const mockTaskList = vi.fn();
 const mockTaskSearch = vi.fn();
 const mockTaskQuickFilterPreference = vi.fn();
 const mockTaskAutomaticListSorting = vi.fn();
+const mockTaskDragHandleVisibility = vi.fn();
 const mockTaskHierarchy = vi.fn();
 const mockTaskDeletedHierarchyRoots = vi.fn();
 const mockTaskReminders = vi.fn();
@@ -132,6 +133,12 @@ vi.mock('@/modules/tasks/hooks/useTaskQuickFilterPreference', () => ({
 vi.mock('@/modules/tasks/hooks/useTaskAutomaticListSorting', () => ({
   useTaskAutomaticListSorting: (...args: unknown[]) => (
     mockTaskAutomaticListSorting(...args)
+  ),
+}));
+
+vi.mock('@/modules/tasks/hooks/useTaskDragHandleVisibility', () => ({
+  useTaskDragHandleVisibility: (...args: unknown[]) => (
+    mockTaskDragHandleVisibility(...args)
   ),
 }));
 
@@ -656,6 +663,13 @@ describe('TasksShell', () => {
       error: null,
       pending: false,
       setEnabled: vi.fn().mockResolvedValue(undefined),
+    });
+    mockTaskDragHandleVisibility.mockReset().mockReturnValue({
+      visibility: 'hidden',
+      loading: false,
+      error: null,
+      pending: false,
+      setVisibility: vi.fn().mockResolvedValue(undefined),
     });
     mockTaskUndo.mockReset().mockReturnValue({
       available: false,
@@ -6758,7 +6772,16 @@ describe('TasksShell', () => {
       expect(syncIndex).toBeGreaterThan(areasIndex);
       expect(settingsText).toContain('Notifications');
       expect(settingsText).toContain('Automatically Sort Anytime and Someday');
+      expect(settingsText).toContain('Drag Handles');
       expect(settingsText).toContain('Keyboard Shortcuts');
+      const dragHandleSelect = config.container.querySelector<HTMLButtonElement>(
+        '[aria-label="Drag Handles"]',
+      );
+      expect(dragHandleSelect).toHaveTextContent('Hidden');
+      await act(async () => {
+        dragHandleSelect?.click();
+      });
+      expect(document.body).toHaveTextContent('Touch Devices Only');
       expect(settingsText).toContain(
         'Press ⌃/ to view all keyboard commands at any time.',
       );
@@ -6821,6 +6844,46 @@ describe('TasksShell', () => {
       } else {
         Reflect.deleteProperty(window.navigator, 'maxTouchPoints');
       }
+    }
+  });
+
+  it('shows immediate drag handles on task and checklist rows when configured always', async () => {
+    const checklistItem = taskChecklistItemFixture({
+      id: 'checklist-handle',
+      task_id: task.id,
+      title: 'Checklist item',
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [task, taskTodoFixture({
+        id: 'task-b',
+        title: 'Second task',
+        destination: 'anytime',
+        today_section: 'next',
+        start_date: '2026-07-20',
+      })],
+      checklistTaskIds: new Set([task.id]),
+    });
+    mockTaskChecklist.mockReturnValue(defaultTaskChecklist([checklistItem]));
+    mockTaskDragHandleVisibility.mockReturnValue({
+      visibility: 'always',
+      loading: false,
+      error: null,
+      pending: false,
+      setVisibility: vi.fn().mockResolvedValue(undefined),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      expect(container.querySelectorAll('[data-task-drag-handle-control]')).toHaveLength(2);
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      expect(container.querySelectorAll('[data-task-drag-handle-control]')).toHaveLength(3);
+      expect(container.querySelector('[data-task-checklist] [data-task-drag-handle-control]'))
+        .toHaveAccessibleName('Reorder Checklist item');
+    } finally {
+      cleanup(root, container);
     }
   });
 
