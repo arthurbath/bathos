@@ -125,9 +125,13 @@ export function useTaskReminders(ownerId: string) {
   }, [mode, reminderService]);
 
   const acknowledge = useCallback(async (deliveryId: string) => {
+    const dueItem = dueItems.find((item) => item.delivery_id === deliveryId);
     await reminderService.acknowledge(deliveryId);
+    if (dueItem) {
+      setOptimistic((current) => ({ ...current, [dueItem.reminder_id]: null }));
+    }
     setDueItems((current) => current.filter((item) => item.delivery_id !== deliveryId));
-  }, [reminderService]);
+  }, [dueItems, reminderService]);
 
   return {
     reminders,

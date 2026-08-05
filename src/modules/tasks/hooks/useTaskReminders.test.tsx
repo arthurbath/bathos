@@ -79,6 +79,7 @@ describe('useTaskReminders', () => {
     });
     expect(reminderService.acknowledge).toHaveBeenCalledWith(dueReminder.delivery_id);
     expect(result.current.dueItems).toEqual([]);
+    expect(result.current.byRootId.has('task-a')).toBe(false);
   });
 
   it('defaults reminder saves to the owner planning time zone and overlays the result', async () => {

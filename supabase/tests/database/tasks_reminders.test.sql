@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(51);
+SELECT plan(52);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -320,6 +320,14 @@ SELECT is(
   ),
   'accepted',
   'acknowledges a displayed in-app reminder explicitly'
+);
+SELECT is(
+  (
+    SELECT status FROM public.tasks_reminders
+    WHERE task_id = '97000000-0000-4000-8000-000000000022'
+  ),
+  'canceled',
+  'retires reminder intent as soon as its in-app alert is presented'
 );
 SELECT is(
   (

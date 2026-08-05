@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(41);
+SELECT plan(43);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -148,7 +148,7 @@ SELECT set_config(
   'test.tasks_v12_reminder',
   public.tasks_save_start_reminder(
     NULL, NULL, 'todo', 'c2000000-0000-4000-8000-000000000030',
-    '09:15', 'America/Los_Angeles', 'earlier',
+    '23:59', 'America/Los_Angeles', 'earlier',
     'c2000000-0000-4000-8000-000000000032'
   )::text,
   false
@@ -198,6 +198,53 @@ SELECT is(
     WHERE task_id = 'c2000000-0000-4000-8000-000000000030'),
   'canceled',
   'cancels the reminder when the complete Start intent clears'
+);
+
+INSERT INTO public.tasks_todos (
+  id, owner_id, title, destination, start_date, order_key,
+  client_mutation_id
+) VALUES
+  (
+    'c2000000-0000-4000-8000-000000000050',
+    'c2000000-0000-4000-8000-000000000001',
+    'Elapsed Today reminder', 'anytime', current_date + 1, 'a3',
+    'c2000000-0000-4000-8000-000000000051'
+  ),
+  (
+    'c2000000-0000-4000-8000-000000000052',
+    'c2000000-0000-4000-8000-000000000001',
+    'Someday reminder', 'anytime', current_date + 1, 'a4',
+    'c2000000-0000-4000-8000-000000000053'
+  );
+SELECT public.tasks_save_start_reminder(
+  NULL, NULL, 'todo', 'c2000000-0000-4000-8000-000000000050',
+  '00:00', 'America/Los_Angeles', 'earlier',
+  'c2000000-0000-4000-8000-000000000054'
+);
+SELECT public.tasks_save_start_reminder(
+  NULL, NULL, 'todo', 'c2000000-0000-4000-8000-000000000052',
+  '23:59', 'America/Los_Angeles', 'earlier',
+  'c2000000-0000-4000-8000-000000000055'
+);
+UPDATE public.tasks_todos
+SET start_date = NULL, today_section = 'inbox', revision = revision + 1,
+  client_mutation_id = 'c2000000-0000-4000-8000-000000000056'
+WHERE id = 'c2000000-0000-4000-8000-000000000050';
+SELECT is(
+  (SELECT status FROM public.tasks_reminders
+    WHERE task_id = 'c2000000-0000-4000-8000-000000000050'),
+  'canceled',
+  'clears an elapsed reminder when a future task moves into Today'
+);
+UPDATE public.tasks_todos
+SET destination = 'someday', revision = revision + 1,
+  client_mutation_id = 'c2000000-0000-4000-8000-000000000057'
+WHERE id = 'c2000000-0000-4000-8000-000000000052';
+SELECT is(
+  (SELECT status FROM public.tasks_reminders
+    WHERE task_id = 'c2000000-0000-4000-8000-000000000052'),
+  'canceled',
+  'clears a reminder when its task moves to Someday'
 );
 
 INSERT INTO public.tasks_todos (

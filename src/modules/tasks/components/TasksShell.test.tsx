@@ -1551,17 +1551,9 @@ describe('TasksShell', () => {
     }
   });
 
-  it('retains Today Inbox and a pending reminder until an untitled draft is created', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
+  it('keeps Reminder hidden for an unplanned untitled draft', async () => {
     const taskList = defaultTaskList();
-    const saveReminder = vi.fn().mockResolvedValue(undefined);
     mockTaskList.mockReturnValue(taskList);
-    mockTaskReminders.mockReturnValue({
-      reminders: [], byRootId: new Map(), dueItems: [],
-      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
-      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
-    });
     const { container, root } = renderShell('/tasks/anytime');
 
     try {
@@ -1571,53 +1563,17 @@ describe('TasksShell', () => {
         }));
       });
       await act(async () => {
-        requestTaskStartPickerOpenForTest(container, 'task-draft:new', 'reminder');
-      });
-      const reminderTime = document.getElementById(
-        'task-start-reminder-task-draft:new',
-      ) as HTMLInputElement;
-      expect(reminderTime).toBeEnabled();
-
-      await act(async () => {
-        setInputValue(reminderTime, '2p');
-        reminderTime.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter',
-          bubbles: true,
-          cancelable: true,
-        }));
+        requestTaskStartPickerOpenForTest(container, 'task-draft:new');
         await Promise.resolve();
       });
+
+      expect(document.querySelector('[data-task-start-reminder-group]')).toBeNull();
+      expect(document.getElementById('task-start-reminder-task-draft:new')).toBeNull();
       expect(taskList.createTask).not.toHaveBeenCalled();
-      expect(saveReminder).not.toHaveBeenCalled();
-      expect(document.getElementById('task-start-task-draft:new'))
-        .toHaveTextContent('Today · Inbox');
-
-      const title = document.getElementById('task-title-task-draft:new') as HTMLInputElement;
-      await act(async () => {
-        setInputValue(title, 'Reminder-backed draft');
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 425));
-      });
-
-      expect(taskList.createTask).toHaveBeenCalledWith(expect.objectContaining({
-        title: 'Reminder-backed draft',
-        destination: 'anytime',
-        startDate: null,
-        todaySection: 'inbox',
-      }));
-      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
-        rootType: 'todo',
-        rootId: 'task-created',
-        reminder: null,
-        localTime: '14:00',
-      }));
-      expect(taskList.createTask.mock.invocationCallOrder[0])
-        .toBeLessThan(saveReminder.mock.invocationCallOrder[0]);
     } finally {
       cleanup(root, container);
-      vi.useRealTimers();
     }
   });
-
   it('closes and discards an untitled draft on plain Escape', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
@@ -9579,203 +9535,86 @@ describe('TasksShell', () => {
     }
   });
 
-  it('plans an unplanned to-do for Today Inbox before saving its reminder', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
+  it('hides Reminder controls while a task has no Start planning', async () => {
     const unplannedTask = taskTodoFixture({
       ...task,
       destination: 'anytime',
       start_date: null,
       today_section: null,
     });
-    const taskList = { ...defaultTaskList(), tasks: [unplannedTask] };
-    const saveReminder = vi.fn().mockResolvedValue(undefined);
-    mockTaskList.mockReturnValue(taskList);
-    mockTaskReminders.mockReturnValue({
-      reminders: [], byRootId: new Map(), dueItems: [],
-      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
-      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
-    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [unplannedTask] });
     const { container, root } = renderShell('/tasks/anytime');
 
     try {
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+        await Promise.resolve();
       });
       await act(async () => {
-        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
-      });
-      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
-      expect(time).toBeEnabled();
-
-      await act(async () => {
-        setInputValue(time, '2p');
-        time.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter',
-          bubbles: true,
-          cancelable: true,
-        }));
+        requestTaskStartPickerOpenForTest(container, 'task-a');
         await Promise.resolve();
       });
 
-      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
-        destination: 'anytime',
-        start_date: null,
-        today_section: 'inbox',
-      });
-      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
-        rootType: 'todo',
-        rootId: 'task-a',
-        localTime: '14:00',
-        ambiguityChoice: 'earlier',
-      }));
-      expect(taskList.updateTask.mock.invocationCallOrder[0])
-        .toBeLessThan(saveReminder.mock.invocationCallOrder[0]);
-      expect(container.querySelector('#task-start-task-a')).toHaveTextContent('Today · Inbox');
-      expect(time).toHaveValue('2:00 pm');
-      expect(time).toBeInTheDocument();
-      await act(async () => {
-        time.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter',
-          bubbles: true,
-          cancelable: true,
-        }));
-        await Promise.resolve();
-      });
-      expect(document.querySelector('#task-start-reminder-task-a')).not.toBeInTheDocument();
-      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
-        title: 'Reminder Could Not Be Saved',
-      }));
+      expect(document.querySelector('[data-task-start-reminder-group]')).toBeNull();
+      expect(document.querySelector('#task-start-reminder-task-a')).toBeNull();
     } finally {
       cleanup(root, container);
-      vi.useRealTimers();
     }
   });
 
-  it('submits an unplanned reminder only once when planning rerenders and blurs the input', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
+  it('warns without opening Start when the reminder shortcut targets unplanned work', async () => {
     const unplannedTask = taskTodoFixture({
       ...task,
       destination: 'anytime',
       start_date: null,
       today_section: null,
     });
-    const taskList = { ...defaultTaskList(), tasks: [unplannedTask] };
-    let releaseReminder!: () => void;
-    const reminderPending = new Promise<void>((resolve) => {
-      releaseReminder = resolve;
-    });
-    const saveReminder = vi.fn().mockReturnValue(reminderPending);
-    mockTaskList.mockReturnValue(taskList);
-    mockTaskReminders.mockReturnValue({
-      reminders: [], byRootId: new Map(), dueItems: [],
-      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
-      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
-    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [unplannedTask] });
     const { container, root } = renderShell('/tasks/anytime');
 
     try {
-      await act(async () => {
-        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      const row = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
+      row.focus();
+      const shortcut = new KeyboardEvent('keydown', {
+        key: 'y',
+        altKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
       });
       await act(async () => {
-        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
-      });
-      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
-
-      await act(async () => {
-        setInputValue(time, '2p');
-        time.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter',
-          bubbles: true,
-          cancelable: true,
-        }));
-        await Promise.resolve();
-        time.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-        await Promise.resolve();
-      });
-      expect(saveReminder).toHaveBeenCalledOnce();
-
-      await act(async () => {
-        releaseReminder();
-        await reminderPending;
+        window.dispatchEvent(shortcut);
         await Promise.resolve();
       });
 
-      expect(saveReminder).toHaveBeenCalledOnce();
-      expect(time).toHaveValue('2:00 pm');
-      expect(time).toBeInTheDocument();
-      await act(async () => {
-        time.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter',
-          bubbles: true,
-          cancelable: true,
-        }));
-        await Promise.resolve();
+      expect(shortcut.defaultPrevented).toBe(true);
+      expect(document.querySelector('[data-task-start-picker]')).toBeNull();
+      expect(mockToast).toHaveBeenCalledWith({
+        description: 'Set a start date before setting a reminder.',
       });
-      expect(document.querySelector('#task-start-reminder-task-a')).not.toBeInTheDocument();
-      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
-        title: 'Reminder Could Not Be Saved',
-      }));
     } finally {
       cleanup(root, container);
-      vi.useRealTimers();
     }
   });
 
-  it('applies the same unplanned reminder default from the row Start dialog', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
-    const unplannedTask = taskTodoFixture({
+  it('hides Reminder controls in a Someday task Start picker', async () => {
+    const somedayTask = taskTodoFixture({
       ...task,
-      destination: 'anytime',
+      destination: 'someday',
       start_date: null,
       today_section: null,
     });
-    const taskList = { ...defaultTaskList(), tasks: [unplannedTask] };
-    const saveReminder = vi.fn().mockResolvedValue(undefined);
-    mockTaskList.mockReturnValue(taskList);
-    mockTaskReminders.mockReturnValue({
-      reminders: [], byRootId: new Map(), dueItems: [],
-      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
-      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
-    });
-    const { container, root } = renderShell('/tasks/anytime');
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [somedayTask] });
+    const { container, root } = renderShell('/tasks/someday');
 
     try {
       await openTaskMenuSurface(container, 'Existing task', "Start...");
-      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
-      expect(time).toBeEnabled();
-
-      await act(async () => {
-        setInputValue(time, '2p');
-        time.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter',
-          bubbles: true,
-          cancelable: true,
-        }));
-        await Promise.resolve();
-      });
-
-      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
-        destination: 'anytime',
-        start_date: null,
-        today_section: 'inbox',
-      });
-      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
-        rootType: 'todo',
-        rootId: 'task-a',
-        localTime: '14:00',
-      }));
-      expect(taskList.updateTask.mock.invocationCallOrder[0])
-        .toBeLessThan(saveReminder.mock.invocationCallOrder[0]);
+      expect(document.querySelector('[data-task-start-reminder-group]')).toBeNull();
+      expect(document.querySelector('#task-start-reminder-task-a')).toBeNull();
     } finally {
       cleanup(root, container);
-      vi.useRealTimers();
     }
   });
-
   it('preserves an existing Today horizon when saving a reminder', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
@@ -9817,55 +9656,6 @@ describe('TasksShell', () => {
         localTime: '14:00',
       }));
       expect(container.querySelector('#task-start-task-a')).toHaveTextContent('Today · Later');
-    } finally {
-      cleanup(root, container);
-      vi.useRealTimers();
-    }
-  });
-
-  it('rejects an elapsed reminder before planning an unplanned to-do', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
-    const unplannedTask = taskTodoFixture({
-      ...task,
-      destination: 'anytime',
-      start_date: null,
-      today_section: null,
-    });
-    const taskList = { ...defaultTaskList(), tasks: [unplannedTask] };
-    const saveReminder = vi.fn().mockResolvedValue(undefined);
-    mockTaskList.mockReturnValue(taskList);
-    mockTaskReminders.mockReturnValue({
-      reminders: [], byRootId: new Map(), dueItems: [],
-      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
-      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
-    });
-    const { container, root } = renderShell('/tasks/anytime');
-
-    try {
-      await act(async () => {
-        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
-      });
-      await act(async () => {
-        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
-      });
-      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
-      await act(async () => {
-        setInputValue(time, '12p');
-        time.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter',
-          bubbles: true,
-          cancelable: true,
-        }));
-        await Promise.resolve();
-      });
-
-      expect(time).toHaveValue('');
-      expect(taskList.updateTask).not.toHaveBeenCalled();
-      expect(saveReminder).not.toHaveBeenCalled();
-      expect(mockToast).toHaveBeenCalledWith({
-        title: 'Not Allowed.',
-      });
     } finally {
       cleanup(root, container);
       vi.useRealTimers();
@@ -10444,13 +10234,13 @@ describe('TasksShell', () => {
     }
   });
 
-  it('disables the whole-hour action after 11 pm when Start is empty', async () => {
+  it('disables the whole-hour action after 11 pm for Today work', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-07-21T06:00:00.000Z'));
     const unplannedTask = taskTodoFixture({
       ...task,
       start_date: null,
-      today_section: null,
+      today_section: 'inbox',
     });
     mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [unplannedTask] });
     mockTaskReminders.mockReturnValue({
@@ -11105,7 +10895,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('shows a claimed due reminder as a persistent info toast and acknowledges dismissal', async () => {
+  it('shows a claimed due reminder as a persistent info toast and retires it immediately', async () => {
     const acknowledge = vi.fn().mockResolvedValue(undefined);
     mockTaskList.mockReturnValue(defaultTaskList());
     mockTaskReminders.mockReturnValue({
@@ -11137,13 +10927,13 @@ describe('TasksShell', () => {
       expect(reminderTitle.props.children).toContain('Reminder');
       expect((reminderTitle.props.children[0] as React.ReactElement<{ className: string }>)
         .props.className).toContain('h-3 w-3');
-      expect(acknowledge).not.toHaveBeenCalled();
+      await waitFor(() => expect(acknowledge).toHaveBeenCalledWith('delivery-a'));
 
       await act(async () => {
         reminderToast.onOpenChange(false);
         await Promise.resolve();
       });
-      expect(acknowledge).toHaveBeenCalledWith('delivery-a');
+      expect(acknowledge).toHaveBeenCalledTimes(1);
     } finally {
       cleanup(root, container);
     }
@@ -11267,14 +11057,25 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(1));
-      const reminderToast = mockToast.mock.calls[0][0];
+      await waitFor(() => expect(mockToast.mock.calls.filter(([configuration]) => (
+        configuration.description === '9:00 AM: Existing task'
+      ))).toHaveLength(1));
+      const reminderToast = mockToast.mock.calls.find(([configuration]) => (
+        configuration.description === '9:00 AM: Existing task'
+      ))![0];
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith({
+        title: 'Reminder Could Not Be Acknowledged',
+        description: 'The reminder acknowledgement failed. The reminder remains available to retry.',
+        variant: 'destructive',
+      }));
       await act(async () => {
+        await Promise.resolve();
         reminderToast.onOpenChange(false);
         await Promise.resolve();
       });
 
       expect(acknowledge).toHaveBeenCalledWith('delivery-a');
+      expect(acknowledge).toHaveBeenCalledTimes(3);
       expect(mockToast).toHaveBeenCalledWith({
         title: 'Reminder Could Not Be Acknowledged',
         description: 'The reminder acknowledgement failed. The reminder remains available to retry.',

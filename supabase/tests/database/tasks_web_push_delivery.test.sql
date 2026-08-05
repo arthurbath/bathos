@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(39);
+SELECT plan(40);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -218,6 +218,23 @@ SELECT is(
   ),
   'provider_accepted',
   'retains provider acceptance without claiming that the user saw it'
+);
+SELECT is(
+  (
+    SELECT reminder.status
+    FROM public.tasks_reminders AS reminder
+    JOIN public.tasks_reminder_occurrences AS occurrence
+      ON occurrence.reminder_id = reminder.id
+     AND occurrence.owner_id = reminder.owner_id
+    JOIN public.tasks_reminder_deliveries AS delivery
+      ON delivery.occurrence_id = occurrence.id
+     AND delivery.owner_id = occurrence.owner_id
+    WHERE delivery.id = (
+      current_setting('test.push_claim_a')::jsonb #>> '{items,0,delivery_id}'
+    )::uuid
+  ),
+  'canceled',
+  'retires reminder intent after Web Push provider acceptance'
 );
 SELECT is(
   public.tasks_record_web_push_delivery_result(

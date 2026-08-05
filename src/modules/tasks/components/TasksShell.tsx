@@ -174,6 +174,7 @@ import {
   getTaskPrimaryLinkIconKind,
   taskPrimaryLinkOpensBrowserTab,
 } from '@/modules/tasks/domain/taskPrimaryLink';
+import { taskHasReminderEligibleStart } from '@/modules/tasks/domain/taskReminderEligibility';
 import {
   buildRecurrencePrototypeEditInput,
   type RecurrencePrototypeMetadataPatch,
@@ -1051,6 +1052,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     input?.setSelectionRange(input.value.length, input.value.length);
   }, [resetTouchQuickFindPull]);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
+  const acknowledgedReminderDeliveriesRef = useRef(new Set<string>());
   const activeReminderToastsRef = useRef(new Map<string, ReturnType<typeof toast>>());
   const reminderAcknowledgementsInFlightRef = useRef(new Set<string>());
   const suppressingReminderDeliveriesRef = useRef(new Set<string>());
@@ -2092,27 +2094,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   useEffect(() => {
     if (nativeQuickEntry || reminderPresentationMode === 'checking') return;
 
-    const dueDeliveryIds = new Set(reminders.dueItems.map(({ delivery_id }) => delivery_id));
-    for (const [deliveryId, controller] of activeReminderToastsRef.current) {
-      if (dueDeliveryIds.has(deliveryId)) continue;
-      activeReminderToastsRef.current.delete(deliveryId);
-      controller.dismiss();
-    }
-
     const acknowledge = (
       deliveryId: string,
       retryToastOnFailure: boolean,
     ) => {
       if (reminderAcknowledgementsInFlightRef.current.has(deliveryId)) return;
       reminderAcknowledgementsInFlightRef.current.add(deliveryId);
-      void acknowledgeReminderDelivery(deliveryId).catch(() => {
-        showReminderDeliveryError('Reminder Could Not Be Acknowledged');
-        if (retryToastOnFailure && !reminderToastCleanupRef.current) {
-          setReminderToastRetrySequence((current) => current + 1);
+      let shouldRetryToast = false;
+      void Promise.resolve(acknowledgeReminderDelivery(deliveryId)).then(() => {
+        if (activeReminderToastsRef.current.has(deliveryId)) {
+          acknowledgedReminderDeliveriesRef.current.add(deliveryId);
         }
+      }).catch(() => {
+        showReminderDeliveryError('Reminder Could Not Be Acknowledged');
+        shouldRetryToast = retryToastOnFailure && !reminderToastCleanupRef.current;
       }).finally(() => {
         reminderAcknowledgementsInFlightRef.current.delete(deliveryId);
         suppressingReminderDeliveriesRef.current.delete(deliveryId);
+        if (shouldRetryToast) {
+          setReminderToastRetrySequence((current) => current + 1);
+        }
       });
     };
 
@@ -2156,10 +2157,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           if (open || reminderToastCleanupRef.current) return;
           activeReminderToastsRef.current.delete(item.delivery_id);
           if (suppressingReminderDeliveriesRef.current.has(item.delivery_id)) return;
+          if (acknowledgedReminderDeliveriesRef.current.delete(item.delivery_id)) return;
           acknowledge(item.delivery_id, true);
         },
       });
       activeReminderToastsRef.current.set(item.delivery_id, controller);
+      acknowledge(item.delivery_id, false);
     }
   }, [
     acknowledgeReminderDelivery,
@@ -3148,6 +3151,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'focus-reminder') {
+        if (bulkMode) return;
+        const target = getTaskCommandTargets()[0];
+        if (
+          !target
+          || !taskHasReminderEligibleStart(target, planningDate)
+        ) {
+          toast({ description: 'Set a start date before setting a reminder.' });
+          return;
+        }
         void openTaskCommandField('reminder');
         return;
       }
@@ -3223,6 +3235,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     navigate,
     openTaskCommandField,
     openRelativeTask,
+    planningDate,
     runDuplicateShortcut,
     runCycleAreaShortcut,
     runCycleActionabilityShortcut,
@@ -7820,6 +7833,7 @@ function TaskRow({
                 reminderTime={reminderTime}
                 reminderTimeZone={reminderTimeZone}
                 reminderDisabled={reminderMode !== 'connected'}
+                showReminder={taskHasReminderEligibleStart(task, planningDate)}
                 reminderUnavailableMessage={reminderMode === 'connected'
                   ? null
                   : getTaskReminderUnavailableMessage(reminderMode)}
@@ -8180,6 +8194,11 @@ function TaskEditor({
             reminderTime={reminderTime}
             reminderTimeZone={reminderTimeZone}
             reminderDisabled={reminderMode !== 'connected'}
+            showReminder={taskHasReminderEligibleStart({
+              destination,
+              start_date: startDate || null,
+              today_section: todaySection,
+            }, planningDate)}
             reminderUnavailableMessage={reminderMode === 'connected'
               ? null
               : getTaskReminderUnavailableMessage(reminderMode)}
