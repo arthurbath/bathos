@@ -980,9 +980,9 @@ INSERT INTO public.tasks_todos (
     'b2000000-0000-4000-8000-000000000013'
   ),
   (
-    'b2000000-0000-4000-8000-000000000014',
+    '00000000-0000-4000-8000-000000000014',
     'b2000000-0000-4000-8000-000000000001',
-    'Ordinary First', 'anytime', 'z9', 'a2', current_date + 1, NULL,
+    'Ordinary First', 'anytime', 'z9', 'a3', current_date + 1, NULL,
     clock_timestamp(), 'b2000000-0000-4000-8000-000000000015'
   ),
   (
@@ -1005,7 +1005,7 @@ SET start_date = NULL,
     updated_at = (
       current_date::timestamp + interval '1 minute'
     ) AT TIME ZONE 'UTC'
-WHERE id = 'b2000000-0000-4000-8000-000000000014';
+WHERE id = '00000000-0000-4000-8000-000000000014';
 UPDATE public.tasks_todos
 SET start_date = NULL,
     deadline = current_date,
@@ -1085,8 +1085,8 @@ SELECT is(
   ARRAY[
     'Existing Inbox',
     'Rolled Existing',
-    'Ordinary First',
     'Recurrence Middle',
+    'Ordinary First',
     'Ordinary Last'
   ]::text[],
   'appends the mixed reached batch in its deliberate Upcoming order'
@@ -1108,7 +1108,7 @@ SELECT is(
   (
     SELECT task.start_date
     FROM public.tasks_todos AS task
-    WHERE task.id = 'b2000000-0000-4000-8000-000000000014'
+    WHERE task.id = '00000000-0000-4000-8000-000000000014'
   ),
   NULL::date,
   'retains foreground explicit-Start clearing during authoritative ordering'
