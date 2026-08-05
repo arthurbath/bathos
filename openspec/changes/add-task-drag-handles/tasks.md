@@ -30,3 +30,8 @@
   - Automated application checks pass. The production migration dry run, apply, migration-history readback, schema/default/constraint readback, normalizer readback, and relevant security/performance advisor checks pass. The local database stack remains unavailable because the existing Colima Docker socket cannot be mounted.
 - [x] 5.4 Audit the implementation against every proposal, design, and specification requirement and record any manual touch-device verification still needed.
   - A final physical iPhone/PWA gesture pass is still needed after the matching web release is published and the setting can safely be changed on the synced account.
+
+## 6. Trailing Control Refinement
+
+- [x] 6.1 Keep the ordinary-task ellipsis mounted while its drawer is open and group it compactly with a visible handle.
+- [x] 6.2 Apply the same compact ellipsis-to-handle rhythm to recurrence prototypes and add regression coverage.

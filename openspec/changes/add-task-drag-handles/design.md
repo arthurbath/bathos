@@ -49,6 +49,10 @@ A Tasks-local drop-target registry maps row and section elements to their existi
 
 The immediate handle path initializes the same active drag subjects and finishes through the same task or checklist commit code used by native drag. This preserves grouped order, legal section rules, optimistic presentation, history, and rollback.
 
+### Keep trailing task controls stable and compact
+
+The ellipsis action remains mounted when a task drawer opens. When a drag handle is visible, the ellipsis and handle share one compact trailing-control group so opening the task does not remove an established action or create an exaggerated gap between adjacent controls. Recurrence prototypes use the same control-group rhythm.
+
 ## Risks / Trade-offs
 
 - [Pointer capture makes `event.target` remain the handle] -> Resolve drop location with `document.elementsFromPoint` and a scoped target registry.

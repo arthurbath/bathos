@@ -453,58 +453,64 @@ function RecurrencePrototypeRow({
               waiting={waiting}
             />
           </button>}
-          {!bulkSelection ? <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                ref={actionMenuTriggerRef}
-                type="button"
-                variant="clear"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground"
-                aria-label={`Actions for ${visibleTitle}`}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                const trigger = actionMenuTriggerRef.current;
-                window.queueMicrotask(() => {
-                  if (document.activeElement === trigger) trigger?.blur();
-                });
-              }}
-            >
-              <DropdownMenuItem onSelect={() => void openRepeatEditor()}>
-                Edit Repeat
-              </DropdownMenuItem>
-              {onGoToInstance ? (
-                <DropdownMenuItem onSelect={onGoToInstance}>
-                  Go to Instance
-                </DropdownMenuItem>
+          {(!bulkSelection || (draggable && showDragHandles)) ? (
+            <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
+              {!bulkSelection ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      ref={actionMenuTriggerRef}
+                      type="button"
+                      variant="clear"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground"
+                      aria-label={`Actions for ${visibleTitle}`}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    onCloseAutoFocus={(event) => {
+                      event.preventDefault();
+                      const trigger = actionMenuTriggerRef.current;
+                      window.queueMicrotask(() => {
+                        if (document.activeElement === trigger) trigger?.blur();
+                      });
+                    }}
+                  >
+                    <DropdownMenuItem onSelect={() => void openRepeatEditor()}>
+                      Edit Repeat
+                    </DropdownMenuItem>
+                    {onGoToInstance ? (
+                      <DropdownMenuItem onSelect={onGoToInstance}>
+                        Go to Instance
+                      </DropdownMenuItem>
+                    ) : null}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => void deletePrototype()}
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : null}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onSelect={() => void deletePrototype()}
-              >
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu> : null}
-          {draggable && showDragHandles ? (
-            <TaskImmediateDragHandle
-              label={`Reorder ${visibleTitle}`}
-              scope="tasks"
-              previewRef={summaryRowRef}
-              onStart={beginDrag}
-              onDrop={() => {
-                if (onImmediateDrop) onImmediateDrop();
-                else onDragEnd?.();
-              }}
-              onCancel={onDragEnd}
-            />
+              {draggable && showDragHandles ? (
+                <TaskImmediateDragHandle
+                  label={`Reorder ${visibleTitle}`}
+                  scope="tasks"
+                  previewRef={summaryRowRef}
+                  onStart={beginDrag}
+                  onDrop={() => {
+                    if (onImmediateDrop) onImmediateDrop();
+                    else onDragEnd?.();
+                  }}
+                  onCancel={onDragEnd}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
         {editorOpen ? (

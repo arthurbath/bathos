@@ -2375,7 +2375,16 @@ describe('TasksShell', () => {
       expect(openLink?.getAttribute('href')).toBe('https://example.test/source');
       expect(openLink?.target).toBe('_blank');
       expect(openLink?.title).toBe('https://example.test/source');
-      expect(container.querySelector('[aria-label="Actions for Existing task"]')).toBeNull();
+      const openActions = container.querySelector<HTMLButtonElement>(
+        '[aria-label="Actions for Existing task"]',
+      )!;
+      expect(openActions).toBeTruthy();
+      await act(async () => {
+        openActions.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        openActions.click();
+      });
+      expect(Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .some((item) => item.textContent?.trim() === 'Start...')).toBe(true);
     } finally {
       cleanup(root, container);
     }
@@ -6876,10 +6885,23 @@ describe('TasksShell', () => {
 
     try {
       expect(container.querySelectorAll('[data-task-drag-handle-control]')).toHaveLength(2);
+      const taskRow = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
+      const actions = taskRow.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Existing task"]',
+      )!;
+      const taskHandle = taskRow.querySelector<HTMLButtonElement>(
+        '[data-task-drag-handle-control]',
+      )!;
+      const trailingControls = actions.closest('[data-task-row-trailing-controls]');
+      expect(trailingControls).toHaveClass('gap-0.5');
+      expect(actions.nextElementSibling).toBe(taskHandle);
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
       });
       expect(container.querySelectorAll('[data-task-drag-handle-control]')).toHaveLength(3);
+      expect(taskRow.querySelector('button[aria-label="Actions for Existing task"]'))
+        .toBe(actions);
+      expect(actions.nextElementSibling).toBe(taskHandle);
       expect(container.querySelector('[data-task-checklist] [data-task-drag-handle-control]'))
         .toHaveAccessibleName('Reorder Checklist item');
     } finally {
@@ -12115,6 +12137,13 @@ describe('TasksShell', () => {
       setStatus: setRecurrenceStatus,
       evaluate: vi.fn(),
     });
+    mockTaskDragHandleVisibility.mockReturnValue({
+      visibility: 'always',
+      loading: false,
+      error: null,
+      pending: false,
+      setVisibility: vi.fn().mockResolvedValue(undefined),
+    });
     const { container, root } = renderShell('/tasks/upcoming');
 
     try {
@@ -12138,6 +12167,11 @@ describe('TasksShell', () => {
       const actions = row.querySelector<HTMLButtonElement>(
         'button[aria-label="Actions for Quarterly Review"]',
       )!;
+      const prototypeHandle = row.querySelector<HTMLButtonElement>(
+        '[data-task-drag-handle-control]',
+      )!;
+      expect(actions.closest('[data-task-row-trailing-controls]')).toHaveClass('gap-0.5');
+      expect(actions.nextElementSibling).toBe(prototypeHandle);
       await act(async () => {
         actions.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
         actions.click();

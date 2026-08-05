@@ -19,6 +19,14 @@ The Tasks module SHALL persist an account-level Drag Handles preference with Hid
 - **WHEN** an eligible task or recurrence prototype shows a drag handle
 - **THEN** the handle appears at the trailing edge of its summary row after the ellipsis action when that action is present
 
+#### Scenario: Keep the ellipsis available while a task is open
+- **WHEN** a user opens an ordinary task drawer
+- **THEN** its summary-row ellipsis action remains visible and operative in its established trailing position
+
+#### Scenario: Group adjacent trailing controls compactly
+- **WHEN** a task or recurrence prototype shows both an ellipsis action and a drag handle
+- **THEN** the controls use the same compact spacing rhythm as adjacent row actions without a wider row-layout gap between them
+
 #### Scenario: Place checklist handles at the trailing edge
 - **WHEN** an eligible checklist item shows a drag handle
 - **THEN** the handle appears at the trailing edge of the checklist row without replacing its completion, selection, or text-editing controls

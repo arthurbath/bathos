@@ -7774,10 +7774,12 @@ function TaskRow({
             </span>
           ) : null}
         </TitleControl>
-        {!bulkSelection ? (
+        {(!bulkSelection || (showDragHandle && draggableTask && !pending)) ? (
           <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
-            <TaskSourceIndicator task={task} compact />
-            {!selected ? <DropdownMenu
+            {!bulkSelection ? (
+              <>
+                <TaskSourceIndicator task={task} compact />
+                <DropdownMenu
               open={actionMenuOpen}
               onOpenChange={(open) => {
                 setActionMenuOpen(open);
@@ -7898,18 +7900,20 @@ function TaskRow({
             )}
               </>
               </DropdownMenuContent>
-            </DropdownMenu> : null}
+                </DropdownMenu>
+              </>
+            ) : null}
+            {showDragHandle && draggableTask && !pending ? (
+              <TaskImmediateDragHandle
+                label={`Reorder ${taskLabel}`}
+                scope="tasks"
+                previewRef={summaryRowRef}
+                onStart={beginTaskDrag}
+                onDrop={onTaskImmediateDrop}
+                onCancel={onTaskDragEnd}
+              />
+            ) : null}
           </div>
-        ) : null}
-        {showDragHandle && draggableTask && !pending ? (
-          <TaskImmediateDragHandle
-            label={`Reorder ${taskLabel}`}
-            scope="tasks"
-            previewRef={summaryRowRef}
-            onStart={beginTaskDrag}
-            onDrop={onTaskImmediateDrop}
-            onCancel={onTaskDragEnd}
-          />
         ) : null}
       </div>
       </> : null}
