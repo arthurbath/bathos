@@ -1005,11 +1005,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setTouchListElasticActive(false);
   }, []);
   const handleTouchQuickFindStart = useCallback((event: ReactTouchEvent) => {
+    const startedOnDragHandle = event.target instanceof Element
+      && event.target.closest('[data-task-drag-handle-control]') !== null;
     if (
       !touchQuickFindEnabled
       || !quickFindListEligible
       || quickFindOpen
       || event.touches.length !== 1
+      || startedOnDragHandle
       || document.querySelector('[role="dialog"], [data-radix-portal], [data-vaul-drawer]')
     ) {
       resetTouchQuickFindPull();

@@ -1444,6 +1444,63 @@ describe('TasksShell', () => {
     }
   });
 
+  it('reserves touch pulls from drag handles for reordering instead of Quick Find', async () => {
+    const maxTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      'maxTouchPoints',
+    );
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 5,
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [task, taskTodoFixture({
+        id: 'task-b',
+        title: 'Second task',
+        destination: 'anytime',
+        today_section: 'next',
+        start_date: '2026-07-20',
+      })],
+    });
+    mockTaskDragHandleVisibility.mockReturnValue({
+      visibility: 'always',
+      loading: false,
+      error: null,
+      pending: false,
+      setVisibility: vi.fn().mockResolvedValue(undefined),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const handle = container.querySelector<HTMLElement>(
+        '[data-task-drag-handle-control]',
+      )!;
+      await act(async () => {
+        dispatchTouch(handle, 'touchstart', 20);
+        dispatchTouch(handle, 'touchmove', 220);
+      });
+      expect(container.querySelector('[data-task-pull-to-find-indicator]')).toBeNull();
+
+      await act(async () => {
+        dispatchTouch(handle, 'touchend');
+        await Promise.resolve();
+      });
+      expect(document.querySelector('[data-task-quick-find]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+      if (maxTouchPointsDescriptor) {
+        Object.defineProperty(
+          window.navigator,
+          'maxTouchPoints',
+          maxTouchPointsDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window.navigator, 'maxTouchPoints');
+      }
+    }
+  });
+
   it('elastically resists a touch pull at the bottom without opening Quick Find', async () => {
     const maxTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
       window.navigator,

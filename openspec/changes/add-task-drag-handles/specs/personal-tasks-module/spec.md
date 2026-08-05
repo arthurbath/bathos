@@ -43,6 +43,10 @@ The Tasks module SHALL persist an account-level Drag Handles preference with Hid
 - **WHEN** a touch gesture begins directly on an exposed handle
 - **THEN** Tasks prevents browser scrolling for that gesture, captures the pointer, and updates the established list insertion indicator as the pointer moves
 
+#### Scenario: Keep pull-to-find out of handle gestures
+- **WHEN** a touch gesture begins on an exposed task or checklist drag handle while the list is at its top boundary
+- **THEN** Tasks reserves that gesture for reordering and does not reveal or open Quick Find
+
 #### Scenario: Reuse established drop rules
 - **WHEN** a handle drag ends over or after crossing a valid insertion position
 - **THEN** Tasks applies the same eligibility, grouped ordering, autosave boundary, persistence, undo history, and rollback rules as the corresponding existing row drag

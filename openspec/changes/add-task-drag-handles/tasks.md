@@ -35,3 +35,8 @@
 
 - [x] 6.1 Keep the ordinary-task ellipsis mounted while its drawer is open and group it compactly with a visible handle.
 - [x] 6.2 Apply the same compact ellipsis-to-handle rhythm to recurrence prototypes and add regression coverage.
+
+## 7. Handle-Owned Gesture Refinement
+
+- [x] 7.1 Exclude task and checklist handle-origin touch sequences from the pull-to-find gesture.
+- [x] 7.2 Add regression coverage proving a handle pull cannot reveal or open Quick Find while ordinary list pulls still can.

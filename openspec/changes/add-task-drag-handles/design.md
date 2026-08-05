@@ -39,6 +39,8 @@ Alternative considered: store separate per-device settings. This would complicat
 
 The handle uses Pointer Events, pointer capture, and `touch-action: none`. Pointer down starts transient dragging immediately. Pointer movement hit-tests registered task or checklist drop targets and updates the existing insertion indicator. Pointer up invokes the existing commit function. The rest of each row retains its current touch behavior and native scrolling.
 
+The Tasks shell's pull-to-find gesture rejects touch sequences whose initial target is a task or checklist drag handle. This keeps the handle-owned reorder gesture exclusive even when the list is resting at its top boundary, where the downward pull would otherwise begin Quick Find.
+
 Alternative considered: dispatch a synthetic HTML drag event. Browser security and `DataTransfer` restrictions make synthetic native drag unreliable, especially on iOS. Alternative considered: set `touch-action: none` on the whole row. This would steal ordinary list scrolling and is rejected.
 
 ### Keep pointer-drop routing local to Tasks
