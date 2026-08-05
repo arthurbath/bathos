@@ -438,8 +438,7 @@ private struct TaskWidgetHorizonMarker: View {
     var body: some View {
         Group {
             if horizon == "inbox" {
-                Image(systemName: "tray")
-                    .font(.system(size: 12, weight: .regular))
+                TaskWidgetInboxMarker()
             } else {
                 TaskWidgetClockMarker(hour: hour)
             }
@@ -475,6 +474,40 @@ private struct TaskWidgetHorizonMarker: View {
 
     private var accessibilityLabel: String {
         horizon.prefix(1).uppercased() + horizon.dropFirst()
+    }
+}
+
+private struct TaskWidgetInboxMarker: View {
+    var body: some View {
+        Canvas { context, size in
+            let x = { (value: Double) in value * size.width / 15 }
+            let y = { (value: Double) in value * size.height / 15 }
+            var tray = Path()
+            tray.move(to: CGPoint(x: x(2), y: y(8.5)))
+            tray.addLine(to: CGPoint(x: x(3.4), y: y(3.6)))
+            tray.addLine(to: CGPoint(x: x(11.6), y: y(3.6)))
+            tray.addLine(to: CGPoint(x: x(13), y: y(8.5)))
+            tray.addLine(to: CGPoint(x: x(11.8), y: y(11.4)))
+            tray.addLine(to: CGPoint(x: x(3.2), y: y(11.4)))
+            tray.closeSubpath()
+            tray.move(to: CGPoint(x: x(2.2), y: y(8.5)))
+            tray.addLine(to: CGPoint(x: x(5.4), y: y(8.5)))
+            tray.addCurve(
+                to: CGPoint(x: x(9.6), y: y(8.5)),
+                control1: CGPoint(x: x(6.1), y: y(10.1)),
+                control2: CGPoint(x: x(8.9), y: y(10.1))
+            )
+            tray.addLine(to: CGPoint(x: x(12.8), y: y(8.5)))
+            context.stroke(
+                tray,
+                with: .foreground,
+                style: StrokeStyle(
+                    lineWidth: 1.6,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
+        }
     }
 }
 

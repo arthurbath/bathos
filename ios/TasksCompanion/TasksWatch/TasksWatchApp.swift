@@ -35,7 +35,15 @@ struct TasksWatchCaptureView: View {
                     .font(.system(size: 26, weight: .medium))
                     .foregroundStyle(.white)
                     .frame(width: 64, height: 64)
-                    .background(Circle().fill(.green))
+                    .background(
+                        Circle().fill(Color(red: 24 / 255, green: 143 / 255, blue: 77 / 255))
+                    )
+                    .overlay(
+                        Circle().stroke(
+                            Color(red: 64 / 255, green: 194 / 255, blue: 112 / 255),
+                            lineWidth: 1
+                        )
+                    )
                     .contentShape(Circle())
             } onSubmit: { summary in
                 model.submit(summary)
