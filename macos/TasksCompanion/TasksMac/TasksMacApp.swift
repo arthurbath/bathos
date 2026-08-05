@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct TasksMacApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var browserModel = TasksBrowserModel()
     @StateObject private var keyboardController = TasksMacKeyboardController()
 
@@ -18,6 +19,11 @@ struct TasksMacApp: App {
                 .onOpenURL(perform: handleURL)
                 .onAppear {
                     keyboardController.attach(to: browserModel)
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        browserModel.notifyNativeAppBecameActive()
+                    }
                 }
         }
         .defaultSize(width: 1_100, height: 780)

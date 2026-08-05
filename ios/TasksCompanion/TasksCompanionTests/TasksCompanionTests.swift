@@ -870,6 +870,11 @@ final class TasksCompanionTests: XCTestCase {
             TaskWidgetPresentationPolicy.lockScreenTaskRowSpacing,
             4
         )
+        XCTAssertEqual(TaskWidgetPresentationPolicy.lockScreenTaskFontSize, 13)
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.emptyStateSystemImageName,
+            "sparkles"
+        )
         XCTAssertEqual(
             tasks.prefix(
                 TaskWidgetPresentationPolicy.lockScreenTaskLimit
@@ -1063,6 +1068,15 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertTrue(
             TasksBrowserModel.taskUndoCommandJavaScript.contains(
                 "command: \"undo\""
+            )
+        )
+    }
+
+    @MainActor
+    func testNativeActivationRequestsAFreshTasksSyncStream() {
+        XCTAssertTrue(
+            TasksBrowserModel.nativeAppActiveJavaScript.contains(
+                "bathos:tasks-native-app-active"
             )
         )
     }

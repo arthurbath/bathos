@@ -178,7 +178,8 @@ private struct TaskListLockScreenWidgetView: View {
                                 .font(.system(size: 10, weight: .regular))
                                 Text(task.summary)
                                     .font(.system(
-                                        size: 13,
+                                        size: TaskWidgetPresentationPolicy
+                                            .lockScreenTaskFontSize,
                                         weight: .regular,
                                         design: .default
                                     ))
@@ -365,15 +366,21 @@ private struct TaskListWidgetView: View {
 
     private func emptyState(_ message: String) -> some View {
         VStack(spacing: 8) {
-            Image(systemName: entry.snapshot == nil ? "rectangle.and.hand.point.up.left" : "checkmark")
+            Image(systemName: entry.snapshot == nil
+                ? "rectangle.and.hand.point.up.left"
+                : TaskWidgetPresentationPolicy.emptyStateSystemImageName
+            )
                 .font(.title2)
                 .foregroundStyle(.secondary)
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .top)
-        .padding(.top, 8)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .center
+        )
     }
 
     private func taskSymbol(_ task: TaskWidgetTask) -> String {

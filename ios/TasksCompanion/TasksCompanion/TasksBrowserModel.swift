@@ -78,6 +78,9 @@ final class TasksBrowserModel: NSObject, ObservableObject {
       }
     }));
     """
+    static let nativeAppActiveJavaScript = """
+    window.dispatchEvent(new CustomEvent("bathos:tasks-native-app-active"));
+    """
     static let reloadSafeWebsiteDataTypes: Set<String> = [
         WKWebsiteDataTypeDiskCache,
         WKWebsiteDataTypeFetchCache,
@@ -227,6 +230,10 @@ final class TasksBrowserModel: NSObject, ObservableObject {
 
     func requestTaskUndo() {
         webView?.evaluateJavaScript(Self.taskUndoCommandJavaScript)
+    }
+
+    func notifyNativeAppBecameActive() {
+        webView?.evaluateJavaScript(Self.nativeAppActiveJavaScript)
     }
 
     func didStartLoading() {

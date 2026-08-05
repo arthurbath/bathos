@@ -53,7 +53,9 @@ enum TaskWidgetPresentationPolicy {
     static let lockScreenTaskLimit = 3
     static let lockScreenTaskRowMinimumHeight: CGFloat = 16
     static let lockScreenTaskRowSpacing: CGFloat = 4
+    static let lockScreenTaskFontSize: CGFloat = 13
     static let lockScreenLeadingSystemImageName = "square"
+    static let emptyStateSystemImageName = "sparkles"
 
     static func verticallyCentersLockScreenTasks(taskCount: Int) -> Bool {
         taskCount >= lockScreenTaskLimit

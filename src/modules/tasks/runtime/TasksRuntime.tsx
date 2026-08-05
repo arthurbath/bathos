@@ -63,6 +63,7 @@ import {
 } from '@/modules/tasks/runtime/taskRuntimeRecovery';
 
 export const TASKS_STARTUP_REFRESH_TIMEOUT_MS = 15_000;
+export const TASKS_NATIVE_APP_ACTIVE_EVENT = 'bathos:tasks-native-app-active';
 
 export function TasksRuntimeProvider({
   ownerId,
@@ -139,7 +140,11 @@ export function TasksRuntimeProvider({
     let startupRefreshTimeout: ReturnType<typeof setTimeout> | undefined;
     let startupSyncBaseline: number | null = null;
     let startupSyncBaselineCaptured = false;
+    let nativeReconnectInFlight: Promise<void> | null = null;
     const endpoint = configuredEndpoint;
+    const connector = endpoint
+      ? createTasksSupabaseConnector({ endpoint, supabase })
+      : null;
     const isBrowserOnline = () => window.navigator.onLine !== false;
     const isCurrentGeneration = () => isCurrentTasksRuntimeGeneration(
       active,
@@ -184,10 +189,32 @@ export function TasksRuntimeProvider({
       setSyncState(resolveTasksSyncState(database.currentStatus, isBrowserOnline()));
     };
 
+    const refreshNativeAppSync = () => {
+      if (!isCurrentGeneration() || !connector || !isBrowserOnline()) {
+        return;
+      }
+      beginStartupRefresh();
+      setSyncState('connecting');
+      if (nativeReconnectInFlight) {
+        return;
+      }
+      nativeReconnectInFlight = database.connect(connector)
+        .catch(() => {
+          if (isCurrentGeneration()) {
+            releaseStartupRefresh();
+            setSyncState('offline');
+          }
+        })
+        .finally(() => {
+          nativeReconnectInFlight = null;
+        });
+    };
+
     beginStartupRefresh();
 
     window.addEventListener('offline', refreshBrowserNetworkState);
     window.addEventListener('online', refreshBrowserNetworkState);
+    window.addEventListener(TASKS_NATIVE_APP_ACTIVE_EVENT, refreshNativeAppSync);
 
     const refreshQueueDepth = async () => {
       const queue = await database.getUploadQueueStats();
@@ -283,7 +310,10 @@ export function TasksRuntimeProvider({
           planningTimeZone: settings.planning_timezone,
         });
         if (endpoint) {
-          const connector = createTasksSupabaseConnector({ endpoint, supabase });
+          if (!connector) {
+            releaseStartupRefresh();
+            return;
+          }
           setSyncState('connecting');
           const baselineLastSyncedAt = database.currentStatus.lastSyncedAt;
           startupSyncBaseline = baselineLastSyncedAt instanceof Date
@@ -350,6 +380,7 @@ export function TasksRuntimeProvider({
       active = false;
       window.removeEventListener('offline', refreshBrowserNetworkState);
       window.removeEventListener('online', refreshBrowserNetworkState);
+      window.removeEventListener(TASKS_NATIVE_APP_ACTIVE_EVENT, refreshNativeAppSync);
       disposeStatusListener?.();
       if (queuePoll !== undefined) {
         clearInterval(queuePoll);
