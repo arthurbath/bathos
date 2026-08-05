@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyTaskSelectionGesture,
+  isMacControlTaskSelectionPointer,
   isMacLikeTaskPlatform,
   type TaskSelectionState,
 } from './taskSelection';
@@ -34,6 +35,24 @@ describe('task selection gestures', () => {
       shiftKey: false,
       macLikePlatform: true,
     })!;
+    expect(selected).toEqual({
+      active: true,
+      anchorId: 'b',
+      focusedId: null,
+      selectedIds: new Set(['b']),
+    });
+  });
+
+  it('enters explicit selection mode for a Mac Control-click', () => {
+    const selected = applyTaskSelectionGesture(inactive(), {
+      taskId: 'b',
+      visibleTaskIds: ['a', 'b', 'c'],
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: false,
+      macLikePlatform: true,
+    });
+
     expect(selected).toEqual({
       active: true,
       anchorId: 'b',
@@ -152,6 +171,29 @@ describe('task selection gestures', () => {
     })).toEqual(inactive());
   });
 
+  it('toggles active Mac selection with Control-click', () => {
+    const selected: TaskSelectionState = {
+      active: true,
+      anchorId: 'b',
+      focusedId: null,
+      selectedIds: new Set(['b']),
+    };
+
+    expect(applyTaskSelectionGesture(selected, {
+      taskId: 'c',
+      visibleTaskIds: ['a', 'b', 'c'],
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: false,
+      macLikePlatform: true,
+    })).toEqual({
+      active: true,
+      anchorId: 'b',
+      focusedId: null,
+      selectedIds: new Set(['b', 'c']),
+    });
+  });
+
   it('replaces repeated Shift-click ranges from the original anchor', () => {
     const entered = applyTaskSelectionGesture(inactive(), {
       taskId: 'b',
@@ -204,5 +246,23 @@ describe('task selection gestures', () => {
     expect(isMacLikeTaskPlatform('MacIntel')).toBe(true);
     expect(isMacLikeTaskPlatform('iPhone')).toBe(true);
     expect(isMacLikeTaskPlatform('Win32')).toBe(false);
+  });
+
+  it('recognizes only Mac Control-left-click as the pointer interception gesture', () => {
+    expect(isMacControlTaskSelectionPointer({
+      macLikePlatform: true,
+      ctrlKey: true,
+      button: 0,
+    })).toBe(true);
+    expect(isMacControlTaskSelectionPointer({
+      macLikePlatform: false,
+      ctrlKey: true,
+      button: 0,
+    })).toBe(false);
+    expect(isMacControlTaskSelectionPointer({
+      macLikePlatform: true,
+      ctrlKey: true,
+      button: 2,
+    })).toBe(false);
   });
 });

@@ -4424,6 +4424,89 @@ describe('TasksShell', () => {
     }
   });
 
+  it('treats Mac Control-click as one context-menu-free task selection gesture', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    const secondTask = taskTodoFixture({
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [task, secondTask] });
+    const { container, root } = renderShell();
+
+    const controlClick = async (target: HTMLElement) => {
+      const contextMenu = new MouseEvent('contextmenu', {
+        ctrlKey: true,
+        button: 2,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        target.dispatchEvent(new MouseEvent('mousedown', {
+          ctrlKey: true,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        }));
+        target.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        }));
+        target.dispatchEvent(contextMenu);
+        await Promise.resolve();
+      });
+      return contextMenu;
+    };
+
+    try {
+      const firstTitle = container.querySelector<HTMLElement>('[data-task-id="task-a"]')!;
+      const firstContextMenu = await controlClick(firstTitle);
+      expect(firstContextMenu.defaultPrevented).toBe(true);
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task',
+      );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+
+      const secondTitle = container.querySelector<HTMLElement>('[data-task-id="task-b"]')!;
+      await controlClick(secondTitle);
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '2 Tasks',
+      );
+
+      await controlClick(firstTitle);
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task',
+      );
+      expect(container.querySelector('[aria-label="Deselect Second task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+
+      const nonTaskContextMenu = new MouseEvent('contextmenu', {
+        ctrlKey: true,
+        button: 2,
+        bubbles: true,
+        cancelable: true,
+      });
+      container.querySelector<HTMLElement>('[data-task-view-heading]')
+        ?.dispatchEvent(nonTaskContextMenu);
+      expect(nonTaskContextMenu.defaultPrevented).toBe(false);
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
+      cleanup(root, container);
+    }
+  });
+
   it('clears incidental summary focus after platform-modifier selection and bare Shift', async () => {
     const secondTask = taskTodoFixture({
       ...task,
@@ -12218,6 +12301,11 @@ describe('TasksShell', () => {
   });
 
   it('selects dated recurrence prototypes with task gestures and toggles the active lasso', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
     const definition = taskRecurrenceDefinitionFixture({
       id: 'recurrence-selection',
       name: 'Selectable Repeat',
@@ -12265,14 +12353,28 @@ describe('TasksShell', () => {
       const prototypeTitle = container.querySelector<HTMLButtonElement>(
         'button[aria-label="Open Selectable Repeat"]',
       )!;
+      const contextMenu = new MouseEvent('contextmenu', {
+        ctrlKey: true,
+        button: 2,
+        bubbles: true,
+        cancelable: true,
+      });
       await act(async () => {
+        prototypeTitle.dispatchEvent(new MouseEvent('mousedown', {
+          ctrlKey: true,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        }));
         prototypeTitle.dispatchEvent(new MouseEvent('click', {
           ctrlKey: true,
           bubbles: true,
           cancelable: true,
         }));
+        prototypeTitle.dispatchEvent(contextMenu);
         await Promise.resolve();
       });
+      expect(contextMenu.defaultPrevented).toBe(true);
       expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
         '1 Task',
       );
@@ -12327,6 +12429,10 @@ describe('TasksShell', () => {
           .find(({ textContent }) => textContent === 'Edit...'),
       ).not.toBeDisabled();
     } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
       cleanup(root, container);
     }
   });

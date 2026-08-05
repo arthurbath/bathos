@@ -40,6 +40,7 @@ import {
   formatTaskCompactCalendarDayOffset,
   formatTaskRelativeCalendarDate,
 } from '@/modules/tasks/domain/taskDates';
+import { isMacControlTaskSelectionPointer } from '@/modules/tasks/domain/taskSelection';
 import { planChecklistGroupMove } from '@/modules/tasks/domain/taskChecklistOrder';
 import {
   buildRecurrencePrototypeEditInput,
@@ -74,6 +75,7 @@ type PrototypeRowSharedProps = {
   onFocusRow?: () => void;
   onMoveFocus?: (direction: -1 | 1) => void;
   onActivate?: () => void;
+  macControlClickSelection?: boolean;
 };
 
 export function WaitingRecurrenceRow({
@@ -147,6 +149,7 @@ function RecurrencePrototypeRow({
   onFocusRow,
   onMoveFocus,
   onActivate,
+  macControlClickSelection = false,
   waiting = false,
   onGoToInstance,
   dragPlacement = null,
@@ -250,6 +253,26 @@ function RecurrencePrototypeRow({
   };
 
   const draggable = !waiting && onDragStart && onDragOver && onDragEnd;
+  const handleMacControlSelectionMouseDown = (event: MouseEvent<HTMLElement>) => {
+    if (
+      !macControlClickSelection
+      || !onSelect
+      || !isMacControlTaskSelectionPointer({
+        macLikePlatform: true,
+        ctrlKey: event.ctrlKey,
+        button: event.button,
+      })
+    ) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressClickUntilRef.current = Date.now() + 500;
+    onSelect(event);
+  };
+  const handleMacControlSelectionContextMenu = (event: MouseEvent<HTMLElement>) => {
+    if (!macControlClickSelection || !onSelect || !event.ctrlKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   return (
     <>
@@ -336,6 +359,8 @@ function RecurrencePrototypeRow({
           {navigationHref ? <a
             href={navigationHref}
             className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onMouseDown={handleMacControlSelectionMouseDown}
+            onContextMenu={handleMacControlSelectionContextMenu}
             onClick={(event) => {
               if (Date.now() <= suppressClickUntilRef.current) {
                 event.preventDefault();
@@ -378,6 +403,8 @@ function RecurrencePrototypeRow({
               'flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none',
               draggable && 'cursor-grab active:cursor-grabbing',
             )}
+            onMouseDown={handleMacControlSelectionMouseDown}
+            onContextMenu={handleMacControlSelectionContextMenu}
             onClick={(event) => {
               if (Date.now() <= suppressClickUntilRef.current) {
                 event.preventDefault();

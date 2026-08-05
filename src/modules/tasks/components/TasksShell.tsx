@@ -227,6 +227,7 @@ import {
 } from '@/modules/tasks/domain/taskUpcoming';
 import {
   applyTaskSelectionGesture,
+  isMacControlTaskSelectionPointer,
   isMacLikeTaskPlatform,
 } from '@/modules/tasks/domain/taskSelection';
 import {
@@ -3758,6 +3759,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         showAreaMetadata={searchRow ? searchRow.route !== 'anytime' : view !== 'anytime'}
         selected={searchRow ? false : selectedTaskId === task.id}
         focused={searchRow ? searchRow.focused : focusedTaskId === task.id}
+        macControlClickSelection={!searchRow
+          && !isCreationDraft
+          && bulkEligible
+          && macLikePlatform}
         onSelect={searchRow ? (event) => {
           event.preventDefault();
           setSearchTarget({ kind: 'task', taskId: task.id, targetPath: searchRow.href });
@@ -4024,6 +4029,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         showAreaMetadata
         selected={searchRow ? false : selectedTaskId === task.id}
         focused={searchRow ? searchRow.focused : focusedTaskId === task.id}
+        macControlClickSelection={!searchRow && macLikePlatform}
         onSelect={searchRow ? (event) => {
           event.preventDefault();
           setSearchTarget({ kind: 'task', taskId: task.id, targetPath: searchRow.href });
@@ -4855,6 +4861,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       }}
                       bulkMode={bulkMode}
                       bulkSelection={bulkSelection}
+                      macControlClickSelection={macLikePlatform}
                       onPrototypeSelect={handleRecurrencePrototypePointerSelection}
                       renderTask={renderActiveTask}
                     />
@@ -6331,6 +6338,7 @@ function UpcomingTaskSections({
   onPrototypeDragEnd,
   bulkMode,
   bulkSelection,
+  macControlClickSelection,
   onPrototypeSelect,
   renderTask,
 }: {
@@ -6376,6 +6384,7 @@ function UpcomingTaskSections({
   onPrototypeDragEnd: () => void;
   bulkMode: boolean;
   bulkSelection: ReadonlySet<string>;
+  macControlClickSelection: boolean;
   onPrototypeSelect: (
     event: MouseEvent<HTMLElement>,
     definitionId: string,
@@ -6562,6 +6571,7 @@ function UpcomingTaskSections({
                         'selection-control',
                       ),
                     } : undefined}
+                    macControlClickSelection={macControlClickSelection}
                     onSelect={(event) => onPrototypeSelect(
                       event,
                       row.prototype.definition.id,
@@ -6576,6 +6586,23 @@ function UpcomingTaskSections({
   );
 }
 
+const TASK_ROW_NON_ACTIVATION_SELECTOR = [
+  'button:not([data-task-title-control])',
+  'a:not([data-task-title-control])',
+  'input',
+  'textarea',
+  'select',
+  '[role="button"]:not([data-task-title-control])',
+  '[role="menu"]',
+  '[role="menuitem"]',
+  '[role="dialog"]',
+  '[data-task-editor-region]',
+].join(', ');
+
+function isTaskRowActivationTarget(target: EventTarget | null): boolean {
+  return !(target instanceof Element && target.closest(TASK_ROW_NON_ACTIVATION_SELECTOR));
+}
+
 function TaskRow({
   task,
   quickEntry = false,
@@ -6587,6 +6614,7 @@ function TaskRow({
   showAreaMetadata,
   selected,
   focused,
+  macControlClickSelection,
   onSelect,
   onTouchSwipeSelect,
   onActivate,
@@ -6633,6 +6661,7 @@ function TaskRow({
   showAreaMetadata: boolean;
   selected: boolean;
   focused: boolean;
+  macControlClickSelection: boolean;
   onSelect: (event: MouseEvent<HTMLElement>) => void;
   onTouchSwipeSelect: () => void;
   onActivate: () => void;
@@ -7225,7 +7254,35 @@ function TaskRow({
       data-task-row-id={task.id}
       data-task-search-id={task.id}
       data-task-row-focus-target
+      onMouseDownCapture={(event) => {
+        if (
+          !macControlClickSelection
+          || !isTaskRowActivationTarget(event.target)
+          || !isMacControlTaskSelectionPointer({
+            macLikePlatform: true,
+            ctrlKey: event.ctrlKey,
+            button: event.button,
+          })
+        ) return;
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClickUntilRef.current = Date.now() + 500;
+        onSelect(event);
+      }}
+      onContextMenuCapture={(event) => {
+        if (
+          !macControlClickSelection
+          || !event.ctrlKey
+          || !isTaskRowActivationTarget(event.target)
+        ) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       onClick={(event) => {
+        if (Date.now() <= suppressClickUntilRef.current) {
+          event.preventDefault();
+          return;
+        }
         const target = event.target instanceof Element ? event.target : null;
         if (
           target?.closest(

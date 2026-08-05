@@ -21,7 +21,9 @@ export function applyTaskSelectionGesture(
   current: TaskSelectionState,
   gesture: TaskSelectionGesture,
 ): TaskSelectionState | null {
-  const platformModifier = gesture.macLikePlatform ? gesture.metaKey : gesture.ctrlKey;
+  const platformModifier = gesture.macLikePlatform
+    ? gesture.metaKey || gesture.ctrlKey
+    : gesture.ctrlKey;
   if (!current.active && !platformModifier && !gesture.shiftKey) {
     return null;
   }
@@ -94,6 +96,14 @@ export function applyTaskSelectionGesture(
     selectedIds.add(gesture.taskId);
   }
   return normalize(selectedIds, anchorId);
+}
+
+export function isMacControlTaskSelectionPointer(input: {
+  macLikePlatform: boolean;
+  ctrlKey: boolean;
+  button: number;
+}): boolean {
+  return input.macLikePlatform && input.ctrlKey && input.button === 0;
 }
 
 export function isMacLikeTaskPlatform(platform: string): boolean {
