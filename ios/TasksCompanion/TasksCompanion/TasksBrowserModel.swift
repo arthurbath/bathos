@@ -13,10 +13,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         "configure-quick-entry-shortcut"
     static let clearQuickEntryShortcutMessageType =
         "clear-quick-entry-shortcut"
-    static let quickEntryFinishedMessageType = "quick-entry-finished"
-    static let quickEntryReadyMessageType = "quick-entry-ready"
-    static let quickEntryDismissRequestedMessageType =
-        "quick-entry-dismiss-requested"
+    static let quickEntryCredentialMessageType = "quick-entry-credential"
     static let contentReadyMessageType = "content-ready"
     static let newTaskSummaryInputIdentifier = "task-title-task-draft:new"
     static let newTaskSummaryFocusJavaScript = """
@@ -96,7 +93,6 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     @Published private(set) var requestedURL = TaskNativeRoute.list(.today).webURL
     @Published private(set) var isLoading = true
     @Published private(set) var hasLoadedContent = false
-    @Published private(set) var quickEntryPresentationReady = true
     @Published private(set) var loadError: String?
 
     weak var webView: WKWebView?
@@ -106,33 +102,24 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         TaskQuickEntryShortcutPayload
     ) -> TaskQuickEntryShortcutResponse)?
     var clearQuickEntryShortcut: (() -> TaskQuickEntryShortcutResponse)?
-    var quickEntryDidFinish: ((_ committed: Bool) -> Void)?
-    var quickEntryPresentationDidBecomeReady: (() -> Void)?
-    var quickEntryDismissalRequested: (() -> Void)?
 
     private let coldStartRecoveryDelayNanoseconds: UInt64
     private let contentReadyFallbackDelayNanoseconds: UInt64
-    private let quickEntryPresentationFallbackDelayNanoseconds: UInt64
     private let inPageNavigator: InPageNavigator
     private var coldStartRecoveryTask: Task<Void, Never>?
     private var contentReadyFallbackTask: Task<Void, Never>?
-    private var quickEntryPresentationFallbackTask: Task<Void, Never>?
     private var isPerformingColdStartRecovery = false
     private var navigationDidFinish = false
     private var contentReadyReceived = false
-    private var quickEntryReadyReceived = false
 
     init(
         coldStartRecoveryDelayNanoseconds: UInt64 = 400_000_000,
         contentReadyFallbackDelayNanoseconds: UInt64 = 2_000_000_000,
-        quickEntryPresentationFallbackDelayNanoseconds: UInt64 = 12_000_000_000,
         inPageNavigator: @escaping InPageNavigator = TasksBrowserModel.navigateInPage
     ) {
         self.coldStartRecoveryDelayNanoseconds = coldStartRecoveryDelayNanoseconds
         self.contentReadyFallbackDelayNanoseconds =
             contentReadyFallbackDelayNanoseconds
-        self.quickEntryPresentationFallbackDelayNanoseconds =
-            quickEntryPresentationFallbackDelayNanoseconds
         self.inPageNavigator = inPageNavigator
     }
 
@@ -163,28 +150,6 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         }
         isLoading = true
         webView?.load(URLRequest(url: nextURL))
-    }
-
-    func prepareForPresentation(of nextURL: URL) {
-        cancelColdStartRecovery()
-        beginQuickEntryPresentation()
-        requestedURL = nextURL
-        loadError = nil
-        if hasLoadedContent, let webView {
-            isLoading = false
-            inPageNavigator(webView, nextURL)
-            return
-        }
-        resetContentReadiness()
-        isLoading = true
-        hasLoadedContent = false
-        webView?.load(URLRequest(url: nextURL))
-    }
-
-    func cancelQuickEntryPresentation() {
-        quickEntryPresentationFallbackTask?.cancel()
-        quickEntryPresentationFallbackTask = nil
-        quickEntryPresentationReady = false
     }
 
     func retry() {
@@ -250,9 +215,6 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         navigationDidFinish = true
         if contentReadyReceived {
             revealReadyContent()
-            if quickEntryReadyReceived {
-                revealQuickEntryPresentation()
-            }
             return
         }
         scheduleContentReadyFallback()
@@ -271,13 +233,6 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             return
         }
         revealReadyContent()
-    }
-
-    func performQuickEntryPresentationFallback() {
-        guard !quickEntryPresentationReady else {
-            return
-        }
-        revealQuickEntryPresentation()
     }
 
     func didFailLoading(_ error: Error) {
@@ -369,34 +324,6 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         contentReadyReceived = false
     }
 
-    private func beginQuickEntryPresentation() {
-        quickEntryPresentationFallbackTask?.cancel()
-        quickEntryReadyReceived = false
-        quickEntryPresentationReady = false
-        quickEntryPresentationFallbackTask = Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-            try? await Task.sleep(
-                nanoseconds: self.quickEntryPresentationFallbackDelayNanoseconds
-            )
-            guard !Task.isCancelled else {
-                return
-            }
-            self.performQuickEntryPresentationFallback()
-        }
-    }
-
-    private func revealQuickEntryPresentation() {
-        guard !quickEntryPresentationReady else {
-            return
-        }
-        quickEntryPresentationFallbackTask?.cancel()
-        quickEntryPresentationFallbackTask = nil
-        quickEntryPresentationReady = true
-        quickEntryPresentationDidBecomeReady?()
-    }
-
     static func navigateInPage(_ webView: WKWebView, to url: URL) {
         var components = URLComponents()
         components.path = url.path
@@ -481,6 +408,41 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             Self.recordBridgeDiagnostic("Rejected: invalid envelope")
             return
         }
+#if os(macOS)
+        if envelope.type == Self.quickEntryCredentialMessageType {
+            guard let message = try? JSONDecoder().decode(
+                TaskNativeQuickEntryCredentialBridgeMessage.self,
+                from: data
+            ) else {
+                Self.recordBridgeDiagnostic("Rejected: invalid Quick Entry credential")
+                return
+            }
+            let credential = TasksNativeQuickEntryCredential(
+                payloadSchemaVersion: message.payloadSchemaVersion,
+                contractFingerprint: message.contractFingerprint,
+                capability: message.capability,
+                ownerId: message.ownerId,
+                installationId: message.installationId,
+                credential: message.credential,
+                expiresAt: message.expiresAt
+            )
+            do {
+                try credential.validate()
+                guard let installationID = try TaskWidgetInstallationStore()?.identifier(),
+                      installationID == credential.installationId else {
+                    Self.recordBridgeDiagnostic("Rejected: Quick Entry installation mismatch")
+                    return
+                }
+                try TasksNativeQuickEntryCredentialStore().store(credential)
+                Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
+            } catch {
+                Self.recordBridgeDiagnostic(
+                    "Rejected: Quick Entry credential validation or persistence"
+                )
+            }
+            return
+        }
+#endif
         if envelope.type == Self.configureQuickEntryShortcutMessageType {
             guard let request = try? JSONDecoder().decode(
                 TaskQuickEntryShortcutBridgeMessage.self,
@@ -514,36 +476,8 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             )
             return
         }
-        if envelope.type == Self.quickEntryFinishedMessageType {
-            guard let request = try? JSONDecoder().decode(
-                TaskQuickEntryFinishedBridgeMessage.self,
-                from: data
-            ) else {
-                Self.recordBridgeDiagnostic("Rejected: invalid quick-entry result")
-                return
-            }
-            quickEntryDidFinish?(request.committed)
-            Self.recordBridgeDiagnostic(
-                "Accepted: \(envelope.type); committed=\(request.committed)"
-            )
-            return
-        }
         if envelope.type == Self.contentReadyMessageType {
             didBecomeContentReady()
-            Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
-            return
-        }
-        if envelope.type == Self.quickEntryReadyMessageType {
-            quickEntryReadyReceived = true
-            didBecomeContentReady()
-            if navigationDidFinish || hasLoadedContent {
-                revealQuickEntryPresentation()
-            }
-            Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
-            return
-        }
-        if envelope.type == Self.quickEntryDismissRequestedMessageType {
-            quickEntryDismissalRequested?()
             Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
             return
         }
@@ -589,6 +523,19 @@ final class TasksBrowserModel: NSObject, ObservableObject {
                         }
                     }
                 }
+#if os(macOS)
+                let quickEntryStore = TasksNativeQuickEntryCredentialStore()
+                let quickEntryCredential = try? quickEntryStore.load()
+                _ = try? quickEntryStore.clear()
+                _ = try? TasksNativeQuickEntryBootstrapStore().clear()
+                if let quickEntryCredential {
+                    Task {
+                        await Self.revokeQuickEntryCredential(
+                            quickEntryCredential.credential
+                        )
+                    }
+                }
+#endif
             } else if envelope.type == "snapshot" {
                 changed = try store.accept(data)
             } else if envelope.type == "credential" {
@@ -644,6 +591,23 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         _ = try? await URLSession.shared.data(for: request)
     }
 
+#if os(macOS)
+    private static func revokeQuickEntryCredential(_ credential: String) async {
+        var request = URLRequest(url: TaskCompanionConstants.widgetActionsURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(
+            "QuickEntry \(credential)",
+            forHTTPHeaderField: "Authorization"
+        )
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "action": "revokeQuickEntry",
+        ])
+        _ = try? await URLSession.shared.data(for: request)
+    }
+#endif
+
     private func sendQuickEntryShortcutResponse(
         _ response: TaskQuickEntryShortcutResponse
     ) {
@@ -676,6 +640,18 @@ private struct TaskCredentialBridgeMessage: Decodable {
     let expiresAt: String
 }
 
+#if os(macOS)
+private struct TaskNativeQuickEntryCredentialBridgeMessage: Decodable {
+    let payloadSchemaVersion: Int
+    let contractFingerprint: String
+    let capability: String
+    let ownerId: UUID
+    let installationId: UUID
+    let credential: String
+    let expiresAt: String
+}
+#endif
+
 struct TaskQuickEntryShortcutPayload: Codable, Equatable {
     let code: String
     let command: Bool
@@ -692,8 +668,4 @@ struct TaskQuickEntryShortcutResponse: Codable, Equatable {
 
 private struct TaskQuickEntryShortcutBridgeMessage: Decodable {
     let shortcut: TaskQuickEntryShortcutPayload
-}
-
-private struct TaskQuickEntryFinishedBridgeMessage: Decodable {
-    let committed: Bool
 }

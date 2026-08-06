@@ -10,16 +10,13 @@ import {
   clearTaskNativeQuickEntryShortcut,
   clearTaskNativeWidgetCache,
   configureTaskNativeQuickEntryShortcut,
-  finishTaskNativeQuickEntry,
   getNativeNewTaskSignal,
   getNativeTaskDeepLinkId,
   hasNativeNewTaskSignal,
-  isTaskNativeQuickEntry,
   publishTaskNativeContentReady,
-  publishTaskNativeQuickEntryReady,
+  publishTaskNativeQuickEntryCredential,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
-  requestTaskNativeQuickEntryDismissal,
   requestTaskNativeNewTaskSummaryFocus,
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
@@ -511,6 +508,34 @@ describe('taskNativeWidgetBridge', () => {
     })]);
   });
 
+  it('publishes a contract-bound Quick Entry credential only to a current bridge', () => {
+    const messages: unknown[] = [];
+    const message = {
+      payloadSchemaVersion: 1 as const,
+      contractFingerprint:
+        '5ea30f93f4269dcb3423c4a5ca3c8c9e3b505a545e2052e584d7b56cc653cfe1' as const,
+      capability: 'native_quick_entry_v1' as const,
+      ownerId,
+      installationId: '30000000-0000-4000-8000-000000000001',
+      credential: `tqe_${'A'.repeat(43)}`,
+      expiresAt: '2026-09-04T12:00:00.000Z',
+    };
+    expect(publishTaskNativeQuickEntryCredential(message, {} as Window)).toBe(false);
+    expect(publishTaskNativeQuickEntryCredential(
+      message,
+      bridgeWindow(messages, 1),
+    )).toBe(false);
+    expect(publishTaskNativeQuickEntryCredential(
+      message,
+      bridgeWindow(messages),
+    )).toBe(true);
+    expect(messages).toEqual([expect.objectContaining({
+      type: 'quick-entry-credential',
+      schemaVersion: 2,
+      ...message,
+    })]);
+  });
+
   it('requests native Summary focus only from the current companion bridge', () => {
     const messages: unknown[] = [];
 
@@ -535,31 +560,7 @@ describe('taskNativeWidgetBridge', () => {
     }]);
   });
 
-  it('announces a mounted quick-entry editor only to the current companion bridge', () => {
-    const messages: unknown[] = [];
-
-    expect(publishTaskNativeQuickEntryReady({} as Window)).toBe(false);
-    expect(publishTaskNativeQuickEntryReady(bridgeWindow(messages, 1))).toBe(false);
-    expect(publishTaskNativeQuickEntryReady(bridgeWindow(messages))).toBe(true);
-    expect(messages).toEqual([{
-      type: 'quick-entry-ready',
-      schemaVersion: 2,
-    }]);
-  });
-
-  it('requests immediate quick-entry dismissal only through the current companion bridge', () => {
-    const messages: unknown[] = [];
-
-    expect(requestTaskNativeQuickEntryDismissal({} as Window)).toBe(false);
-    expect(requestTaskNativeQuickEntryDismissal(bridgeWindow(messages, 1))).toBe(false);
-    expect(requestTaskNativeQuickEntryDismissal(bridgeWindow(messages))).toBe(true);
-    expect(messages).toEqual([{
-      type: 'quick-entry-dismiss-requested',
-      schemaVersion: 2,
-    }]);
-  });
-
-  it('configures, clears, and finishes Mac quick entry only through the current bridge', () => {
+  it('configures and clears Mac quick entry only through the current bridge', () => {
     const messages: unknown[] = [];
     const shortcut = {
       code: 'Space',
@@ -581,8 +582,6 @@ describe('taskNativeWidgetBridge', () => {
     expect(clearTaskNativeQuickEntryShortcut({} as Window)).toBe(false);
     expect(clearTaskNativeQuickEntryShortcut(bridgeWindow(messages, 1))).toBe(false);
     expect(clearTaskNativeQuickEntryShortcut(bridgeWindow(messages))).toBe(true);
-    expect(finishTaskNativeQuickEntry(true, bridgeWindow(messages))).toBe(true);
-    expect(finishTaskNativeQuickEntry(false, bridgeWindow(messages))).toBe(true);
     expect(messages).toEqual([
       {
         type: 'configure-quick-entry-shortcut',
@@ -592,16 +591,6 @@ describe('taskNativeWidgetBridge', () => {
       {
         type: 'clear-quick-entry-shortcut',
         schemaVersion: 2,
-      },
-      {
-        type: 'quick-entry-finished',
-        schemaVersion: 2,
-        committed: true,
-      },
-      {
-        type: 'quick-entry-finished',
-        schemaVersion: 2,
-        committed: false,
       },
     ]);
   });
@@ -625,11 +614,5 @@ describe('taskNativeWidgetBridge', () => {
     expect(removeNativeNewTaskSignal(
       '?native_new_task=1&reminder_delivery=delivery-a',
     )).toBe('?reminder_delivery=delivery-a');
-  });
-
-  it('recognizes only the active Mac quick-entry route signal', () => {
-    expect(isTaskNativeQuickEntry('?native_quick_entry=1')).toBe(true);
-    expect(isTaskNativeQuickEntry('?native_quick_entry=0')).toBe(false);
-    expect(isTaskNativeQuickEntry('?native_new_task=1')).toBe(false);
   });
 });

@@ -14,6 +14,11 @@
 		BB0000000000000000001005 /* TaskWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000302 /* TaskWidgetSnapshot.swift */; };
 		BB0000000000000000001006 /* TaskNativeRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000303 /* TaskNativeRoute.swift */; };
 		BB0000000000000000001007 /* TaskCompanionConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000304 /* TaskCompanionConstants.swift */; };
+		BB0000000000000000001008 /* TasksNativeQuickEntryContract.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000108 /* TasksNativeQuickEntryContract.generated.swift */; };
+		BB000000000000000000100A /* TasksNativeQuickEntryDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000109 /* TasksNativeQuickEntryDraft.swift */; };
+		BB000000000000000000100B /* TasksNativeQuickEntryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000010A /* TasksNativeQuickEntryViewModel.swift */; };
+		BB000000000000000000100C /* TasksNativeQuickEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000010B /* TasksNativeQuickEntryView.swift */; };
+		BB000000000000000000100D /* TasksNativeQuickEntryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000010C /* TasksNativeQuickEntryService.swift */; };
 		BB0000000000000000001009 /* Tasks Apple Native Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000107 /* Tasks Apple Native Icon.icon */; };
 		BB0000000000000000001101 /* TasksMacWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000201 /* TasksMacWidgetsBundle.swift */; };
 		BB0000000000000000001102 /* TasksListWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000305 /* TasksListWidget.swift */; };
@@ -67,6 +72,11 @@
 		BB0000000000000000000105 /* TasksMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TasksMac.entitlements; sourceTree = "<group>"; };
 		BB0000000000000000000106 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB0000000000000000000107 /* Tasks Apple Native Icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../../raw/Tasks Apple Native Icon.icon"; sourceTree = SOURCE_ROOT; };
+		BB0000000000000000000108 /* TasksNativeQuickEntryContract.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksNativeQuickEntryContract.generated.swift; sourceTree = "<group>"; };
+		BB0000000000000000000109 /* TasksNativeQuickEntryDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksNativeQuickEntryDraft.swift; sourceTree = "<group>"; };
+		BB000000000000000000010A /* TasksNativeQuickEntryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksNativeQuickEntryViewModel.swift; sourceTree = "<group>"; };
+		BB000000000000000000010B /* TasksNativeQuickEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksNativeQuickEntryView.swift; sourceTree = "<group>"; };
+		BB000000000000000000010C /* TasksNativeQuickEntryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksNativeQuickEntryService.swift; sourceTree = "<group>"; };
 		BB0000000000000000000201 /* TasksMacWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksMacWidgetsBundle.swift; sourceTree = "<group>"; };
 		BB0000000000000000000202 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB0000000000000000000203 /* TasksMacWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TasksMacWidgets.entitlements; sourceTree = "<group>"; };
@@ -113,6 +123,11 @@
 				BB0000000000000000000101 /* TasksMacApp.swift */,
 				BB0000000000000000000102 /* TasksMacKeyboardController.swift */,
 				BB0000000000000000000103 /* TasksMacWebView.swift */,
+				BB0000000000000000000108 /* TasksNativeQuickEntryContract.generated.swift */,
+				BB0000000000000000000109 /* TasksNativeQuickEntryDraft.swift */,
+				BB000000000000000000010A /* TasksNativeQuickEntryViewModel.swift */,
+				BB000000000000000000010B /* TasksNativeQuickEntryView.swift */,
+				BB000000000000000000010C /* TasksNativeQuickEntryService.swift */,
 				BB0000000000000000000107 /* Tasks Apple Native Icon.icon */,
 				BB0000000000000000000104 /* Info.plist */,
 				BB0000000000000000000105 /* TasksMac.entitlements */,
@@ -250,6 +265,11 @@
 				BB0000000000000000001005 /* TaskWidgetSnapshot.swift in Sources */,
 				BB0000000000000000001006 /* TaskNativeRoute.swift in Sources */,
 				BB0000000000000000001007 /* TaskCompanionConstants.swift in Sources */,
+				BB0000000000000000001008 /* TasksNativeQuickEntryContract.generated.swift in Sources */,
+				BB000000000000000000100A /* TasksNativeQuickEntryDraft.swift in Sources */,
+				BB000000000000000000100B /* TasksNativeQuickEntryViewModel.swift in Sources */,
+				BB000000000000000000100C /* TasksNativeQuickEntryView.swift in Sources */,
+				BB000000000000000000100D /* TasksNativeQuickEntryService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

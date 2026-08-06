@@ -333,29 +333,17 @@ final class TasksMacTests: XCTestCase {
         XCTAssertNil(TasksGlobalShortcutStore.load(defaults: defaults))
     }
 
-    func testGlobalQuickEntryPanelUsesTheAuthoritativeWebEditorOnAllSpaces() {
+    func testGlobalQuickEntryPanelUsesTheNativeEditorOnAllSpaces() {
         let policy = TasksMacQuickEntryPanelPolicy.self
 
         XCTAssertEqual(policy.contentSize, NSSize(width: 520, height: 560))
-        XCTAssertEqual(policy.webURL.host, "os.bath.garden")
-        XCTAssertEqual(policy.webURL.path, "/tasks/today")
-        XCTAssertEqual(
-            URLComponents(
-                url: policy.webURL,
-                resolvingAgainstBaseURL: false
-            )?.queryItems,
-            [
-                URLQueryItem(name: "native_new_task", value: "1"),
-                URLQueryItem(name: "native_quick_entry", value: "1"),
-            ]
-        )
         XCTAssertTrue(policy.collectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertTrue(policy.collectionBehavior.contains(.fullScreenAuxiliary))
         XCTAssertTrue(policy.collectionBehavior.contains(.transient))
         XCTAssertEqual(policy.dragRegionHeight, 44)
     }
 
-    func testGlobalQuickEntryPanelCannotCollapseToHostedIntrinsicSize() {
+    func testGlobalQuickEntryPanelCannotCollapseToIntrinsicSize() {
         let panel = TasksMacQuickEntryPanel(
             contentRect: NSRect(x: 0, y: 0, width: 40, height: 80),
             styleMask: [.titled, .fullSizeContentView],
@@ -399,16 +387,10 @@ final class TasksMacTests: XCTestCase {
         XCTAssertTrue(panel.contentView?.layer?.masksToBounds == true)
     }
 
-    func testGlobalQuickEntryCancellationDispatchesTheOwnedWebEvent() {
-        XCTAssertTrue(
-            TasksMacQuickEntryPanelPolicy.cancelJavaScript.contains(
-                "bathos:tasks-native-quick-entry-cancel"
-            )
-        )
-    }
-
     func testGlobalQuickEntryForwardsOnlyTaskMetadataControlShortcuts() {
-        let forwardedKeys = ["e", "r", "t", "y", "d", "f", "g", "c", "v"]
+        let forwardedKeys = [
+            "e", "r", "t", "y", "n", "d", "f", "g", "h", "c", "v",
+        ]
         for key in forwardedKeys {
             XCTAssertEqual(
                 TasksMacQuickEntryControlShortcutPolicy.action(
@@ -458,14 +440,252 @@ final class TasksMacTests: XCTestCase {
         )
     }
 
-    func testGlobalQuickEntryMetadataJavaScriptDispatchesOneControlKey() {
-        let javaScript = TasksMacQuickEntryControlShortcutPolicy.javaScript(for: "e")
+    func testNativeQuickEntryMetadataShortcutsMutateTheDraftSemantically() throws {
+        let firstArea = TasksNativeQuickEntryArea(id: UUID(), name: "Household")
+        let secondArea = TasksNativeQuickEntryArea(id: UUID(), name: "Work")
+        let model = TasksNativeQuickEntryViewModel(areas: [firstArea, secondArea])
 
-        XCTAssertTrue(javaScript.contains("document.activeElement"))
-        XCTAssertTrue(javaScript.contains("new KeyboardEvent(\"keydown\""))
-        XCTAssertTrue(javaScript.contains("key: \"e\""))
-        XCTAssertTrue(javaScript.contains("ctrlKey: true"))
-        XCTAssertEqual(javaScript.components(separatedBy: "dispatchEvent").count - 1, 1)
+        XCTAssertFalse(model.canSave)
+
+        model.handleControlShortcut("e")
+        XCTAssertEqual(model.draft.focus, .start)
+        XCTAssertEqual(model.pickerRequest?.kind, .start)
+        let startPickerRequestID = try XCTUnwrap(model.pickerRequest?.id)
+
+        model.handleControlShortcut("t")
+        XCTAssertEqual(model.draft.todaySection, "now")
+        XCTAssertEqual(model.draft.focus, .start)
+        XCTAssertEqual(model.pickerRequest?.id, startPickerRequestID)
+
+        model.handleControlShortcut("y")
+        XCTAssertEqual(model.draft.reminderLocalTime, "09:00")
+        XCTAssertEqual(model.draft.focus, .reminder)
+
+        model.handleControlShortcut("r")
+        XCTAssertNil(model.draft.todaySection)
+        XCTAssertNil(model.draft.startDate)
+        XCTAssertNil(model.draft.reminderLocalTime)
+        XCTAssertEqual(model.draft.focus, .start)
+        XCTAssertEqual(model.pickerRequest?.id, startPickerRequestID)
+
+        XCTAssertFalse(model.handleControlShortcut("n"))
+        XCTAssertTrue(model.draft.showsNotes)
+        XCTAssertEqual(model.draft.focus, .notes)
+        XCTAssertTrue(model.handleControlShortcut("n"))
+
+        XCTAssertFalse(model.handleControlShortcut("h"))
+        XCTAssertTrue(model.draft.showsLink)
+        XCTAssertEqual(model.draft.focus, .link)
+        XCTAssertTrue(model.handleControlShortcut("h"))
+
+        model.handleControlShortcut("c")
+        XCTAssertEqual(model.draft.checklist.count, 1)
+        XCTAssertTrue(model.draft.showsChecklist)
+        let trailingID = try XCTUnwrap(model.draft.checklist.last?.id)
+
+        model.handleControlShortcut("c")
+        XCTAssertEqual(model.draft.checklist.count, 2)
+        XCTAssertNotEqual(model.draft.checklist.first?.id, trailingID)
+        XCTAssertEqual(model.draft.checklist.last?.id, trailingID)
+
+        model.handleControlShortcut("f")
+        XCTAssertEqual(model.draft.actionability, "rechecking")
+
+        model.handleControlShortcut("d")
+        XCTAssertEqual(model.draft.focus, .deadline)
+        XCTAssertEqual(model.pickerRequest?.kind, .deadline)
+        let deadlinePickerRequestID = try XCTUnwrap(model.pickerRequest?.id)
+        XCTAssertNotEqual(deadlinePickerRequestID, startPickerRequestID)
+
+        model.handleControlShortcut("v")
+        XCTAssertEqual(model.draft.areaID, firstArea.id)
+        XCTAssertEqual(model.draft.focus, .area)
+        model.handleControlShortcut("v")
+        XCTAssertEqual(model.draft.areaID, secondArea.id)
+        model.handleControlShortcut("v")
+        XCTAssertNil(model.draft.areaID)
+
+        model.handleControlShortcut("g")
+        XCTAssertEqual(model.draft.destination, "someday")
+        XCTAssertEqual(model.pickerRequest?.id, deadlinePickerRequestID)
+
+        let beforeSuppressedCommand = model.draft
+        model.handleControlShortcut("x")
+        XCTAssertEqual(model.draft, beforeSuppressedCommand)
+
+        model.draft.summary = "Ready to save"
+        XCTAssertTrue(model.canSave)
+    }
+
+    func testNativeQuickEntryFocusTraversalUsesContractOrderAndWraps() throws {
+        let firstChecklistID = UUID()
+        let secondChecklistID = UUID()
+        var draft = TasksNativeQuickEntryDraft()
+        draft.showsNotes = true
+        draft.showsLink = true
+        draft.checklist = [
+            .init(id: firstChecklistID, title: "First"),
+            .init(id: secondChecklistID, title: "Second"),
+        ]
+        draft.showsChecklist = true
+        draft.reminderLocalTime = "09:00"
+
+        let expected: [TasksNativeQuickEntryFocusTarget] = [
+            .summary,
+            .start,
+            .reminder,
+            .deadline,
+            .area,
+            .actionability,
+            .notes,
+            .link,
+            .checklist(firstChecklistID),
+            .checklist(secondChecklistID),
+            .cancel,
+            .save,
+        ]
+        XCTAssertEqual(draft.availableFocusTargets, expected)
+
+        for next in expected.dropFirst() {
+            draft.moveFocus(reverse: false)
+            XCTAssertEqual(draft.focus, next)
+        }
+        draft.moveFocus(reverse: false)
+        XCTAssertEqual(draft.focus, .summary)
+        draft.moveFocus(reverse: true)
+        XCTAssertEqual(draft.focus, .save)
+
+        draft.focus = .checklist(UUID())
+        draft.moveFocus(reverse: false)
+        XCTAssertEqual(draft.focus, .summary)
+        draft.focus = .checklist(UUID())
+        draft.moveFocus(reverse: true)
+        XCTAssertEqual(draft.focus, .save)
+    }
+
+    func testNativeQuickEntryFocusTraversalIncludesOptionalDisclosureButtons() {
+        var draft = TasksNativeQuickEntryDraft()
+
+        XCTAssertEqual(
+            draft.availableFocusTargets,
+            [
+                .summary,
+                .start,
+                .deadline,
+                .area,
+                .actionability,
+                .notes,
+                .link,
+                .checklistDisclosure,
+                .cancel,
+                .save,
+            ]
+        )
+
+        draft.focus = .actionability
+        draft.moveFocus(reverse: false)
+        XCTAssertEqual(draft.focus, .notes)
+        draft.moveFocus(reverse: false)
+        XCTAssertEqual(draft.focus, .link)
+        draft.moveFocus(reverse: false)
+        XCTAssertEqual(draft.focus, .checklistDisclosure)
+    }
+
+    func testNativeQuickEntryPanelOwnsForwardAndReverseTabTraversal() throws {
+        let panel = TasksMacQuickEntryPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        var traversals: [Bool] = []
+        panel.onTabTraversal = { reverse in
+            traversals.append(reverse)
+            return true
+        }
+
+        for modifiers: NSEvent.ModifierFlags in [[], [.shift]] {
+            let event = try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: modifiers,
+                timestamp: 0,
+                windowNumber: panel.windowNumber,
+                context: nil,
+                characters: "\t",
+                charactersIgnoringModifiers: "\t",
+                isARepeat: false,
+                keyCode: 48
+            ))
+            panel.sendEvent(event)
+        }
+
+        XCTAssertEqual(traversals, [false, true])
+    }
+
+    func testNativeQuickEntryRepeatedTextShortcutMovesCaretWithoutDelay() throws {
+        let panel = TasksMacQuickEntryPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 80))
+        editor.string = "Immediate typing stays ordered"
+        panel.contentView = editor
+        XCTAssertTrue(panel.makeFirstResponder(editor))
+
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        panel.moveTextInsertionToOppositeBoundary()
+        XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 0))
+
+        panel.moveTextInsertionToOppositeBoundary()
+        XCTAssertEqual(
+            editor.selectedRange(),
+            NSRange(location: editor.string.utf16.count, length: 0)
+        )
+    }
+
+    func testNativeQuickEntryNativePanelCancelsWithoutWebReadiness() throws {
+        var finishes: [Bool] = []
+        let controller = TasksMacQuickEntryPanelController {
+            finishes.append($0)
+        }
+
+        controller.show()
+        let panel = try XCTUnwrap(
+            NSApp.windows.compactMap { $0 as? TasksMacQuickEntryPanel }.first {
+                $0.isVisible
+            }
+        )
+        XCTAssertTrue(panel.isVisible)
+
+        controller.toggle()
+
+        XCTAssertFalse(panel.isVisible)
+        XCTAssertEqual(finishes, [false])
+    }
+
+    func testNativeQuickEntryDatePickerRemainsInsideTheFloatingPanel() throws {
+        let controller = TasksMacQuickEntryPanelController { _ in }
+
+        controller.show()
+        let panel = try XCTUnwrap(
+            NSApp.windows.compactMap { $0 as? TasksMacQuickEntryPanel }.first {
+                $0.isVisible
+            }
+        )
+        defer { panel.orderOut(nil) }
+
+        panel.onControlShortcut?("e")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertFalse(
+            NSApp.windows.contains { window in
+                window.parent === panel && !(window is TasksMacQuickEntryPanel)
+            }
+        )
     }
 
     func testGlobalQuickEntryControllerPresentsTheDeclaredContentSize() throws {
@@ -484,32 +704,6 @@ final class TasksMacTests: XCTestCase {
             panel.contentRect(forFrameRect: panel.frame).size,
             TasksMacQuickEntryPanelPolicy.contentSize
         )
-    }
-
-    func testWarmGlobalQuickEntryImmediatelyPresentsItsLoadingShell() throws {
-        let model = TasksBrowserModel(inPageNavigator: { _, _ in })
-        let webView = WKWebView()
-        model.webView = webView
-        model.didFinishLoading()
-        model.didBecomeContentReady()
-        XCTAssertTrue(model.hasLoadedContent)
-
-        let controller = TasksMacQuickEntryPanelController(
-            browserModel: model
-        ) { _ in }
-
-        controller.show()
-        let panel = try XCTUnwrap(
-            NSApp.windows.compactMap { $0 as? TasksMacQuickEntryPanel }.first {
-                $0.isVisible
-            }
-        )
-        defer {
-            panel.orderOut(nil)
-        }
-
-        XCTAssertTrue(panel.isVisible)
-        XCTAssertFalse(model.quickEntryPresentationReady)
     }
 
     func testGlobalQuickEntryDragRegionExplicitlyStartsWindowDrag() throws {
@@ -690,6 +884,741 @@ final class TasksMacTests: XCTestCase {
         XCTAssertEqual(try store.load(), snapshot)
         XCTAssertThrowsError(try store.accept(Data("invalid".utf8)))
         XCTAssertEqual(try store.load(), snapshot)
+    }
+
+    func testNativeQuickEntryContractMatchesTheNeutralSource() {
+        XCTAssertEqual(
+            TasksNativeQuickEntryContract.sourceFingerprint,
+            "5ea30f93f4269dcb3423c4a5ca3c8c9e3b505a545e2052e584d7b56cc653cfe1"
+        )
+        XCTAssertEqual(
+            TasksNativeQuickEntryContract.fields.map(\.id),
+            [
+                .summary,
+                .start,
+                .reminder,
+                .deadline,
+                .area,
+                .actionability,
+                .notes,
+                .link,
+                .checklist,
+            ]
+        )
+        XCTAssertEqual(
+            TasksNativeQuickEntryContract.commands.map(\.key),
+            ["e", "r", "t", "y", "n", "d", "f", "g", "h", "c", "v"]
+        )
+        XCTAssertEqual(
+            TasksNativeQuickEntryContract.layoutSections.map(\.id),
+            [.summary, .temporal, .identity, .optional]
+        )
+        XCTAssertEqual(
+            TasksNativeQuickEntryContract.layoutSections.flatMap(\.fieldIDs),
+            TasksNativeQuickEntryContract.fields.map(\.id)
+        )
+    }
+
+    func testNativeQuickEntryDraftUsesTodayInboxDefaultsAndStableRetryIDs() throws {
+        let clientMutationID = UUID()
+        let operationID = UUID()
+        var draft = TasksNativeQuickEntryDraft(
+            clientMutationID: clientMutationID,
+            operationID: operationID
+        )
+        draft.summary = "  Call Babs  "
+
+        let submission = try draft.normalizedSubmission(
+            planningDate: try TasksNativeCalendarDate(year: 2026, month: 8, day: 5)
+        )
+
+        XCTAssertEqual(submission.summary, "Call Babs")
+        XCTAssertEqual(submission.destination, "anytime")
+        XCTAssertEqual(submission.todaySection, "inbox")
+        XCTAssertEqual(submission.clientMutationID, clientMutationID)
+        XCTAssertEqual(submission.operationID, operationID)
+        XCTAssertEqual(
+            submission.contractFingerprint,
+            TasksNativeQuickEntryContract.sourceFingerprint
+        )
+    }
+
+    func testNativeQuickEntryDraftNormalizesOptionalFieldsAndChecklistOrder() throws {
+        let firstID = UUID()
+        let blankID = UUID()
+        let secondID = UUID()
+        var draft = TasksNativeQuickEntryDraft()
+        draft.summary = "Document the release"
+        draft.notes = "  Keep the Markdown.  "
+        draft.link = "   "
+        draft.checklist = [
+            .init(id: firstID, title: "  First  "),
+            .init(id: blankID, title: ""),
+            .init(id: secondID, title: "Second"),
+        ]
+
+        let submission = try draft.normalizedSubmission(
+            planningDate: try TasksNativeCalendarDate(year: 2026, month: 8, day: 5)
+        )
+
+        XCTAssertEqual(submission.notes, "Keep the Markdown.")
+        XCTAssertNil(submission.link)
+        XCTAssertEqual(
+            submission.checklist,
+            [
+                .init(clientID: firstID, title: "First", position: 0),
+                .init(clientID: secondID, title: "Second", position: 1),
+            ]
+        )
+    }
+
+    func testNativeQuickEntryDraftSerializesEverySupportedMetadataField() throws {
+        let planningDate = try TasksNativeCalendarDate(year: 2026, month: 8, day: 6)
+        let startDate = try TasksNativeCalendarDate(year: 2026, month: 8, day: 7)
+        let deadlineDate = try TasksNativeCalendarDate(year: 2025, month: 1, day: 2)
+        let areaID = UUID()
+        let checklistID = UUID()
+        var draft = TasksNativeQuickEntryDraft()
+        draft.summary = "  Complete capture  "
+        draft.notes = "  Markdown notes  "
+        draft.link = "  https://example.test/path  "
+        draft.checklist = [.init(id: checklistID, title: "  First step  ")]
+        draft.setExplicitStart(startDate)
+        draft.reminderLocalTime = "14:45"
+        draft.deadlineDate = deadlineDate
+        draft.areaID = areaID
+        draft.actionability = "waiting"
+
+        let submission = try draft.normalizedSubmission(planningDate: planningDate)
+
+        XCTAssertEqual(submission.summary, "Complete capture")
+        XCTAssertEqual(submission.notes, "Markdown notes")
+        XCTAssertEqual(submission.link, "https://example.test/path")
+        XCTAssertEqual(
+            submission.checklist,
+            [.init(clientID: checklistID, title: "First step", position: 0)]
+        )
+        XCTAssertEqual(submission.destination, "anytime")
+        XCTAssertNil(submission.todaySection)
+        XCTAssertEqual(submission.startDate, "2026-08-07")
+        XCTAssertEqual(submission.reminderLocalTime, "14:45")
+        XCTAssertEqual(submission.deadlineDate, "2025-01-02")
+        XCTAssertEqual(submission.areaID, areaID)
+        XCTAssertEqual(submission.actionability, "waiting")
+    }
+
+    func testNativeQuickEntryDraftRejectsEveryContractBoundedTextField() throws {
+        let planningDate = try TasksNativeCalendarDate(year: 2026, month: 8, day: 6)
+        func maximum(_ fieldID: TasksNativeQuickEntryContract.FieldID) throws -> Int {
+            try XCTUnwrap(
+                TasksNativeQuickEntryContract.fields.first { $0.id == fieldID }?
+                    .maximumCharacters
+            )
+        }
+
+        var draft = TasksNativeQuickEntryDraft()
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual($0 as? TasksNativeQuickEntryDraftError, .summaryRequired)
+        }
+
+        draft.summary = String(repeating: "a", count: try maximum(.summary) + 1)
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryDraftError,
+                .fieldTooLong(field: "Summary", maximum: 500)
+            )
+        }
+
+        draft.summary = "Valid"
+        draft.notes = String(repeating: "n", count: try maximum(.notes) + 1)
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryDraftError,
+                .fieldTooLong(field: "Notes", maximum: 100_000)
+            )
+        }
+
+        draft.notes = ""
+        draft.link = String(repeating: "l", count: try maximum(.link) + 1)
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryDraftError,
+                .fieldTooLong(field: "Link", maximum: 8_000)
+            )
+        }
+
+        draft.link = ""
+        draft.checklist = [
+            .init(title: String(repeating: "c", count: try maximum(.checklist) + 1)),
+        ]
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryDraftError,
+                .fieldTooLong(field: "Checklist", maximum: 500)
+            )
+        }
+    }
+
+    func testNativeQuickEntryDraftRejectsChecklistAndEnumerationBounds() throws {
+        let planningDate = try TasksNativeCalendarDate(year: 2026, month: 8, day: 6)
+        var draft = TasksNativeQuickEntryDraft()
+        draft.summary = "Valid"
+        draft.checklist = (0...TasksNativeQuickEntryContract.maximumChecklistItems).map {
+            .init(title: "Item \($0)")
+        }
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryDraftError,
+                .tooManyChecklistItems(
+                    maximum: TasksNativeQuickEntryContract.maximumChecklistItems
+                )
+            )
+        }
+
+        draft.checklist = []
+        draft.todaySection = "invalid"
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual($0 as? TasksNativeQuickEntryDraftError, .invalidTodaySection)
+        }
+
+        draft.todaySection = "inbox"
+        draft.actionability = "invalid"
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual($0 as? TasksNativeQuickEntryDraftError, .invalidActionability)
+        }
+    }
+
+    func testNativeQuickEntryPlacementPickersMaintainPlanningInvariants() throws {
+        let planningDate = try TasksNativeCalendarDate(year: 2026, month: 8, day: 6)
+        let futureDate = try TasksNativeCalendarDate(year: 2026, month: 8, day: 12)
+        var draft = TasksNativeQuickEntryDraft()
+
+        draft.setExplicitStart(futureDate)
+        XCTAssertEqual(draft.destination, "anytime")
+        XCTAssertEqual(draft.startDate, futureDate)
+        XCTAssertNil(draft.todaySection)
+
+        draft.reminderLocalTime = "09:00"
+        draft.setTodaySection("later")
+        XCTAssertNil(draft.startDate)
+        XCTAssertEqual(draft.todaySection, "later")
+        XCTAssertEqual(draft.reminderLocalTime, "09:00")
+
+        draft.setSomeday()
+        XCTAssertEqual(draft.destination, "someday")
+        XCTAssertNil(draft.todaySection)
+        XCTAssertNil(draft.startDate)
+        XCTAssertNil(draft.reminderLocalTime)
+
+        draft.setTodaySection("inbox")
+        draft.reminderLocalTime = "10:15"
+        draft.clearStart()
+        XCTAssertEqual(draft.destination, "anytime")
+        XCTAssertNil(draft.todaySection)
+        XCTAssertNil(draft.startDate)
+        XCTAssertNil(draft.reminderLocalTime)
+
+        draft.summary = "Past deadlines remain valid"
+        draft.deadlineDate = try TasksNativeCalendarDate(year: 1999, month: 1, day: 1)
+        XCTAssertNoThrow(try draft.normalizedSubmission(planningDate: planningDate))
+    }
+
+    func testNativeQuickEntryChecklistSupportsEveryDraftOperation() throws {
+        let firstID = UUID()
+        let secondID = UUID()
+        let thirdID = UUID()
+        var draft = TasksNativeQuickEntryDraft()
+
+        draft.appendChecklistItem(title: "Second", id: secondID)
+        draft.prependChecklistItem(title: "First", id: firstID)
+        let insertedID = draft.insertChecklistItem(after: firstID)
+        draft.checklist[draft.checklist.firstIndex { $0.id == insertedID }!].title = "Inserted"
+        draft.appendChecklistItem(title: "Third", id: thirdID)
+        XCTAssertEqual(
+            draft.checklist.map(\.title),
+            ["First", "Inserted", "Second", "Third"]
+        )
+
+        draft.moveChecklistItems(fromOffsets: IndexSet(integer: 3), toOffset: 0)
+        XCTAssertEqual(
+            draft.checklist.map(\.title),
+            ["Third", "First", "Inserted", "Second"]
+        )
+
+        let blankID = draft.appendChecklistItem()
+        draft.discardBlankChecklistItems(except: blankID)
+        XCTAssertEqual(draft.checklist.last?.id, blankID)
+        draft.discardBlankChecklistItems()
+        XCTAssertFalse(draft.checklist.contains { $0.id == blankID })
+
+        var blankOnlyDraft = TasksNativeQuickEntryDraft()
+        blankOnlyDraft.appendChecklistItem()
+        blankOnlyDraft.discardBlankChecklistItems()
+        XCTAssertFalse(blankOnlyDraft.showsChecklist)
+        XCTAssertEqual(
+            blankOnlyDraft.availableFocusTargets,
+            [
+                .summary,
+                .start,
+                .deadline,
+                .area,
+                .actionability,
+                .notes,
+                .link,
+                .checklistDisclosure,
+                .cancel,
+                .save,
+            ]
+        )
+
+        draft.focus = .checklist(firstID)
+        draft.removeChecklistItem(id: firstID)
+        XCTAssertEqual(draft.focus, .checklist(insertedID))
+
+        for id in draft.checklist.map(\.id) {
+            draft.removeChecklistItem(id: id)
+        }
+        XCTAssertTrue(draft.checklist.isEmpty)
+        XCTAssertFalse(draft.showsChecklist)
+        XCTAssertEqual(draft.focus, .summary)
+    }
+
+    func testNativeQuickEntryDraftEnforcesPlanningAndReminderRules() throws {
+        let planningDate = try TasksNativeCalendarDate(year: 2026, month: 8, day: 5)
+        var draft = TasksNativeQuickEntryDraft()
+        draft.summary = "Prepare brief"
+        draft.clearStart()
+        draft.reminderLocalTime = "09:00"
+
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryDraftError,
+                .reminderRequiresStart
+            )
+        }
+
+        draft.reminderLocalTime = nil
+        draft.setExplicitStart(
+            try TasksNativeCalendarDate(year: 2026, month: 8, day: 4)
+        )
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryDraftError,
+                .startBeforePlanningDate
+            )
+        }
+
+        draft.setExplicitStart(planningDate)
+        draft.reminderLocalTime = "25:90"
+        XCTAssertThrowsError(try draft.normalizedSubmission(planningDate: planningDate)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryDraftError,
+                .invalidReminderTime
+            )
+        }
+
+        draft.reminderLocalTime = "09:30"
+        draft.deadlineDate = try TasksNativeCalendarDate(year: 2020, month: 1, day: 1)
+        XCTAssertNoThrow(try draft.normalizedSubmission(planningDate: planningDate))
+    }
+
+    func testNativeQuickEntryDraftCyclesMetadataAndReordersChecklist() throws {
+        let first = UUID()
+        let second = UUID()
+        let third = UUID()
+        var draft = TasksNativeQuickEntryDraft()
+        draft.checklist = [
+            .init(id: first, title: "First"),
+            .init(id: second, title: "Second"),
+            .init(id: third, title: "Third"),
+        ]
+
+        draft.moveChecklistItems(fromOffsets: IndexSet(integer: 0), toOffset: 3)
+        XCTAssertEqual(draft.checklist.map(\.id), [second, third, first])
+
+        draft.cycleTodaySection()
+        XCTAssertEqual(draft.todaySection, "now")
+        draft.cycleActionability()
+        XCTAssertEqual(draft.actionability, "rechecking")
+
+        draft.setSomeday()
+        XCTAssertEqual(draft.destination, "someday")
+        XCTAssertNil(draft.todaySection)
+        XCTAssertNil(draft.startDate)
+    }
+
+    func testNativeQuickEntryViewModelRejectsInvalidSaveWithoutSubmitting() async throws {
+        var submissionCount = 0
+        let model = TasksNativeQuickEntryViewModel(
+            planningDate: try TasksNativeCalendarDate(year: 2026, month: 8, day: 6),
+            submitHandler: { _ in
+                submissionCount += 1
+                return UUID()
+            }
+        )
+
+        await model.submit()
+
+        XCTAssertEqual(submissionCount, 0)
+        XCTAssertEqual(
+            model.draft.submissionState,
+            .failed(message: "A task summary is required.")
+        )
+        XCTAssertFalse(model.canSave)
+    }
+
+    func testNativeQuickEntryViewModelPreservesDraftAndIdentityAcrossRetry() async throws {
+        let taskID = UUID()
+        var submissions: [TasksNativeQuickEntrySubmission] = []
+        var accepted: [UUID] = []
+        let model = TasksNativeQuickEntryViewModel(
+            planningDate: try TasksNativeCalendarDate(year: 2026, month: 8, day: 6),
+            submitHandler: { submission in
+                submissions.append(submission)
+                if submissions.count == 1 {
+                    throw TasksNativeQuickEntryServiceFailure.unavailable
+                }
+                return taskID
+            },
+            onAccepted: { accepted.append($0) }
+        )
+        model.draft.summary = "Retry intact"
+        model.draft.notes = "Keep this draft"
+        model.draft.appendChecklistItem(title: "One")
+        let originalDraft = model.draft
+
+        await model.submit()
+
+        XCTAssertEqual(
+            model.draft.submissionState,
+            .failed(message: "Quick Entry is not ready yet. Open Tasks and try again.")
+        )
+        XCTAssertEqual(model.draft.summary, originalDraft.summary)
+        XCTAssertEqual(model.draft.notes, originalDraft.notes)
+        XCTAssertEqual(model.draft.checklist, originalDraft.checklist)
+        XCTAssertEqual(model.draft.clientMutationID, originalDraft.clientMutationID)
+        XCTAssertEqual(model.draft.operationID, originalDraft.operationID)
+        XCTAssertTrue(model.canSave)
+
+        await model.submit()
+
+        XCTAssertEqual(model.draft.submissionState, .accepted(taskID: taskID))
+        XCTAssertEqual(accepted, [taskID])
+        XCTAssertEqual(submissions.count, 2)
+        XCTAssertEqual(submissions[0], submissions[1])
+    }
+
+    func testNativeQuickEntryViewModelCancelAndBootstrapTransitionsAreBounded() throws {
+        var cancellationCount = 0
+        let originalArea = TasksNativeQuickEntryArea(id: UUID(), name: "Original")
+        let refreshedArea = TasksNativeQuickEntryArea(id: UUID(), name: "Refreshed")
+        let model = TasksNativeQuickEntryViewModel(
+            areas: [originalArea],
+            onCancel: { cancellationCount += 1 }
+        )
+
+        model.cancel()
+        XCTAssertEqual(cancellationCount, 1)
+
+        model.beginBootstrapRefresh()
+        XCTAssertTrue(model.isRefreshingBootstrap)
+        model.finishBootstrapRefresh(.failure(TasksNativeQuickEntryServiceFailure.unavailable))
+        XCTAssertFalse(model.isRefreshingBootstrap)
+        XCTAssertEqual(model.areas, [originalArea])
+
+        let bootstrap = TasksNativeQuickEntryBootstrap(
+            outcome: "accepted",
+            type: "nativeQuickEntryBootstrap",
+            schemaVersion: TasksNativeQuickEntryContract.schemaVersion,
+            payloadSchemaVersion: TasksNativeQuickEntryContract.payloadSchemaVersion,
+            contractFingerprint: TasksNativeQuickEntryContract.sourceFingerprint,
+            capability: TasksNativeQuickEntryContract.capability,
+            ownerId: UUID(),
+            generatedAt: "2026-08-06T07:00:00.000Z",
+            planningDate: "2026-08-07",
+            planningTimeZone: "America/Los_Angeles",
+            areas: [refreshedArea],
+            limits: .init(
+                maximumChecklistItems: TasksNativeQuickEntryContract.maximumChecklistItems,
+                maximumPayloadBytes: TasksNativeQuickEntryContract.maximumPayloadBytes
+            )
+        )
+        model.draft.areaID = originalArea.id
+        model.beginBootstrapRefresh()
+        model.finishBootstrapRefresh(.success(bootstrap))
+
+        XCTAssertFalse(model.isRefreshingBootstrap)
+        XCTAssertEqual(model.areas, [refreshedArea])
+        XCTAssertNil(model.draft.areaID)
+        XCTAssertEqual(model.planningDate.iso8601, "2026-08-07")
+
+        let firstMutationID = model.draft.clientMutationID
+        model.draft.summary = "Discard me"
+        model.reset(using: bootstrap)
+        XCTAssertEqual(model.draft.summary, "")
+        XCTAssertNotEqual(model.draft.clientMutationID, firstMutationID)
+        XCTAssertEqual(model.draft.focus, .summary)
+    }
+
+    func testNativeQuickEntryCancelRemainsEffectiveDuringSubmission() async throws {
+        let taskID = UUID()
+        var cancellationCount = 0
+        var accepted: [UUID] = []
+        let model = TasksNativeQuickEntryViewModel(
+            planningDate: try TasksNativeCalendarDate(year: 2026, month: 8, day: 6),
+            submitHandler: { _ in
+                try await Task.sleep(for: .seconds(10))
+                return taskID
+            },
+            onCancel: { cancellationCount += 1 },
+            onAccepted: { accepted.append($0) }
+        )
+        model.draft.summary = "Cancel pending capture"
+
+        model.save()
+        for _ in 0..<10 where model.draft.submissionState != .submitting {
+            await Task.yield()
+        }
+        XCTAssertEqual(model.draft.submissionState, .submitting)
+
+        model.cancel()
+        await Task.yield()
+
+        XCTAssertEqual(cancellationCount, 1)
+        XCTAssertTrue(accepted.isEmpty)
+    }
+
+    func testNativeCalendarDateRejectsImpossibleDatesAndUsesStableWireFormat() throws {
+        let leapDay = try TasksNativeCalendarDate(year: 2028, month: 2, day: 29)
+        XCTAssertEqual(leapDay.iso8601, "2028-02-29")
+        XCTAssertThrowsError(
+            try TasksNativeCalendarDate(year: 2026, month: 2, day: 29)
+        )
+    }
+
+    func testNativeQuickEntryBootstrapCacheIsPrivateAndContractBound() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TasksNativeQuickEntryBootstrapStore(
+            fileURL: directory.appendingPathComponent("bootstrap.json")
+        )
+        let credential = makeQuickEntryCredential()
+        let bootstrap = makeQuickEntryBootstrap(ownerID: credential.ownerId)
+
+        try store.store(bootstrap, credential: credential)
+
+        XCTAssertEqual(try store.load(credential: credential), bootstrap)
+        let attributes = try FileManager.default.attributesOfItem(
+            atPath: store.fileURL.path
+        )
+        XCTAssertEqual(
+            (attributes[.posixPermissions] as? NSNumber)?.intValue,
+            0o600
+        )
+        let wrongOwner = makeQuickEntryCredential(ownerID: UUID())
+        XCTAssertThrowsError(try store.load(credential: wrongOwner)) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryServiceFailure,
+                .incompatibleContract
+            )
+        }
+    }
+
+    func testNativeQuickEntryServiceRefreshesBootstrapWithBoundedAuthority() async throws {
+        let credential = makeQuickEntryCredential()
+        let bootstrap = makeQuickEntryBootstrap(ownerID: credential.ownerId)
+        let responseData = try JSONEncoder().encode(bootstrap)
+        var writtenBootstrap: TasksNativeQuickEntryBootstrap?
+        var observedRequest: URLRequest?
+        let endpoint = try XCTUnwrap(URL(string: "https://example.test/tasks-widget-actions"))
+        let service = TasksNativeQuickEntryService(
+            endpoint: endpoint,
+            credentialLoader: { credential },
+            bootstrapWriter: { value, _ in writtenBootstrap = value },
+            transport: { request in
+                observedRequest = request
+                return (
+                    responseData,
+                    HTTPURLResponse(
+                        url: endpoint,
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                )
+            }
+        )
+
+        let result = try await service.refreshBootstrap()
+
+        XCTAssertEqual(result, bootstrap)
+        XCTAssertEqual(writtenBootstrap, bootstrap)
+        XCTAssertEqual(
+            observedRequest?.value(forHTTPHeaderField: "Authorization"),
+            "QuickEntry \(credential.credential)"
+        )
+        let body = try XCTUnwrap(observedRequest?.httpBody)
+        let json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+        XCTAssertEqual(json["action"] as? String, "quickEntryBootstrap")
+    }
+
+    func testNativeQuickEntryServiceRetriesOneTransientCreateWithoutChangingIdentity() async throws {
+        let credential = makeQuickEntryCredential()
+        let endpoint = try XCTUnwrap(URL(string: "https://example.test/tasks-widget-actions"))
+        let taskID = UUID()
+        let accepted = TasksNativeQuickEntryReceipt(
+            outcome: "accepted",
+            taskId: taskID,
+            revision: 1,
+            acceptedAt: "2026-08-06T07:00:00.000Z",
+            planningDate: "2026-08-06"
+        )
+        let acceptedData = try JSONEncoder().encode(accepted)
+        var requests: [URLRequest] = []
+        let service = TasksNativeQuickEntryService(
+            endpoint: endpoint,
+            credentialLoader: { credential },
+            transport: { request in
+                requests.append(request)
+                let statusCode = requests.count == 1 ? 503 : 200
+                return (
+                    statusCode == 200 ? acceptedData : Data(),
+                    HTTPURLResponse(
+                        url: endpoint,
+                        statusCode: statusCode,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                )
+            }
+        )
+        var draft = TasksNativeQuickEntryDraft(
+            clientMutationID: UUID(),
+            operationID: UUID()
+        )
+        draft.summary = "Capture complete metadata"
+        let submission = try draft.normalizedSubmission(
+            planningDate: try TasksNativeCalendarDate(year: 2026, month: 8, day: 6)
+        )
+
+        let result = try await service.create(submission)
+
+        XCTAssertEqual(result, taskID)
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[0].httpBody, requests[1].httpBody)
+        let body = try XCTUnwrap(requests[0].httpBody)
+        let json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+        XCTAssertEqual(json["action"] as? String, "createQuickEntry")
+        let payload = try XCTUnwrap(json["payload"] as? [String: Any])
+        XCTAssertEqual(
+            payload["clientMutationID"] as? String,
+            submission.clientMutationID.uuidString
+        )
+        XCTAssertEqual(
+            payload["operationID"] as? String,
+            submission.operationID.uuidString
+        )
+    }
+
+    func testNativeQuickEntryServiceRejectsExpiredAndUnauthorizedCredentials() async throws {
+        let endpoint = try XCTUnwrap(URL(string: "https://example.test/tasks-widget-actions"))
+        let expired = makeQuickEntryCredential(expiresAt: "2020-01-01T00:00:00.000Z")
+        let expiredService = TasksNativeQuickEntryService(
+            endpoint: endpoint,
+            credentialLoader: {
+                try expired.validate()
+                return expired
+            },
+            transport: { _ in
+                XCTFail("Expired authority must not reach the network")
+                throw TasksNativeQuickEntryServiceFailure.unavailable
+            }
+        )
+        await XCTAssertThrowsErrorAsync(try await expiredService.refreshBootstrap()) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryServiceFailure,
+                .invalidCredential
+            )
+        }
+
+        let credential = makeQuickEntryCredential()
+        let unauthorizedService = TasksNativeQuickEntryService(
+            endpoint: endpoint,
+            credentialLoader: { credential },
+            transport: { request in
+                (
+                    Data(),
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: 401,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                )
+            }
+        )
+        await XCTAssertThrowsErrorAsync(try await unauthorizedService.refreshBootstrap()) {
+            XCTAssertEqual(
+                $0 as? TasksNativeQuickEntryServiceFailure,
+                .invalidCredential
+            )
+        }
+    }
+
+    private func makeQuickEntryCredential(
+        ownerID: UUID = UUID(),
+        expiresAt: String = "2099-01-01T00:00:00.000Z"
+    ) -> TasksNativeQuickEntryCredential {
+        TasksNativeQuickEntryCredential(
+            payloadSchemaVersion: TasksNativeQuickEntryContract.payloadSchemaVersion,
+            contractFingerprint: TasksNativeQuickEntryContract.sourceFingerprint,
+            capability: TasksNativeQuickEntryContract.capability,
+            ownerId: ownerID,
+            installationId: UUID(),
+            credential: "tqe_\(String(repeating: "a", count: 43))",
+            expiresAt: expiresAt
+        )
+    }
+
+    private func makeQuickEntryBootstrap(
+        ownerID: UUID
+    ) -> TasksNativeQuickEntryBootstrap {
+        TasksNativeQuickEntryBootstrap(
+            outcome: "accepted",
+            type: "nativeQuickEntryBootstrap",
+            schemaVersion: TasksNativeQuickEntryContract.schemaVersion,
+            payloadSchemaVersion: TasksNativeQuickEntryContract.payloadSchemaVersion,
+            contractFingerprint: TasksNativeQuickEntryContract.sourceFingerprint,
+            capability: TasksNativeQuickEntryContract.capability,
+            ownerId: ownerID,
+            generatedAt: "2026-08-06T07:00:00.000Z",
+            planningDate: "2026-08-06",
+            planningTimeZone: "America/Los_Angeles",
+            areas: [
+                TasksNativeQuickEntryArea(id: UUID(), name: "Household"),
+            ],
+            limits: .init(
+                maximumChecklistItems: TasksNativeQuickEntryContract.maximumChecklistItems,
+                maximumPayloadBytes: TasksNativeQuickEntryContract.maximumPayloadBytes
+            )
+        )
+    }
+
+    private func XCTAssertThrowsErrorAsync<T>(
+        _ expression: @autoclosure () async throws -> T,
+        _ errorHandler: (Error) -> Void = { _ in }
+    ) async {
+        do {
+            _ = try await expression()
+            XCTFail("Expected expression to throw")
+        } catch {
+            errorHandler(error)
+        }
     }
 
     private func makeSnapshot(taskID: UUID) -> TaskWidgetSnapshot {

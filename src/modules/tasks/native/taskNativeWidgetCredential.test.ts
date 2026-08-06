@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  maintainTaskNativeQuickEntryCredential,
   maintainTaskNativeWidgetCredential,
+  parseTaskNativeQuickEntryCredential,
   parseTaskNativeWidgetCredential,
 } from './taskNativeWidgetCredential';
 
@@ -13,6 +15,18 @@ const issuedCredential = {
   installationId,
   credential: `twc_${'A'.repeat(43)}`,
   expiresAt: '2026-10-28T12:00:00.000Z',
+};
+const issuedQuickEntryCredential = {
+  outcome: 'issued',
+  type: 'nativeQuickEntryCredential',
+  payloadSchemaVersion: 1,
+  contractFingerprint:
+    '5ea30f93f4269dcb3423c4a5ca3c8c9e3b505a545e2052e584d7b56cc653cfe1',
+  capability: 'native_quick_entry_v1',
+  ownerId,
+  installationId,
+  credential: `tqe_${'B'.repeat(43)}`,
+  expiresAt: '2026-09-04T12:00:00.000Z',
 };
 
 describe('native widget credential provisioning', () => {
@@ -85,5 +99,58 @@ describe('native widget credential provisioning', () => {
       wait,
     })).resolves.toBe(false);
     expect(issue).toHaveBeenCalledOnce();
+  });
+});
+
+describe('native Quick Entry credential provisioning', () => {
+  it('requires the exact contract, owner, installation, and token shape', () => {
+    expect(parseTaskNativeQuickEntryCredential(
+      issuedQuickEntryCredential,
+      ownerId,
+      installationId,
+    )).toEqual({
+      payloadSchemaVersion: 1,
+      contractFingerprint: issuedQuickEntryCredential.contractFingerprint,
+      capability: 'native_quick_entry_v1',
+      ownerId,
+      installationId,
+      credential: issuedQuickEntryCredential.credential,
+      expiresAt: issuedQuickEntryCredential.expiresAt,
+    });
+    expect(parseTaskNativeQuickEntryCredential(
+      { ...issuedQuickEntryCredential, contractFingerprint: 'stale' },
+      ownerId,
+      installationId,
+    )).toBeNull();
+    expect(parseTaskNativeQuickEntryCredential(
+      { ...issuedQuickEntryCredential, credential: 'twc_wrong-capability' },
+      ownerId,
+      installationId,
+    )).toBeNull();
+  });
+
+  it('retries issuance until the native host receives the Quick Entry credential', async () => {
+    const controller = new AbortController();
+    const issue = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(issuedQuickEntryCredential);
+    const publish = vi.fn().mockReturnValue(true);
+    const wait = vi.fn().mockResolvedValue(undefined);
+
+    await expect(maintainTaskNativeQuickEntryCredential({
+      ownerId,
+      installationId,
+      signal: controller.signal,
+      issue,
+      publish,
+      wait,
+    })).resolves.toBe(true);
+
+    expect(issue).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledWith(1_000, controller.signal);
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      credential: issuedQuickEntryCredential.credential,
+      contractFingerprint: issuedQuickEntryCredential.contractFingerprint,
+    }));
   });
 });

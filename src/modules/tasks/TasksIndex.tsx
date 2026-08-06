@@ -6,9 +6,7 @@ import AuthPage from '@/platform/components/AuthPage';
 import { TasksShell } from '@/modules/tasks/components/TasksShell';
 import {
   clearTaskNativeWidgetCache,
-  isTaskNativeQuickEntry,
   publishTaskNativeContentReady,
-  publishTaskNativeQuickEntryReady,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
 import { TasksRuntimeProvider } from '@/modules/tasks/runtime/TasksRuntime';
 
@@ -18,11 +16,7 @@ export default function TasksIndex() {
   useEffect(() => {
     if (!authLoading && !user) {
       clearTaskNativeWidgetCache();
-      if (isTaskNativeQuickEntry(window.location.search)) {
-        publishTaskNativeQuickEntryReady();
-      } else {
-        publishTaskNativeContentReady();
-      }
+      publishTaskNativeContentReady();
     }
   }, [authLoading, user]);
 

@@ -50,6 +50,27 @@ const handler = createTasksWidgetActionsHandler({
         'tasks_revoke_widget_completion_credential',
         { _raw_token: rawToken },
       ),
+      issueQuickEntry: async (input) => client.rpc(
+        'tasks_issue_native_quick_entry_credential',
+        {
+          _owner_id: input.ownerId,
+          _installation_id: input.installationId,
+          _raw_token: input.rawToken,
+          _expires_at: input.expiresAt,
+        },
+      ),
+      quickEntryBootstrap: async (rawToken) => client.rpc(
+        'tasks_read_native_quick_entry_bootstrap',
+        { _raw_token: rawToken },
+      ),
+      createQuickEntry: async (input) => client.rpc(
+        'tasks_create_from_native_quick_entry',
+        { _raw_token: input.rawToken, _payload: input.payload },
+      ),
+      revokeQuickEntry: async (rawToken) => client.rpc(
+        'tasks_revoke_native_quick_entry_credential',
+        { _raw_token: rawToken },
+      ),
     };
   },
 });

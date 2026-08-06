@@ -31,13 +31,16 @@ import {
   getTasksNativeInstallationId,
   TASKS_NATIVE_BRIDGE_HANDLER,
 } from '@/platform/native/tasksNativeCompanion';
+import {
+  taskNativeQuickEntryContract,
+  taskNativeQuickEntryContractFingerprint,
+} from '@/modules/tasks/domain/taskNativeQuickEntryContract.generated';
 
 export const TASK_NATIVE_WIDGET_SCHEMA_VERSION = 2;
 export const TASK_NATIVE_WIDGET_LIST_LIMIT = 50;
 export const TASK_NATIVE_WIDGET_BRIDGE_HANDLER = TASKS_NATIVE_BRIDGE_HANDLER;
 export const TASK_NATIVE_TASK_QUERY_PARAMETER = 'native_task';
 export const TASK_NATIVE_NEW_TASK_QUERY_PARAMETER = 'native_new_task';
-export const TASK_NATIVE_QUICK_ENTRY_QUERY_PARAMETER = 'native_quick_entry';
 export type TaskNativeNewTaskSignal = 'today-inbox' | 'current-list';
 
 export const taskNativeWidgetListIds = [
@@ -96,6 +99,18 @@ export type TaskNativeWidgetCredentialMessage = {
   expiresAt: string;
 };
 
+export type TaskNativeQuickEntryCredentialMessage = {
+  type: 'quick-entry-credential';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+  payloadSchemaVersion: typeof taskNativeQuickEntryContract.payloadSchemaVersion;
+  contractFingerprint: typeof taskNativeQuickEntryContractFingerprint;
+  capability: typeof taskNativeQuickEntryContract.capability;
+  ownerId: string;
+  installationId: string;
+  credential: string;
+  expiresAt: string;
+};
+
 export type TaskNativeNewTaskSummaryFocusMessage = {
   type: 'focus-new-task-summary';
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
@@ -103,16 +118,6 @@ export type TaskNativeNewTaskSummaryFocusMessage = {
 
 export type TaskNativeContentReadyMessage = {
   type: 'content-ready';
-  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
-};
-
-export type TaskNativeQuickEntryReadyMessage = {
-  type: 'quick-entry-ready';
-  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
-};
-
-export type TaskNativeQuickEntryDismissalMessage = {
-  type: 'quick-entry-dismiss-requested';
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
 };
 
@@ -133,12 +138,6 @@ export type TaskNativeQuickEntryShortcutMessage = {
 export type TaskNativeQuickEntryShortcutClearMessage = {
   type: 'clear-quick-entry-shortcut';
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
-};
-
-export type TaskNativeQuickEntryFinishedMessage = {
-  type: 'quick-entry-finished';
-  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
-  committed: boolean;
 };
 
 type BuildTaskNativeWidgetSnapshotInput = {
@@ -306,6 +305,23 @@ export function publishTaskNativeWidgetCredential(
   return true;
 }
 
+export function publishTaskNativeQuickEntryCredential(
+  message: Omit<
+    TaskNativeQuickEntryCredentialMessage,
+    'type' | 'schemaVersion'
+  >,
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'quick-entry-credential',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+    ...message,
+  } satisfies TaskNativeQuickEntryCredentialMessage);
+  return true;
+}
+
 export function requestTaskNativeNewTaskSummaryFocus(
   target: Window = window,
 ): boolean {
@@ -327,30 +343,6 @@ export function publishTaskNativeContentReady(
     type: 'content-ready',
     schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
   } satisfies TaskNativeContentReadyMessage);
-  return true;
-}
-
-export function publishTaskNativeQuickEntryReady(
-  target: Window = window,
-): boolean {
-  const handler = getTasksNativeMessageHandler(target);
-  if (!handler || getTasksNativeInstallationId(target) === null) return false;
-  handler.postMessage({
-    type: 'quick-entry-ready',
-    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
-  } satisfies TaskNativeQuickEntryReadyMessage);
-  return true;
-}
-
-export function requestTaskNativeQuickEntryDismissal(
-  target: Window = window,
-): boolean {
-  const handler = getTasksNativeMessageHandler(target);
-  if (!handler || getTasksNativeInstallationId(target) === null) return false;
-  handler.postMessage({
-    type: 'quick-entry-dismiss-requested',
-    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
-  } satisfies TaskNativeQuickEntryDismissalMessage);
   return true;
 }
 
@@ -377,20 +369,6 @@ export function clearTaskNativeQuickEntryShortcut(
     type: 'clear-quick-entry-shortcut',
     schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
   } satisfies TaskNativeQuickEntryShortcutClearMessage);
-  return true;
-}
-
-export function finishTaskNativeQuickEntry(
-  committed: boolean,
-  target: Window = window,
-): boolean {
-  const handler = getTasksNativeMessageHandler(target);
-  if (!handler || getTasksNativeInstallationId(target) === null) return false;
-  handler.postMessage({
-    type: 'quick-entry-finished',
-    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
-    committed,
-  } satisfies TaskNativeQuickEntryFinishedMessage);
   return true;
 }
 
@@ -425,10 +403,6 @@ export function removeNativeNewTaskSignal(search: string): string {
   parameters.delete(TASK_NATIVE_NEW_TASK_QUERY_PARAMETER);
   const next = parameters.toString();
   return next ? `?${next}` : '';
-}
-
-export function isTaskNativeQuickEntry(search: string): boolean {
-  return new URLSearchParams(search).get(TASK_NATIVE_QUICK_ENTRY_QUERY_PARAMETER) === '1';
 }
 
 export function resetTaskNativeWidgetPublisherForTests(): void {

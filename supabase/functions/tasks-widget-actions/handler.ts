@@ -1,3 +1,11 @@
+import {
+  nativeQuickEntryCapability,
+  nativeQuickEntryContractFingerprint,
+  nativeQuickEntryMaximumPayloadBytes,
+  nativeQuickEntryPayloadSchemaVersion,
+  nativeQuickEntrySchemaVersion,
+} from './nativeQuickEntryContract.generated.ts';
+
 export type WidgetActionRpcClient = {
   issue: (input: {
     ownerId: string;
@@ -20,6 +28,22 @@ export type WidgetActionRpcClient = {
   }) => Promise<{ data: unknown; error: unknown | null }>;
   todayProgress: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
   revoke: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
+  issueQuickEntry: (input: {
+    ownerId: string;
+    installationId: string;
+    rawToken: string;
+    expiresAt: string;
+  }) => Promise<{ data: unknown; error: unknown | null }>;
+  quickEntryBootstrap: (
+    rawToken: string,
+  ) => Promise<{ data: unknown; error: unknown | null }>;
+  createQuickEntry: (input: {
+    rawToken: string;
+    payload: JsonRecord;
+  }) => Promise<{ data: unknown; error: unknown | null }>;
+  revokeQuickEntry: (
+    rawToken: string,
+  ) => Promise<{ data: unknown; error: unknown | null }>;
 };
 
 type HandlerDependencies = {
@@ -39,6 +63,7 @@ type JsonRecord = Record<string, unknown>;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const widgetTokenPattern = /^twc_[A-Za-z0-9_-]{43}$/;
+const quickEntryTokenPattern = /^tqe_[A-Za-z0-9_-]{43}$/;
 const planningDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -63,10 +88,18 @@ function parseWidgetCredential(header: string | null): string | null {
   return match?.[1] ?? null;
 }
 
+function parseQuickEntryCredential(header: string | null): string | null {
+  const match = header?.match(/^QuickEntry (tqe_[A-Za-z0-9_-]{43})$/);
+  return match?.[1] ?? null;
+}
+
 async function parseBody(request: Request): Promise<JsonRecord | null> {
   try {
     const serialized = await request.text();
-    if (new TextEncoder().encode(serialized).byteLength > 4096) return null;
+    if (
+      new TextEncoder().encode(serialized).byteLength
+        > nativeQuickEntryMaximumPayloadBytes + 4096
+    ) return null;
     const value = JSON.parse(serialized) as unknown;
     return typeof value === 'object' && value !== null && !Array.isArray(value)
       ? value as JsonRecord
@@ -143,6 +176,7 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
     const action = body?.action;
     if (!body || ![
       'issue', 'complete', 'snapshot', 'createInboxTask', 'todayProgress', 'revoke',
+      'issueQuickEntry', 'quickEntryBootstrap', 'createQuickEntry', 'revokeQuickEntry',
     ].includes(String(action))) {
       return response(400, { error: 'Invalid request' });
     }
@@ -205,6 +239,179 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
         installationId,
         expiresAt,
       });
+    }
+
+    if (action === 'issueQuickEntry') {
+      const accessToken = parseBearer(request.headers.get('authorization'));
+      const installationId = body.installationId;
+      if (
+        !accessToken
+        || typeof installationId !== 'string'
+        || !uuidPattern.test(installationId)
+      ) {
+        return response(401, { error: 'Unauthorized' });
+      }
+
+      let ownerId: string | null = null;
+      try {
+        ownerId = await dependencies.authenticateUser(
+          supabaseUrl,
+          publishableKey,
+          accessToken,
+        );
+      } catch {
+        ownerId = null;
+      }
+      if (!ownerId || !uuidPattern.test(ownerId)) {
+        return response(401, { error: 'Unauthorized' });
+      }
+
+      const rawToken = `tqe_${toBase64Url(randomBytes(32))}`;
+      if (!quickEntryTokenPattern.test(rawToken)) {
+        return response(500, { error: 'Credential could not be issued' });
+      }
+      const expiresAt = new Date(now().getTime() + 30 * 86_400_000).toISOString();
+      const result = await rpc.issueQuickEntry({
+        ownerId,
+        installationId,
+        rawToken,
+        expiresAt,
+      });
+      if (result.error) {
+        logError('Native Quick Entry credential issue failed');
+        return response(500, { error: 'Credential could not be issued' });
+      }
+      return response(200, {
+        outcome: 'issued',
+        type: 'nativeQuickEntryCredential',
+        schemaVersion: nativeQuickEntrySchemaVersion,
+        payloadSchemaVersion: nativeQuickEntryPayloadSchemaVersion,
+        contractFingerprint: nativeQuickEntryContractFingerprint,
+        capability: nativeQuickEntryCapability,
+        credential: rawToken,
+        ownerId,
+        installationId,
+        expiresAt,
+      });
+    }
+
+    if ([
+      'quickEntryBootstrap', 'createQuickEntry', 'revokeQuickEntry',
+    ].includes(String(action))) {
+      const rawToken = parseQuickEntryCredential(request.headers.get('authorization'));
+      if (!rawToken) {
+        return response(401, { error: 'Unauthorized' });
+      }
+
+      if (action === 'revokeQuickEntry') {
+        const result = await rpc.revokeQuickEntry(rawToken);
+        if (result.error) {
+          logError('Native Quick Entry credential revoke failed');
+          return response(500, { error: 'Credential could not be revoked' });
+        }
+        return response(200, parseRpcData(result.data) ?? { outcome: 'revoked' });
+      }
+
+      if (action === 'quickEntryBootstrap') {
+        const result = await rpc.quickEntryBootstrap(rawToken);
+        if (result.error) {
+          logError('Native Quick Entry bootstrap read failed');
+          return response(500, { error: 'Quick Entry could not be refreshed' });
+        }
+        const bootstrap = parseRpcData(result.data);
+        if (!bootstrap) {
+          return response(500, { error: 'Quick Entry could not be refreshed' });
+        }
+        if (bootstrap.outcome === 'rejected') {
+          return response(401, {
+            error: 'Quick Entry could not be refreshed',
+            code: bootstrap.code,
+          });
+        }
+        const areasAreValid = Array.isArray(bootstrap.areas)
+          && bootstrap.areas.length <= 10_000
+          && bootstrap.areas.every((area) => (
+            typeof area === 'object'
+            && area !== null
+            && !Array.isArray(area)
+            && typeof (area as JsonRecord).id === 'string'
+            && uuidPattern.test((area as JsonRecord).id as string)
+            && typeof (area as JsonRecord).name === 'string'
+            && ((area as JsonRecord).name as string).length <= 500
+          ));
+        if (
+          bootstrap.type !== 'nativeQuickEntryBootstrap'
+          || bootstrap.schemaVersion !== nativeQuickEntrySchemaVersion
+          || bootstrap.payloadSchemaVersion !== nativeQuickEntryPayloadSchemaVersion
+          || bootstrap.contractFingerprint !== nativeQuickEntryContractFingerprint
+          || bootstrap.capability !== nativeQuickEntryCapability
+          || typeof bootstrap.ownerId !== 'string'
+          || !uuidPattern.test(bootstrap.ownerId)
+          || typeof bootstrap.generatedAt !== 'string'
+          || Number.isNaN(Date.parse(bootstrap.generatedAt))
+          || typeof bootstrap.planningDate !== 'string'
+          || !planningDatePattern.test(bootstrap.planningDate)
+          || typeof bootstrap.planningTimeZone !== 'string'
+          || bootstrap.planningTimeZone.length === 0
+          || bootstrap.planningTimeZone.length > 255
+          || !areasAreValid
+        ) {
+          return response(500, { error: 'Quick Entry could not be refreshed' });
+        }
+        const serialized = JSON.stringify(bootstrap);
+        if (new TextEncoder().encode(serialized).byteLength > 512 * 1024) {
+          logError('Native Quick Entry bootstrap exceeded the bounded response size');
+          return response(500, { error: 'Quick Entry could not be refreshed' });
+        }
+        return response(200, bootstrap);
+      }
+
+      const payload = body.payload;
+      if (
+        typeof payload !== 'object'
+        || payload === null
+        || Array.isArray(payload)
+        || new TextEncoder().encode(JSON.stringify(payload)).byteLength
+          > nativeQuickEntryMaximumPayloadBytes
+      ) {
+        return response(400, { error: 'Invalid request' });
+      }
+      const result = await rpc.createQuickEntry({
+        rawToken,
+        payload: payload as JsonRecord,
+      });
+      if (result.error) {
+        logError('Native Quick Entry task creation failed');
+        return response(500, { error: 'Task could not be created' });
+      }
+      const outcome = parseRpcData(result.data);
+      if (!outcome) return response(500, { error: 'Task could not be created' });
+      if (outcome.outcome === 'rejected') {
+        return response(
+          outcome.code === 'invalid_credential' ? 401 : 409,
+          { error: 'Task could not be created', code: outcome.code },
+        );
+      }
+      if (
+        !['accepted', 'already_applied'].includes(String(outcome.outcome))
+        || typeof outcome.taskId !== 'string'
+        || !uuidPattern.test(outcome.taskId)
+        || typeof outcome.revision !== 'number'
+        || !Number.isInteger(outcome.revision)
+        || outcome.revision < 1
+        || typeof outcome.acceptedAt !== 'string'
+        || Number.isNaN(Date.parse(outcome.acceptedAt))
+        || (
+          outcome.planningDate !== undefined
+          && (
+            typeof outcome.planningDate !== 'string'
+            || !planningDatePattern.test(outcome.planningDate)
+          )
+        )
+      ) {
+        return response(500, { error: 'Task could not be created' });
+      }
+      return response(200, outcome);
     }
 
     const rawToken = parseWidgetCredential(request.headers.get('authorization'));

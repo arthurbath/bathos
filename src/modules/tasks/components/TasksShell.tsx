@@ -168,18 +168,15 @@ import { reportTaskBulkDeleteFailure } from '@/modules/tasks/runtime/taskBulkMut
 import {
   getNativeTaskDeepLinkId,
   getNativeNewTaskSignal,
-  isTaskNativeQuickEntry,
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
   publishTaskNativeContentReady,
-  publishTaskNativeQuickEntryReady,
-  requestTaskNativeQuickEntryDismissal,
   requestTaskNativeNewTaskSummaryFocus,
   clearTaskNativeQuickEntryShortcut,
   configureTaskNativeQuickEntryShortcut,
-  finishTaskNativeQuickEntry,
   type TaskNativeQuickEntryShortcut,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
+import { getTaskNativeQuickEntryCreationPlacement } from '@/modules/tasks/domain/taskNativeQuickEntryContract';
 import type {
   TaskRecurrenceDefinition,
   TaskRecurrenceRevision,
@@ -256,7 +253,6 @@ import {
 } from '@/modules/tasks/domain/taskTouchSelection';
 import {
   getTaskKeyboardCommand,
-  isTaskNativeQuickEntryMetadataCommand,
   type TaskKeyboardCommand,
 } from '@/modules/tasks/domain/taskKeyboardCommands';
 import {
@@ -607,8 +603,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
-  const nativeQuickEntry = getDeclaredNativePlatform() === 'macos'
-    && isTaskNativeQuickEntry(location.search);
 
   useEffect(() => {
     publishTaskNativeContentReady();
@@ -883,12 +877,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
   metadataMutationHandlerRef.current = handleTaskMetadataMutations;
   const renderedPlanningTasks = useMemo(
-    () => nativeQuickEntry
-      ? creationDraft?.view === taskListView ? [creationDraft.task] : []
-      : creationDraft?.view === taskListView
+    () => creationDraft?.view === taskListView
       ? [creationDraft.task, ...filteredTasks]
       : filteredTasks,
-    [creationDraft, filteredTasks, nativeQuickEntry, taskListView],
+    [creationDraft, filteredTasks, taskListView],
   );
   const detachedCreationDraft = creationDraft?.view === 'upcoming'
     && creationDraft.task.start_date === null
@@ -1094,7 +1086,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const forcedTaskDomFocusIdRef = useRef<string | null>(null);
   const filteredDepartureFocusAbandonmentRef = useRef<string | null>(null);
   const visibleTaskIdsRef = useRef<string[]>([]);
-  const nativeQuickEntryCommitRequestedRef = useRef(false);
   const deferredCompletionTaskIdsRef = useRef<Set<string>>(new Set());
   const taskEditorAutosaveRef = useRef<{
     taskId: string;
@@ -1495,12 +1486,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       document.activeElement.blur();
     }
     const closingCreationDraft = currentTaskId === NEW_TASK_DRAFT_ID;
-    const committingNativeQuickEntry = closingCreationDraft
-      && nativeQuickEntry
-      && nativeQuickEntryCommitRequestedRef.current;
-    const cancellingNativeQuickEntry = closingCreationDraft
-      && nativeQuickEntry
-      && !committingNativeQuickEntry;
     const exitingEmptyCreationDraft = closingCreationDraft
       && creationDraftRef.current?.persistedTaskId === null;
     const completingCreationDraft = closingCreationDraft
@@ -1558,7 +1543,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     );
     if (
       currentTaskId !== null
-      && !cancellingNativeQuickEntry
       && !trashingEmptyCurrentTask
     ) {
       finalizeDeferredCompletion(currentTaskId);
@@ -1570,7 +1554,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         showTaskError('Empty Task Could Not Be Removed', deleteError);
       }
     }
-    if (closingCreationDraft && !nativeQuickEntry) {
+    if (closingCreationDraft) {
       await waitForTaskMotion(TASK_EDITOR_EXPANSION_DURATION_MS);
       if (openTaskSequenceRef.current !== sequence) return false;
       if (exitingEmptyCreationDraft) {
@@ -1586,25 +1570,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     setClosingTaskId(null);
     if (closingCreationDraft) {
-      if (cancellingNativeQuickEntry) {
-        const persistedTaskId = creationDraftRef.current?.persistedTaskId ?? null;
-        if (persistedTaskId !== null) {
-          try {
-            await transitionTask(persistedTaskId, 'delete');
-          } catch (deleteError) {
-            showTaskError('Quick Entry Could Not Be Canceled', deleteError);
-            nativeQuickEntryCommitRequestedRef.current = false;
-            return false;
-          }
-        }
-      }
-      finishCreationDraft(completingCreationDraft || cancellingNativeQuickEntry);
-      if (nativeQuickEntry) {
-        finishTaskNativeQuickEntry(
-          committingNativeQuickEntry && !exitingEmptyCreationDraft,
-        );
-        nativeQuickEntryCommitRequestedRef.current = false;
-      }
+      finishCreationDraft(completingCreationDraft);
     }
     if (currentTaskId !== null) latestTaskMetadataRef.current.delete(currentTaskId);
     if (closingDepartureToast !== null) toast(closingDepartureToast);
@@ -1627,7 +1593,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     finishCreationDraft,
     planningDate,
     persistCreationDraft,
-    nativeQuickEntry,
     taskListView,
     taskQuickFilter,
     transitionTask,
@@ -1851,32 +1816,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     return true;
   }, [focusTaskRow, setOpenTask]);
 
-  const commitNativeQuickEntry = useCallback(async (): Promise<boolean> => {
-    nativeQuickEntryCommitRequestedRef.current = true;
-    const closed = await setOpenTask(null);
-    if (!closed) nativeQuickEntryCommitRequestedRef.current = false;
-    return closed;
-  }, [setOpenTask]);
-
-  const cancelNativeQuickEntry = useCallback(async (): Promise<boolean> => {
-    nativeQuickEntryCommitRequestedRef.current = false;
-    requestTaskNativeQuickEntryDismissal();
-    return setOpenTask(null);
-  }, [setOpenTask]);
-
-  useEffect(() => {
-    if (!nativeQuickEntry) return;
-    const cancel = (event: Event) => {
-      event.preventDefault();
-      void cancelNativeQuickEntry();
-    };
-    window.addEventListener('bathos:tasks-native-quick-entry-cancel', cancel);
-    return () => window.removeEventListener(
-      'bathos:tasks-native-quick-entry-cancel',
-      cancel,
-    );
-  }, [cancelNativeQuickEntry, nativeQuickEntry]);
-
   const openRelativeTask = useCallback((direction: -1 | 1) => {
     const rows = Array.from(document.querySelectorAll<HTMLElement>(
       '[data-task-row-focus-target][data-task-row-id]',
@@ -1941,7 +1880,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }, { replace: true });
     void beginTaskCreation(
       nativeNewTaskSignal === 'today-inbox'
-        ? { todaySection: 'inbox' }
+        ? getTaskNativeQuickEntryCreationPlacement()
         : floatingTaskCreationPlacement,
     );
   }, [
@@ -1953,23 +1892,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     location.search,
     navigate,
   ]);
-
-  const nativeQuickEntryEditorReady = nativeQuickEntry
-    && !loading
-    && selectedTaskId === NEW_TASK_DRAFT_ID
-    && creationDraft !== null;
-
-  useEffect(() => {
-    if (!nativeQuickEntryEditorReady) return;
-    const frame = window.requestAnimationFrame(() => {
-      const title = document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`);
-      const editor = document.querySelector('[data-task-quick-entry-editor="true"]');
-      if (title instanceof HTMLInputElement && editor !== null) {
-        publishTaskNativeQuickEntryReady();
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [nativeQuickEntryEditorReady]);
 
   useEffect(() => {
     if (!bulkMode && focusedTaskId === null) return undefined;
@@ -2016,7 +1938,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, []);
 
   useEffect(() => {
-    if (selectedTaskId === null || nativeQuickEntry) return undefined;
+    if (selectedTaskId === null) return undefined;
 
     const handleOutsidePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -2044,7 +1966,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
     document.addEventListener('pointerdown', handleOutsidePointerDown, true);
     return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
-  }, [nativeQuickEntry, selectedTaskId, setOpenTask]);
+  }, [selectedTaskId, setOpenTask]);
 
   useEffect(() => {
     if (openRecurrencePrototypeId === null) return undefined;
@@ -2146,7 +2068,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [focusedTaskId, quickFindOpen, renderedPlanningTasks]);
 
   useEffect(() => {
-    if (nativeQuickEntry || reminderPresentationMode === 'checking') return;
+    if (reminderPresentationMode === 'checking') return;
 
     const acknowledge = (deliveryId: string) => {
       if (reminderAcknowledgementsInFlightRef.current.has(deliveryId)) return;
@@ -2211,7 +2133,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [
     acknowledgeReminderDelivery,
-    nativeQuickEntry,
     reminderPresentationMode,
     reminderToastRetrySequence,
     reminders.dueItems,
@@ -2273,9 +2194,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
 
   const getTaskCommandTargets = useCallback((): TaskTodo[] => {
-    if (nativeQuickEntry && creationDraftRef.current !== null) {
-      return [creationDraftRef.current.task];
-    }
     if (bulkMode && bulkSelection.size >= 1) {
       if (Array.from(bulkSelection).some(isRecurrenceSelectionId)) return [];
       return selectableTasks.filter((task) => bulkSelection.has(task.id));
@@ -2287,7 +2205,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     const task = selectableTasks.find((candidate) => candidate.id === taskId);
     return task ? [task] : [];
-  }, [bulkMode, bulkSelection, nativeQuickEntry, selectableTasks]);
+  }, [bulkMode, bulkSelection, selectableTasks]);
 
   const cancelTaskReminders = useCallback(async (targets: readonly TaskTodo[]) => {
     for (const task of targets) {
@@ -2661,13 +2579,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const control = document.getElementById(controlId);
       if (!(control instanceof HTMLElement)) return;
       if (mode === 'start' || mode === 'reminder') {
-        if (nativeQuickEntry) {
-          control.click();
-          if (mode === 'reminder') {
-            requestTaskStartPickerOpen(control, mode);
-          }
-          return;
-        }
         requestTaskStartPickerOpen(
           control,
           mode satisfies TaskStartPickerFocusTarget,
@@ -2688,7 +2599,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }
       }
     }, 0);
-  }, [bulkMode, bulkSelection.size, getTaskCommandTargets, nativeQuickEntry, setOpenTask]);
+  }, [bulkMode, bulkSelection.size, getTaskCommandTargets, setOpenTask]);
 
   const focusTaskCommandContent = useCallback(async (
     field: Extract<TaskEditorFocusField, 'notes' | 'link'>,
@@ -3069,20 +2980,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const command = getTaskKeyboardCommand(event, macLikePlatform);
       if (command === null) return;
       if (view === 'search') return;
-      const nativeQuickEntryControlCommand = nativeQuickEntry
-        && macLikePlatform
-        && event.ctrlKey
-        && !event.metaKey
-        && !event.altKey
-        && !event.shiftKey;
-      if (
-        nativeQuickEntryControlCommand
-        && !isTaskNativeQuickEntryMetadataCommand(command)
-      ) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
       if (command === 'keyboard-help' && event.isComposing) return;
       if (
         (command === 'copy' || command === 'cut' || command === 'paste')
@@ -3289,7 +3186,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     getTaskCommandTargets,
     keyboardHelpOpen,
     macLikePlatform,
-    nativeQuickEntry,
     navigate,
     openTaskCommandField,
     openRelativeTask,
@@ -3789,7 +3685,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         task={task}
         navigationHref={searchRow?.href}
         touchActionsEnabled={!searchRow}
-        quickEntry={nativeQuickEntry && isCreationDraft}
         draftExiting={isCreationDraft && closingTaskId === task.id}
         hasChecklistItems={checklistTaskIds.has(persistedDraftTaskId ?? task.id)}
         checklistTaskId={persistedDraftTaskId ?? (
@@ -3827,12 +3722,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           void enterTaskSelectionFromTouchSwipe(task.id);
         }}
         onActivate={searchRow?.onActivate ?? (() => toggleTaskFromKeyboard(task.id))}
-        onCloseEditor={nativeQuickEntry && isCreationDraft
-          ? commitNativeQuickEntry
-          : closeOpenTaskToFocus}
-        onCancelEditor={nativeQuickEntry && isCreationDraft
-          ? cancelNativeQuickEntry
-          : closeOpenTaskToFocus}
+        onCloseEditor={closeOpenTaskToFocus}
+        onCancelEditor={closeOpenTaskToFocus}
         onFocusTask={() => {
           if (searchRow) {
             searchRow.onFocus();
@@ -4482,7 +4373,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   return (
     <div
       className="min-h-screen bg-background"
-      data-task-native-quick-entry={nativeQuickEntry ? 'true' : undefined}
       data-task-module-drop-surface
       onTouchStart={handleTouchQuickFindStart}
       onTouchMove={handleTouchQuickFindMove}
@@ -4540,25 +4430,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           />
         </div>
       ) : null}
-      {!nativeQuickEntry ? (
-        <ToplineHeader
-          title="Tasks"
-          moduleId="tasks"
-          userId={userId}
-          displayName={displayName}
-          onSignOut={handleSignOut}
-          showAppSwitcher
-        />
-      ) : null}
+      <ToplineHeader
+        title="Tasks"
+        moduleId="tasks"
+        userId={userId}
+        displayName={displayName}
+        onSignOut={handleSignOut}
+        showAppSwitcher
+      />
 
       <main
         data-task-space-entry-surface
         data-task-list-bottom-clearance
-        className={`mx-auto w-full ${
-          nativeQuickEntry
-            ? 'max-w-none px-8 py-3'
-            : `max-w-3xl px-4 pt-8 md:pt-10 ${TASK_LIST_BOTTOM_CLEARANCE_CLASS}`
-        } ${
+        className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${TASK_LIST_BOTTOM_CLEARANCE_CLASS} ${
           touchListElasticActive ? '' : 'transition-transform duration-200 ease-out'
         }`}
         style={{
@@ -4569,9 +4453,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       >
         <div className="space-y-7">
           <div
-            className={nativeQuickEntry
-              ? 'hidden'
-              : 'flex flex-wrap items-start justify-between gap-4'}
+            className="flex flex-wrap items-start justify-between gap-4"
             data-task-list-toolbar
           >
             <div className="flex min-w-0 flex-col gap-1">
@@ -4657,13 +4539,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             ) : null}
           </div>
 
-          {!nativeQuickEntry && reminders.projectionError
-            ? <TaskReminderProjectionFailure />
-            : null}
+          {reminders.projectionError ? <TaskReminderProjectionFailure /> : null}
 
-          {!nativeQuickEntry ? (
-            <TaskDesktopNavigation view={view} basePath={basePath} navigate={navigate} />
-          ) : null}
+          <TaskDesktopNavigation view={view} basePath={basePath} navigate={navigate} />
 
           {detachedCreationDraft ? (
             <section aria-label="New Task">
@@ -5093,7 +4971,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         </div>
       </main>
 
-      {!nativeQuickEntry && (view === 'today'
+      {(view === 'today'
         || view === 'upcoming'
         || view === 'anytime'
         || view === 'someday') && !bulkMode ? (
@@ -5157,22 +5035,20 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         />
       ) : null}
 
-      {!nativeQuickEntry ? (
-        <MobileBottomNav
-          items={primaryTaskViews}
-          overflowItems={secondaryTaskViews}
-          isActive={(path) => isTaskNavigationActive(view, path)}
-          onNavigate={(path) => navigate(`${basePath}${path}`)}
-          hrefForPath={(path) => `${basePath}${path}`}
-        />
-      ) : null}
+      <MobileBottomNav
+        items={primaryTaskViews}
+        overflowItems={secondaryTaskViews}
+        isActive={(path) => isTaskNavigationActive(view, path)}
+        onNavigate={(path) => navigate(`${basePath}${path}`)}
+        hrefForPath={(path) => `${basePath}${path}`}
+      />
       <TaskPermanentDeletionDialog
         preview={permanentDeletionPreview}
         pending={permanentDeletionPending}
         onCancel={() => setPermanentDeletionPreview(null)}
         onConfirm={confirmPermanentDeletion}
       />
-      {!nativeQuickEntry ? <TaskQuickFindDialog
+      <TaskQuickFindDialog
         open={quickFindOpen}
         initialQuery={quickFindInitialQuery}
         basePath={basePath}
@@ -5207,7 +5083,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           setSearchTarget({ kind: 'recurrence', definitionId: definition.id });
           navigate(path);
         }}
-      /> : null}
+      />
       <TaskKeyboardHelpDialog
         open={keyboardHelpOpen}
         onOpenChange={setKeyboardHelpOpen}
@@ -6777,7 +6653,6 @@ function isTaskRowActivationTarget(target: EventTarget | null): boolean {
 
 function TaskRow({
   task,
-  quickEntry = false,
   draftExiting,
   hasChecklistItems,
   checklistTaskId,
@@ -6826,7 +6701,6 @@ function TaskRow({
   touchActionsEnabled = true,
 }: {
   task: TaskTodo;
-  quickEntry?: boolean;
   draftExiting: boolean;
   hasChecklistItems: boolean;
   checklistTaskId: string | null;
@@ -6929,7 +6803,7 @@ function TaskRow({
     restoreImmediately: restoreEditorImmediately,
   } = useTaskEditorMotion({
     disabled: inBulkSelection,
-    immediate: quickEntry,
+    immediate: false,
     open: selected,
     regionRef: editorRegionRef,
     rowRef: articleRef,
@@ -7381,7 +7255,7 @@ function TaskRow({
   return (
     <article
       ref={articleRef}
-      tabIndex={quickEntry || selected ? -1 : 0}
+      tabIndex={selected ? -1 : 0}
       role="group"
       aria-label={taskLabel}
       aria-current={focused ? 'true' : undefined}
@@ -7480,21 +7354,18 @@ function TaskRow({
       }}
       className={[
         'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none motion-reduce:transition-none',
-        quickEntry
-          ? 'bg-transparent'
-          : 'focus-visible:rounded-md focus-visible:bg-info/10 focus-visible:outline-none',
+        'focus-visible:rounded-md focus-visible:bg-info/10 focus-visible:outline-none',
         terminalExiting || draftExiting
           ? 'grid-rows-[0fr] opacity-0'
           : 'grid-rows-[1fr] opacity-100',
-        !quickEntry && selected
+        selected
           ? 'rounded-md bg-info/10'
-          : !quickEntry && (focused || bulkSelection?.selected)
+          : focused || bulkSelection?.selected
             ? 'rounded-md bg-info/10'
           : '',
       ].filter(Boolean).join(' ') || undefined}
       style={{ transitionDuration: `${TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS}ms` }}
       data-task-planning-card
-      data-task-quick-entry-editor={quickEntry ? 'true' : undefined}
       data-terminal-settling={terminalSettling ? 'true' : undefined}
       data-terminal-exiting={terminalExiting ? 'true' : undefined}
       data-completion-grace={completionGraceActive ? 'true' : undefined}
@@ -7513,7 +7384,7 @@ function TaskRow({
         className={TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS}
         data-task-open-highlight-surface
       >
-      {!quickEntry ? <>
+      <>
       {touchActionsEnabled ? <>
       <span
         aria-hidden="true"
@@ -7941,7 +7812,7 @@ function TaskRow({
           </div>
         ) : null}
       </div>
-      </> : null}
+      </>
       {editorMounted && !bulkSelection ? (
         <div
           ref={editorRegionRef}
@@ -7952,7 +7823,7 @@ function TaskRow({
           className={getTaskEditorMotionClassName({
             expanded: editorExpanded,
             interactive: selected,
-            topPadding: !quickEntry,
+            topPadding: true,
           })}
           style={{ transitionDuration: `${TASK_EDITOR_EXPANSION_DURATION_MS}ms` }}
         >
@@ -7973,7 +7844,6 @@ function TaskRow({
               onRegisterAutosave={onRegisterAutosave}
               onTitleChange={setVisibleTitle}
               showTemporalFields
-              quickEntry={quickEntry}
               showDragHandles={showDragHandle}
             />
             <button
@@ -7985,24 +7855,6 @@ function TaskRow({
             >
               Close Task
             </button>
-            {quickEntry ? (
-              <div className="flex justify-end gap-2 px-1 pt-1" data-task-quick-entry-actions>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void onCancelEditor()}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => void onCloseEditor()}
-                >
-                  Save
-                </Button>
-              </div>
-            ) : null}
             <button
               type="button"
               tabIndex={-1}
@@ -8015,7 +7867,7 @@ function TaskRow({
           </div>
         </div>
       ) : null}
-      {!quickEntry && !bulkSelection ? (
+      {!bulkSelection ? (
         <Popover
           open={temporalPicker !== null}
           onOpenChange={(open) => {
@@ -8076,7 +7928,7 @@ function TaskRow({
           </PopoverContent>
         </Popover>
       ) : null}
-      {!quickEntry && !bulkSelection ? (
+      {!bulkSelection ? (
         <TaskRepeatDialog
           task={task}
           planningDate={planningDate}
@@ -8105,7 +7957,6 @@ function TaskEditor({
   onRegisterAutosave,
   onTitleChange,
   showTemporalFields = true,
-  quickEntry = false,
   showDragHandles = false,
 }: {
   task: TaskTodo;
@@ -8130,7 +7981,6 @@ function TaskEditor({
   ) => void;
   onTitleChange: (title: string) => void;
   showTemporalFields?: boolean;
-  quickEntry?: boolean;
   showDragHandles?: boolean;
 }) {
   const [title, setTitle] = useState(task.title);
@@ -8409,7 +8259,7 @@ function TaskEditor({
             onPlanningChange={changeStartPlanning}
             onReminderChange={changeReminderTime}
             onClear={clearStartPlanning}
-            popoverPlacement={quickEntry ? 'viewport-center' : 'anchored'}
+            popoverPlacement="anchored"
           />
         </div>
         <div className="min-w-0">
@@ -8433,7 +8283,7 @@ function TaskEditor({
             clearLabel="Clear"
             panelCommandScope="task-deadline"
             popoverAlign="end"
-            popoverPlacement={quickEntry ? 'viewport-center' : 'anchored'}
+            popoverPlacement="anchored"
           />
         </div>
         </div>
@@ -8485,7 +8335,6 @@ function TaskEditor({
         </span>
       ) : null}
       nativeSummaryCaptureActive={nativeSummaryCaptureActive}
-      quickEntry={quickEntry}
     />
   );
 }

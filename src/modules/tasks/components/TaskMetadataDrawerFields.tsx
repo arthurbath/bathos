@@ -32,6 +32,10 @@ import {
   getTaskPrimaryLinkIconKind,
   taskPrimaryLinkOpensBrowserTab,
 } from '@/modules/tasks/domain/taskPrimaryLink';
+import {
+  getTaskNativeQuickEntryFieldLabel,
+  TASK_NATIVE_QUICK_ENTRY_LAYOUT_SECTIONS,
+} from '@/modules/tasks/domain/taskNativeQuickEntryContract';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 const TaskMarkdownNotes = lazy(async () => {
@@ -68,7 +72,6 @@ export function TaskMetadataDrawerFields({
   onTitleKeyDown,
   titleOverlay = null,
   nativeSummaryCaptureActive = false,
-  quickEntry = false,
   className,
 }: {
   editorId: string;
@@ -97,7 +100,6 @@ export function TaskMetadataDrawerFields({
   onTitleKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
   titleOverlay?: ReactNode;
   nativeSummaryCaptureActive?: boolean;
-  quickEntry?: boolean;
   className?: string;
 }) {
   const [notesDisclosed, setNotesDisclosed] = useState(notes.length > 0);
@@ -106,6 +108,9 @@ export function TaskMetadataDrawerFields({
   const [notesFocusRevision, setNotesFocusRevision] = useState(0);
   const [primaryLinkFocusRevision, setPrimaryLinkFocusRevision] = useState(0);
   const primaryLinkInputRef = useRef<HTMLInputElement>(null);
+  const optionalContentLabel = (content: 'link' | 'notes' | 'checklist') => (
+    getTaskNativeQuickEntryFieldLabel(content)
+  );
 
   useLayoutEffect(() => {
     if (primaryLinkFocusRevision === 0) return;
@@ -192,38 +197,45 @@ export function TaskMetadataDrawerFields({
   return (
     <div
       className={cn(
-        quickEntry
-          ? 'flex flex-col gap-2 p-1'
-          : cn(
-              'flex flex-col gap-3 px-2 sm:px-3.5',
-              checklistEndsDrawer ? 'pb-2' : 'pb-3',
-            ),
+        'flex flex-col gap-3 px-2 sm:px-3.5',
+        checklistEndsDrawer ? 'pb-2' : 'pb-3',
         className,
       )}
       data-task-editor-form
       data-task-metadata-drawer-fields
+      data-task-native-quick-entry-layout={TASK_NATIVE_QUICK_ENTRY_LAYOUT_SECTIONS
+        .map(({ id }) => id)
+        .join(',')}
     >
-      <div
-        className="relative w-full"
-        data-task-native-summary-capture={nativeSummaryCaptureActive ? 'true' : undefined}
-      >
-        <Input
-          ref={titleInputRef}
-          id={`task-title-${editorId}`}
-          data-task-editor-title
-          autoFocus={titleAutoFocus}
-          aria-label="Summary"
-          placeholder="New Task"
-          aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Alt+Shift+Q"
-          value={title}
-          className={titleClassName}
-          onPointerDown={onTitlePointerDown}
-          onChange={(event) => onTitleChange(event.target.value)}
-          onKeyDown={onTitleKeyDown}
-        />
-        {titleOverlay}
+      <div className="contents" data-task-native-quick-entry-layout-section="summary">
+        <div
+          className="relative w-full"
+          data-task-native-summary-capture={nativeSummaryCaptureActive ? 'true' : undefined}
+        >
+          <Input
+            ref={titleInputRef}
+            id={`task-title-${editorId}`}
+            data-task-editor-title
+            autoFocus={titleAutoFocus}
+            aria-label="Summary"
+            placeholder="New Task"
+            aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Alt+Shift+Q"
+            value={title}
+            className={titleClassName}
+            onPointerDown={onTitlePointerDown}
+            onChange={(event) => onTitleChange(event.target.value)}
+            onKeyDown={onTitleKeyDown}
+          />
+          {titleOverlay}
+        </div>
       </div>
-      {temporalFields}
+      <div className="contents" data-task-native-quick-entry-layout-section="temporal">
+        {temporalFields}
+      </div>
+      <div
+        className="contents"
+        data-task-native-quick-entry-layout-section="identity"
+      >
       <div
         data-task-editor-identity-grid
         className={cn('grid gap-3', areas.length > 0 ? 'grid-cols-2' : 'grid-cols-1')}
@@ -274,6 +286,8 @@ export function TaskMetadataDrawerFields({
           </Select>
         </div>
       </div>
+      </div>
+      <div className="contents" data-task-native-quick-entry-layout-section="optional">
       {notesDisclosed ? (
         <Suspense fallback={<div className="min-h-16" aria-label="Loading Task Notes" />}>
           <TaskMarkdownNotes
@@ -346,7 +360,7 @@ export function TaskMetadataDrawerFields({
               type="button"
               variant="outline"
               size="sm"
-              aria-label={`Add ${content === 'link' ? 'Link' : content === 'notes' ? 'Notes' : 'Checklist'}`}
+              aria-label={`Add ${optionalContentLabel(content)}`}
               data-task-primary-link-disclosure={content === 'link' ? 'true' : undefined}
               data-task-checklist-disclosure={content === 'checklist' ? 'true' : undefined}
               data-task-notes-disclosure={content === 'notes' ? 'true' : undefined}
@@ -363,11 +377,12 @@ export function TaskMetadataDrawerFields({
                 }
               }}
             >
-              + {content === 'link' ? 'Link' : content === 'notes' ? 'Notes' : 'Checklist'}
+              + {optionalContentLabel(content)}
             </Button>
           ))}
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

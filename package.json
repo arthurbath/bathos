@@ -32,7 +32,9 @@
     "dev:supabase-functions": "node scripts/supabase-functions-local.mjs",
     "verify:tasks:edge-bundle": "node scripts/verify-tasks-edge-bundle.mjs",
     "verify:tasks:edge-serve": "node scripts/verify-tasks-edge-serve.mjs",
-    "verify:tasks:reminders": "node scripts/verify-tasks-web-push-config.mjs"
+    "verify:tasks:reminders": "node scripts/verify-tasks-web-push-config.mjs",
+    "generate:tasks:native-quick-entry-contract": "node scripts/generate-tasks-native-quick-entry-contract.mjs",
+    "verify:tasks:native-quick-entry-contract": "node scripts/generate-tasks-native-quick-entry-contract.mjs --check"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

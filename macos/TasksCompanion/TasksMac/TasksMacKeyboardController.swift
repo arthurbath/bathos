@@ -4,11 +4,13 @@ import Foundation
 import OSLog
 import SwiftUI
 import WebKit
+import WidgetKit
 
 @MainActor
 final class TasksMacKeyboardController: ObservableObject {
     private weak var browserModel: TasksBrowserModel?
     private var keyMonitor: Any?
+    private var didProcessDebugQuickEntryLaunch = false
     private let shortcutRegistrar = TasksGlobalShortcutRegistrar()
     private lazy var quickEntryPanel = TasksMacQuickEntryPanelController {
         [weak self] committed in
@@ -48,6 +50,18 @@ final class TasksMacKeyboardController: ObservableObject {
         shortcutRegistrar.onTrigger = { [weak self] in
             self?.quickEntryPanel.toggle()
         }
+#if DEBUG
+        if !didProcessDebugQuickEntryLaunch {
+            didProcessDebugQuickEntryLaunch = true
+            if ProcessInfo.processInfo.environment[
+                "TASKS_SHOW_NATIVE_QUICK_ENTRY_ON_LAUNCH"
+            ] == "1" {
+                DispatchQueue.main.async { [weak self] in
+                    self?.quickEntryPanel.show()
+                }
+            }
+        }
+#endif
         guard keyMonitor == nil else {
             return
         }
@@ -466,47 +480,39 @@ private func tasksGlobalQuickEntryHotKeyHandler(
 @MainActor
 final class TasksMacQuickEntryPanelController: NSObject {
     private let onFinish: (Bool) -> Void
-    private let browserModel: TasksBrowserModel
+    private lazy var nativeService = TasksNativeQuickEntryService()
     private lazy var panel: TasksMacQuickEntryPanel = makePanel()
+    private lazy var nativeViewModel = TasksNativeQuickEntryViewModel(
+        submitHandler: { [weak self] submission in
+            guard let self else {
+                throw TasksNativeQuickEntryServiceFailure.unavailable
+            }
+            return try await self.nativeService.create(submission)
+        },
+        onCancel: { [weak self] in
+            self?.requestCancellation()
+        },
+        onAccepted: { [weak self] _ in
+            guard let self else { return }
+            self.nativeBootstrapTask?.cancel()
+            self.nativeBootstrapTask = nil
+            self.panel.orderOut(nil)
+            WidgetCenter.shared.reloadTimelines(
+                ofKind: TaskCompanionConstants.widgetKind
+            )
+            self.onFinish(true)
+        }
+    )
     private var cancellationPending = false
-    private var presentationPending = false
-    private var cancellationFallback: DispatchWorkItem?
+    private var nativeBootstrapTask: Task<Void, Never>?
 
-    convenience init(onFinish: @escaping (Bool) -> Void) {
-        self.init(
-            browserModel: TasksBrowserModel(),
-            onFinish: onFinish
-        )
-    }
-
-    init(
-        browserModel: TasksBrowserModel,
-        onFinish: @escaping (Bool) -> Void
-    ) {
-        self.browserModel = browserModel
+    init(onFinish: @escaping (Bool) -> Void) {
         self.onFinish = onFinish
         super.init()
-        browserModel.quickEntryDidFinish = { [weak self] committed in
-            guard let self else {
-                return
-            }
-            self.cancellationPending = false
-            self.cancellationFallback?.cancel()
-            self.cancellationFallback = nil
-            self.presentationPending = false
-            self.panel.orderOut(nil)
-            self.onFinish(committed)
-        }
-        browserModel.quickEntryPresentationDidBecomeReady = { [weak self] in
-            self?.finishPresentation()
-        }
-        browserModel.quickEntryDismissalRequested = { [weak self] in
-            self?.hideForWebDismissal()
-        }
     }
 
     func toggle() {
-        if panel.isVisible || presentationPending {
+        if panel.isVisible {
             requestCancellation()
         } else {
             show()
@@ -515,36 +521,24 @@ final class TasksMacQuickEntryPanelController: NSObject {
 
     func show() {
         cancellationPending = false
-        cancellationFallback?.cancel()
-        cancellationFallback = nil
-        presentationPending = true
-        browserModel.prepareForPresentation(
-            of: TasksMacQuickEntryPanelPolicy.webURL
-        )
+        nativeBootstrapTask?.cancel()
+        nativeViewModel.reset(using: nativeService.cachedBootstrap())
+        nativeViewModel.beginBootstrapRefresh()
+        nativeBootstrapTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let bootstrap = try await nativeService.refreshBootstrap()
+                guard !Task.isCancelled else { return }
+                nativeViewModel.finishBootstrapRefresh(.success(bootstrap))
+            } catch {
+                guard !Task.isCancelled else { return }
+                nativeViewModel.finishBootstrapRefresh(.failure(error))
+            }
+        }
         TasksMacQuickEntryPanelPolicy.apply(to: panel)
         panel.center()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
-    }
-
-    private func finishPresentation() {
-        guard presentationPending, !cancellationPending else {
-            return
-        }
-        presentationPending = false
-        TasksMacQuickEntryPanelPolicy.apply(to: panel)
-        if !panel.isVisible {
-            panel.center()
-            NSApp.activate(ignoringOtherApps: true)
-            panel.makeKeyAndOrderFront(nil)
-        }
-    }
-
-    private func hideForWebDismissal() {
-        presentationPending = false
-        cancellationPending = true
-        browserModel.cancelQuickEntryPresentation()
-        panel.orderOut(nil)
     }
 
     private func makePanel() -> TasksMacQuickEntryPanel {
@@ -561,12 +555,21 @@ final class TasksMacQuickEntryPanelController: NSObject {
             self?.requestCancellation()
         }
         panel.onControlShortcut = { [weak self] key in
-            guard let webView = self?.browserModel.webView else {
+            guard let self else {
                 return
             }
-            webView.evaluateJavaScript(
-                TasksMacQuickEntryControlShortcutPolicy.javaScript(for: key)
-            )
+            let shouldMoveInsertionBoundary =
+                self.nativeViewModel.handleControlShortcut(key)
+            if shouldMoveInsertionBoundary {
+                self.panel.moveTextInsertionToOppositeBoundary()
+            }
+        }
+        panel.onTabTraversal = { [weak self] reverse in
+            guard let self else {
+                return false
+            }
+            self.nativeViewModel.moveFocus(reverse: reverse)
+            return true
         }
         panel.isMovableByWindowBackground = true
         panel.isFloatingPanel = true
@@ -576,72 +579,46 @@ final class TasksMacQuickEntryPanelController: NSObject {
             TasksMacQuickEntryPanelPolicy.collectionBehavior
         panel.backgroundColor = .clear
         panel.contentViewController = NSHostingController(
-            rootView: TasksMacQuickEntryPanelContent(model: browserModel)
+            rootView: TasksMacQuickEntryPanelContent(
+                nativeModel: nativeViewModel
+            )
         )
         TasksMacQuickEntryPanelPolicy.apply(to: panel)
         return panel
     }
 
     private func requestCancellation() {
-        guard (panel.isVisible || presentationPending), !cancellationPending else {
+        guard panel.isVisible, !cancellationPending else {
             return
         }
         cancellationPending = true
-        presentationPending = false
-        browserModel.cancelQuickEntryPresentation()
+        nativeBootstrapTask?.cancel()
+        nativeBootstrapTask = nil
         panel.orderOut(nil)
-        guard browserModel.hasLoadedContent else {
-            cancellationPending = false
-            onFinish(false)
-            return
-        }
-        guard let webView = browserModel.webView else {
-            cancellationPending = false
-            onFinish(false)
-            return
-        }
-        let fallback = DispatchWorkItem { [weak self] in
-            guard let self, self.cancellationPending else {
-                return
-            }
-            self.cancellationPending = false
-            self.cancellationFallback = nil
-            self.onFinish(false)
-        }
-        cancellationFallback = fallback
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: fallback)
-        webView.evaluateJavaScript(
-            TasksMacQuickEntryPanelPolicy.cancelJavaScript
-        ) { [weak self] result, error in
-            Task { @MainActor in
-                guard let self else {
-                    return
-                }
-                if error != nil || (result as? Bool) != true {
-                    self.cancellationFallback?.cancel()
-                    self.cancellationFallback = nil
-                    self.cancellationPending = false
-                    self.onFinish(false)
-                }
-            }
-        }
+        cancellationPending = false
+        onFinish(false)
     }
 }
 
 private struct TasksMacQuickEntryPanelContent: View {
-    @ObservedObject var model: TasksBrowserModel
+    @ObservedObject var nativeModel: TasksNativeQuickEntryViewModel
 
     var body: some View {
         ZStack(alignment: .top) {
-            TasksMacWebView(
-                model: model,
-                waitsForQuickEntryPresentation: true
-            )
+            TasksNativeQuickEntryView(model: nativeModel)
 
-            TasksMacQuickEntryDragRegion()
-                .frame(maxWidth: .infinity)
-                .frame(height: TasksMacQuickEntryPanelPolicy.dragRegionHeight)
-                .accessibilityHidden(true)
+            HStack(spacing: 0) {
+                Color.clear
+                    .frame(width: 52)
+                    .allowsHitTesting(false)
+                TasksMacQuickEntryDragRegion()
+                Color.clear
+                    .frame(width: 52)
+                    .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: TasksMacQuickEntryPanelPolicy.dragRegionHeight)
+            .accessibilityHidden(true)
         }
     }
 }
@@ -720,21 +697,6 @@ enum TasksMacQuickEntryPanelPolicy {
         layer.masksToBounds = true
     }
 
-    static let cancelJavaScript = """
-    (() => {
-      const event = new CustomEvent(
-        "bathos:tasks-native-quick-entry-cancel",
-        { cancelable: true }
-      );
-      window.dispatchEvent(event);
-      return event.defaultPrevented;
-    })();
-    """
-
-    static let webURL = URL(
-        string: "https://\(TaskCompanionConstants.trustedWebHost)"
-            + "/tasks/today?native_new_task=1&native_quick_entry=1"
-    )!
 }
 
 enum TasksMacQuickEntryControlShortcutAction: Equatable {
@@ -745,7 +707,7 @@ enum TasksMacQuickEntryControlShortcutAction: Equatable {
 
 enum TasksMacQuickEntryControlShortcutPolicy {
     private static let metadataKeys: Set<String> = [
-        "e", "r", "t", "y", "d", "f", "g", "c", "v",
+        "e", "r", "t", "y", "n", "d", "f", "g", "h", "c", "v",
     ]
     private static let excludedTaskKeys: Set<String> = [
         "q", "w", "a", "s", "z", "x", "b",
@@ -775,30 +737,30 @@ enum TasksMacQuickEntryControlShortcutPolicy {
         return .passThrough
     }
 
-    static func javaScript(for key: String) -> String {
-        """
-        (() => {
-          const target = document.activeElement || document.body;
-          target.dispatchEvent(new KeyboardEvent("keydown", {
-            key: "\(key)",
-            ctrlKey: true,
-            bubbles: true,
-            cancelable: true
-          }));
-        })();
-        """
-    }
 }
 
 final class TasksMacQuickEntryPanel: NSPanel {
     var onCancel: (() -> Void)?
     var onControlShortcut: ((String) -> Void)?
+    var onTabTraversal: ((Bool) -> Bool)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown {
+            if event.keyCode == 48 {
+                let modifiers = event.modifierFlags.intersection([
+                    .command,
+                    .control,
+                    .option,
+                    .shift,
+                ])
+                if modifiers.isEmpty || modifiers == [.shift],
+                   onTabTraversal?(modifiers == [.shift]) == true {
+                    return
+                }
+            }
             switch TasksMacQuickEntryControlShortcutPolicy.action(
                 charactersIgnoringModifiers: event.charactersIgnoringModifiers,
                 modifierFlags: event.modifierFlags
@@ -817,5 +779,19 @@ final class TasksMacQuickEntryPanel: NSPanel {
 
     override func cancelOperation(_ sender: Any?) {
         onCancel?()
+    }
+
+    func moveTextInsertionToOppositeBoundary() {
+        guard let editor = firstResponder as? NSTextView else {
+            return
+        }
+        let length = editor.string.utf16.count
+        let selection = editor.selectedRange()
+        let destination = selection.length == 0 && selection.location >= length
+            ? 0
+            : length
+        let range = NSRange(location: destination, length: 0)
+        editor.setSelectedRange(range)
+        editor.scrollRangeToVisible(range)
     }
 }

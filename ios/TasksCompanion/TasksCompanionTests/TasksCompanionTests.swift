@@ -1169,49 +1169,6 @@ final class TasksCompanionTests: XCTestCase {
     }
 
     @MainActor
-    func testPresentationReusesHealthyContentForQuickEntry() {
-        var navigatedURL: URL?
-        let model = TasksBrowserModel(
-            inPageNavigator: { _, url in
-                navigatedURL = url
-            }
-        )
-        model.webView = WKWebView()
-        model.didFinishLoading()
-        model.didBecomeContentReady()
-        XCTAssertTrue(model.hasLoadedContent)
-
-        let nextURL = TaskNativeRoute.newTask.webURL
-        model.prepareForPresentation(of: nextURL)
-
-        XCTAssertEqual(model.requestedURL, nextURL)
-        XCTAssertEqual(navigatedURL, nextURL)
-        XCTAssertTrue(model.hasLoadedContent)
-        XCTAssertFalse(model.quickEntryPresentationReady)
-        XCTAssertFalse(model.isLoading)
-        XCTAssertNil(model.loadError)
-    }
-
-    @MainActor
-    func testQuickEntryPresentationHasABoundedCompatibilityFallback() {
-        var readyCount = 0
-        let model = TasksBrowserModel(
-            quickEntryPresentationFallbackDelayNanoseconds: 60_000_000_000
-        )
-        model.quickEntryPresentationDidBecomeReady = {
-            readyCount += 1
-        }
-
-        model.prepareForPresentation(of: TaskNativeRoute.newTask.webURL)
-        XCTAssertFalse(model.quickEntryPresentationReady)
-
-        model.performQuickEntryPresentationFallback()
-
-        XCTAssertTrue(model.quickEntryPresentationReady)
-        XCTAssertEqual(readyCount, 1)
-    }
-
-    @MainActor
     func testNavigationWaitsForWebReadinessAndHasABoundedFallback() {
         let model = TasksBrowserModel(
             contentReadyFallbackDelayNanoseconds: 60_000_000_000

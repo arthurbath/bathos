@@ -19,6 +19,10 @@ function setup(overrides?: {
   createInboxTask?: WidgetActionRpcClient['createInboxTask'];
   todayProgress?: WidgetActionRpcClient['todayProgress'];
   revoke?: WidgetActionRpcClient['revoke'];
+  issueQuickEntry?: WidgetActionRpcClient['issueQuickEntry'];
+  quickEntryBootstrap?: WidgetActionRpcClient['quickEntryBootstrap'];
+  createQuickEntry?: WidgetActionRpcClient['createQuickEntry'];
+  revokeQuickEntry?: WidgetActionRpcClient['revokeQuickEntry'];
 }) {
   const rpc: WidgetActionRpcClient = {
     issue: overrides?.issue ?? vi.fn(async () => ({ data: { outcome: 'issued' }, error: null })),
@@ -65,6 +69,41 @@ function setup(overrides?: {
       error: null,
     })),
     revoke: overrides?.revoke ?? vi.fn(async () => ({ data: { outcome: 'revoked' }, error: null })),
+    issueQuickEntry: overrides?.issueQuickEntry ?? vi.fn(async () => ({
+      data: { outcome: 'issued' },
+      error: null,
+    })),
+    quickEntryBootstrap: overrides?.quickEntryBootstrap ?? vi.fn(async () => ({
+      data: {
+        outcome: 'accepted',
+        type: 'nativeQuickEntryBootstrap',
+        schemaVersion: 1,
+        payloadSchemaVersion: 1,
+        contractFingerprint: '5ea30f93f4269dcb3423c4a5ca3c8c9e3b505a545e2052e584d7b56cc653cfe1',
+        capability: 'native_quick_entry_v1',
+        ownerId: '9b000000-0000-4000-8000-000000000001',
+        generatedAt: '2026-07-28T20:00:00.000Z',
+        planningDate: '2026-07-28',
+        planningTimeZone: 'America/Los_Angeles',
+        areas: [{ id: '9b000000-0000-4000-8000-000000000010', name: 'Home' }],
+        limits: { maximumChecklistItems: 200, maximumPayloadBytes: 262144 },
+      },
+      error: null,
+    })),
+    createQuickEntry: overrides?.createQuickEntry ?? vi.fn(async () => ({
+      data: {
+        outcome: 'accepted',
+        taskId: '9b000000-0000-4000-8000-000000000080',
+        revision: 1,
+        acceptedAt: '2026-07-28T20:00:00.000Z',
+        planningDate: '2026-07-28',
+      },
+      error: null,
+    })),
+    revokeQuickEntry: overrides?.revokeQuickEntry ?? vi.fn(async () => ({
+      data: { outcome: 'revoked' },
+      error: null,
+    })),
   };
   return {
     rpc,
@@ -299,5 +338,94 @@ describe('tasks widget action handler', () => {
     }));
     expect(response.status).toBe(200);
     expect(rpc.revoke).toHaveBeenCalledWith(`twc_${'A'.repeat(43)}`);
+  });
+
+  it('issues a distinct expiring native Quick Entry credential', async () => {
+    const { handler, rpc } = setup();
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer access-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'issueQuickEntry',
+        installationId: '9b000000-0000-4000-8000-000000000040',
+      }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      outcome: 'issued',
+      type: 'nativeQuickEntryCredential',
+      capability: 'native_quick_entry_v1',
+      payloadSchemaVersion: 1,
+      ownerId: '9b000000-0000-4000-8000-000000000001',
+      installationId: '9b000000-0000-4000-8000-000000000040',
+    });
+    expect(rpc.issueQuickEntry).toHaveBeenCalledWith(expect.objectContaining({
+      rawToken: expect.stringMatching(/^tqe_[A-Za-z0-9_-]{43}$/),
+    }));
+  });
+
+  it('reads a bounded contract-compatible native Quick Entry bootstrap', async () => {
+    const { handler, rpc } = setup();
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: {
+        Authorization: `QuickEntry tqe_${'A'.repeat(43)}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'quickEntryBootstrap' }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      type: 'nativeQuickEntryBootstrap',
+      planningDate: '2026-07-28',
+      areas: [{ name: 'Home' }],
+    });
+    expect(rpc.quickEntryBootstrap).toHaveBeenCalledWith(`tqe_${'A'.repeat(43)}`);
+  });
+
+  it('forwards a bounded native draft to the atomic creation RPC', async () => {
+    const { handler, rpc } = setup();
+    const payload = {
+      payloadSchemaVersion: 1,
+      contractFingerprint: '5ea30f93f4269dcb3423c4a5ca3c8c9e3b505a545e2052e584d7b56cc653cfe1',
+      clientMutationID: '9b000000-0000-4000-8000-000000000080',
+      operationID: '9b000000-0000-4000-8000-000000000081',
+      summary: 'Native task',
+      destination: 'anytime',
+      todaySection: 'inbox',
+      actionability: 'actionable',
+      checklist: [],
+    };
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: {
+        Authorization: `QuickEntry tqe_${'A'.repeat(43)}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'createQuickEntry', payload }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      outcome: 'accepted',
+      taskId: '9b000000-0000-4000-8000-000000000080',
+    });
+    expect(rpc.createQuickEntry).toHaveBeenCalledWith({
+      rawToken: `tqe_${'A'.repeat(43)}`,
+      payload,
+    });
+  });
+
+  it('rejects malformed native credentials before calling native RPCs', async () => {
+    const { handler, rpc } = setup();
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Widget twc_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'quickEntryBootstrap' }),
+    }));
+    expect(response.status).toBe(401);
+    expect(rpc.quickEntryBootstrap).not.toHaveBeenCalled();
   });
 });

@@ -4,10 +4,14 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { TaskQuickFilter } from '@/modules/tasks/domain/taskQuickFilters';
 import {
   buildTaskNativeWidgetSnapshot,
+  publishTaskNativeQuickEntryCredential,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
-import { maintainTaskNativeWidgetCredential } from '@/modules/tasks/native/taskNativeWidgetCredential';
+import {
+  maintainTaskNativeQuickEntryCredential,
+  maintainTaskNativeWidgetCredential,
+} from '@/modules/tasks/native/taskNativeWidgetCredential';
 import type {
   TaskArea,
   TaskRecurrenceDefinition,
@@ -37,6 +41,7 @@ export function useTaskNativeWidgetBridge({
   }>;
 }): void {
   const provisionedCredentialKeyRef = useRef<string | null>(null);
+  const provisionedQuickEntryCredentialKeyRef = useRef<string | null>(null);
   const query = useQuery<TaskTodo>(
     `SELECT *
      FROM tasks_todos
@@ -105,6 +110,38 @@ export function useTaskNativeWidgetBridge({
     }).catch(() => {
       if (!controller.signal.aborted) {
         provisionedCredentialKeyRef.current = null;
+      }
+    });
+
+    return () => controller.abort();
+  }, [ownerId]);
+
+  useEffect(() => {
+    const installationId = getTasksNativeInstallationId();
+    if (!installationId) return;
+    const credentialKey = `${ownerId}:${installationId}`;
+    if (provisionedQuickEntryCredentialKeyRef.current === credentialKey) return;
+    const controller = new AbortController();
+
+    void maintainTaskNativeQuickEntryCredential({
+      ownerId,
+      installationId,
+      signal: controller.signal,
+      issue: async () => {
+        const { data, error } = await supabase.functions.invoke(
+          'tasks-widget-actions',
+          { body: { action: 'issueQuickEntry', installationId } },
+        );
+        return error ? null : data;
+      },
+      publish: publishTaskNativeQuickEntryCredential,
+    }).then((provisioned) => {
+      if (provisioned && !controller.signal.aborted) {
+        provisionedQuickEntryCredentialKeyRef.current = credentialKey;
+      }
+    }).catch(() => {
+      if (!controller.signal.aborted) {
+        provisionedQuickEntryCredentialKeyRef.current = null;
       }
     });
 

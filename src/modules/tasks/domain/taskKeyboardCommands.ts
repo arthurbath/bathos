@@ -1,3 +1,5 @@
+import { TASK_NATIVE_QUICK_ENTRY_COMMANDS } from '@/modules/tasks/domain/taskNativeQuickEntryContract';
+
 export type TaskKeyboardCommand =
   | 'undo'
   | 'redo'
@@ -85,19 +87,9 @@ const viewNavigationCommands: Record<string, TaskKeyboardCommand> = {
   '6': 'view-config',
 };
 
-const nativeQuickEntryMetadataCommands = new Set<TaskKeyboardCommand>([
-  'open-start-date',
-  'clear-start',
-  'cycle-horizon',
-  'focus-reminder',
-  'focus-link',
-  'focus-notes',
-  'open-deadline',
-  'cycle-actionability',
-  'set-someday',
-  'open-checklist',
-  'cycle-area',
-]);
+const nativeQuickEntryMetadataCommands = new Set<TaskKeyboardCommand>(
+  TASK_NATIVE_QUICK_ENTRY_COMMANDS.map(({ command }) => command),
+);
 
 export function isTaskNativeQuickEntryMetadataCommand(
   command: TaskKeyboardCommand,

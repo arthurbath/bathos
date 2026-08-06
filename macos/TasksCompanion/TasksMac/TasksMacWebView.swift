@@ -63,11 +63,9 @@ enum TasksMacWebNavigationPolicy {
 
 struct TasksMacWebView: View {
     @ObservedObject var model: TasksBrowserModel
-    var waitsForQuickEntryPresentation = false
 
     private var contentIsVisible: Bool {
         model.hasLoadedContent
-            && (!waitsForQuickEntryPresentation || model.quickEntryPresentationReady)
     }
 
     var body: some View {
