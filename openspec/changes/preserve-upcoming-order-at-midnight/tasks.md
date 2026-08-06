@@ -13,3 +13,10 @@
 
 - [x] 3.1 Add pgTAP coverage for mixed ordinary and recurrence ordering, existing Inbox placement, and retry stability
 - [x] 3.2 Run focused Tasks tests, database tests, build, lint, and OpenSpec validation
+
+## 4. Fractional-key Collation Regression
+
+- [x] 4.1 Diagnose the production activation history against preserved Upcoming keys
+- [x] 4.2 Add a forward migration that applies ordinal `"C"` collation to activation ordering
+- [x] 4.3 Add and run pgTAP coverage across upper- and lower-case fractional keys
+- [x] 4.4 Re-run OpenSpec validation and migration lint

@@ -980,21 +980,38 @@ INSERT INTO public.tasks_todos (
     'b2000000-0000-4000-8000-000000000013'
   ),
   (
+    'b2000000-0000-4000-8000-000000000030',
+    'b2000000-0000-4000-8000-000000000001',
+    'Ordinal Before', 'anytime', 'z8', 'Zw', current_date + 1, NULL,
+    clock_timestamp(), 'b2000000-0000-4000-8000-000000000031'
+  ),
+  (
     '00000000-0000-4000-8000-000000000014',
     'b2000000-0000-4000-8000-000000000001',
-    'Ordinary First', 'anytime', 'z9', 'a3', current_date + 1, NULL,
+    'Ordinary First', 'anytime', 'z9', 'Zx', current_date + 1, NULL,
     clock_timestamp(), 'b2000000-0000-4000-8000-000000000015'
   ),
   (
     'b2000000-0000-4000-8000-000000000016',
     'b2000000-0000-4000-8000-000000000001',
-    'Ordinary Last', 'anytime', 'A0', 'a4', current_date + 1, NULL,
+    'Ordinary Last', 'anytime', 'A0', 'aP', current_date + 1, NULL,
     clock_timestamp(), 'b2000000-0000-4000-8000-000000000017'
   );
 
--- Simulate the foreground client reaching midnight and uploading one ordinary
--- activation before the authoritative recurrence pass runs.
+-- Simulate the foreground client reaching midnight and uploading ordinary
+-- activations before the authoritative recurrence pass runs.
 SELECT set_config('garden.bath.tasks_activation', 'on', true);
+UPDATE public.tasks_todos
+SET start_date = NULL,
+    today_section = 'inbox',
+    revision = revision + 1,
+    client_mutation_id = 'b2000000-0000-4000-8000-000000000032',
+    last_mutation_channel = 'native',
+    last_actor_type = 'system',
+    updated_at = (
+      current_date::timestamp + interval '1 minute'
+    ) AT TIME ZONE 'UTC'
+WHERE id = 'b2000000-0000-4000-8000-000000000030';
 UPDATE public.tasks_todos
 SET start_date = NULL,
     today_section = 'inbox',
@@ -1027,7 +1044,7 @@ INSERT INTO public.tasks_recurrence_definitions (
   'b2000000-0000-4000-8000-000000000020',
   'b2000000-0000-4000-8000-000000000001',
   'Recurrence Middle', 'active', 1, 1,
-  current_date - 1, current_date, 'a3',
+  current_date - 1, current_date, 'Zx',
   'native', 'system', 'b2000000-0000-4000-8000-000000000021'
 );
 INSERT INTO public.tasks_recurrence_revisions (
@@ -1070,8 +1087,8 @@ SELECT is(
 SELECT is(
   (current_setting('test.mixed_order_activation')::jsonb
     ->> 'activated_todos')::integer,
-  2,
-  'mixed midnight activation promotes both reached ordinary tasks'
+  3,
+  'mixed midnight activation promotes every reached ordinary task'
 );
 SELECT is(
   (
@@ -1085,11 +1102,12 @@ SELECT is(
   ARRAY[
     'Existing Inbox',
     'Rolled Existing',
+    'Ordinal Before',
     'Recurrence Middle',
     'Ordinary First',
     'Ordinary Last'
   ]::text[],
-  'appends the mixed reached batch in its deliberate Upcoming order'
+  'appends the mixed reached batch in ordinal Upcoming order across upper- and lower-case keys'
 );
 SELECT is(
   (

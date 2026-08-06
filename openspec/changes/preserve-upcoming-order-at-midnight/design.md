@@ -41,12 +41,17 @@ The foreground repository will read the current Inbox tail and assign sequential
 
 The authoritative pass will also recognize current-day native/system Inbox activations as provisional local work. It will exclude them from the retained Inbox tail, fold them into the mixed batch, preserve their already-normalized Start value, and mark the finalized server mutation as automation-authored. This makes a connected client that uploads its local midnight activation before the recurrence job converge through the same ordering pass without making later retries reorder the batch.
 
+### Compare fractional keys with ordinal collation
+
+Fractional-indexing keys are case-sensitive ordinal strings. The client compares them by code-point order, and the Upcoming database query uses PostgreSQL's `"C"` collation for the same reason. The activation function must explicitly use `"C"` for every fractional-key ordering operation. A database's default linguistic collation can otherwise place a lower-case key such as `aP` before upper-case keys such as `Zw` and `Zx`, producing a Today sequence different from the one displayed in Upcoming.
+
 ## Risks / Trade-offs
 
 - [Risk] A generated recurrence root receives a second revision update during activation. → Mitigation: keep the update system-authored and in the same transaction, and cover retry idempotency so no later pass rewrites it.
 - [Risk] Catch-up recurrence evaluation can generate more than one instance for one prototype. → Mitigation: retain controlling-date sorting before Upcoming rank and use stable IDs as the final deterministic tie-breaker.
 - [Risk] Local ordinary activation briefly lacks recurrence rows while offline or before synchronization. → Mitigation: preserve ordinary relative order locally and rely on the existing authoritative server activation to converge the complete mixed batch.
 - [Risk] A connected foreground client can upload an ordinary activation before the server recurrence pass. → Mitigation: treat current-day native/system Inbox activations as provisional until the authoritative pass marks the combined order automation-authored.
+- [Risk] Database collation can differ from the ordinal comparison required by fractional indexing. → Mitigation: apply the `"C"` collation explicitly and cover upper- to lower-case key boundaries in pgTAP.
 
 ## Migration Plan
 
