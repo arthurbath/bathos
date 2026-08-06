@@ -606,6 +606,7 @@ private struct TasksMacQuickEntryPanelContent: View {
     var body: some View {
         ZStack(alignment: .top) {
             TasksNativeQuickEntryView(model: nativeModel)
+                .id(nativeModel.draft.clientMutationID)
 
             HStack(spacing: 0) {
                 Color.clear
