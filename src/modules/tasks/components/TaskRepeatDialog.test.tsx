@@ -207,12 +207,14 @@ describe('TaskRepeatDialog', () => {
         '[role="switch"][aria-label="Tasks Have Deadlines"]',
       );
       expect(deadlineToggle).toBeTruthy();
-      expect(document.body).toHaveTextContent('Next Starts');
+      expect(document.body).toHaveTextContent('Next Starts on');
       expect(document.querySelector('[aria-label="Next Date Type"]')).toBeNull();
 
       await act(async () => deadlineToggle?.click());
 
       expect(document.querySelector('[aria-label="Next Date Type"]')).toBeTruthy();
+      expect(document.querySelector('[data-task-repeat-anchor-preposition]'))
+        .toHaveTextContent('on');
       expect(document.body).toHaveTextContent('With Deadlines');
       expect(document.body).toHaveTextContent('Days After');
       expect(document.body).not.toHaveTextContent('Next Deadline');
@@ -340,8 +342,12 @@ describe('TaskRepeatDialog', () => {
       deadline: '2026-08-05',
     }));
     try {
+      const deadlinesToggleRow = document.querySelector<HTMLElement>(
+        '[aria-label="Tasks Have Deadlines"]',
+      )!.parentElement!;
       const datePhrase = document.querySelector<HTMLElement>('[data-task-repeat-date-phrase]')!;
-      expect(datePhrase).toHaveClass('space-y-2');
+      expect(deadlinesToggleRow).toHaveClass('!mt-7');
+      expect(datePhrase).toHaveClass('!mt-7', 'space-y-2');
       expect(datePhrase).toHaveTextContent('Next');
       expect(datePhrase).toHaveTextContent('With Deadlines');
     } finally {
@@ -656,6 +662,8 @@ describe('TaskRepeatDialog', () => {
       await act(async () => setInput(offset, '7'));
       await selectBathosOption('Next Date Type', 'Due');
       expect(document.querySelector('[aria-label="Next Deadline"]')).toBeTruthy();
+      expect(document.querySelector('[data-task-repeat-anchor-preposition]'))
+        .toHaveTextContent('on');
       expect(document.body).toHaveTextContent('And Starts');
       expect(document.body).toHaveTextContent('Days Prior');
       expect(document.body).not.toHaveTextContent('With Deadlines');

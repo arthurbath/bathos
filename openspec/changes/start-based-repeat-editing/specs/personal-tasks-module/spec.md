@@ -27,9 +27,9 @@ The Tasks repeat editor SHALL present repetition as one atomic form that first e
 #### Scenario: Configure generated dates
 - **WHEN** the repeat editor is open
 - **THEN** Tasks Have Deadlines is the first control after cadence
-- **AND** the toggle is visually separated from the cadence controls
-- **AND** when deadlines are disabled the editor displays the sentence Next Starts followed by the Next Start date picker
-- **AND** when deadlines are enabled the editor displays Next followed by a Starts or Due Select and the corresponding anchor date picker
+- **AND** the toggle has balanced major-concept separation above and below its row
+- **AND** when deadlines are disabled the editor displays the sentence `Next Starts on` followed by the Next Start date picker
+- **AND** when deadlines are enabled the editor displays `Next`, followed by a Starts or Due Select, the lowercase word `on`, and the corresponding anchor date picker
 - **AND** Start basis displays With Deadlines, a nonnegative whole-day input, and Days After
 - **AND** Deadline basis displays And Starts, a nonnegative whole-day input, and Days Prior
 

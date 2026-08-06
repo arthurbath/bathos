@@ -501,13 +501,13 @@ export function TaskRepeatDialog({
               className="!mt-7"
             />
 
-            <div className="space-y-2" data-task-repeat-date-phrase>
+            <div className="!mt-7 space-y-2" data-task-repeat-date-phrase>
               <div
                 className={addDeadline
-                  ? 'grid grid-cols-[auto_7rem_minmax(0,1fr)] items-center gap-2'
+                  ? 'grid grid-cols-[auto_7rem_auto_minmax(0,1fr)] items-center gap-2'
                   : 'grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2'}
               >
-                <span className="text-sm">{addDeadline ? 'Next' : 'Next Starts'}</span>
+                <span className="text-sm">{addDeadline ? 'Next' : 'Next Starts on'}</span>
                 {addDeadline ? (
                   <Select
                     value={dateBasis}
@@ -521,6 +521,9 @@ export function TaskRepeatDialog({
                       <SelectItem value="deadline">Due</SelectItem>
                     </SelectContent>
                   </Select>
+                ) : null}
+                {addDeadline ? (
+                  <span className="text-sm" data-task-repeat-anchor-preposition>on</span>
                 ) : null}
                 <DatePickerField
                   aria-label={dateBasis === 'deadline' ? 'Next Deadline' : 'Next Start'}

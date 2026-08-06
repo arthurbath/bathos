@@ -31,6 +31,10 @@ export function toDatePickerFieldValue(date: Date): string {
   return format(date, 'yyyy-MM-dd');
 }
 
+export function formatDatePickerDisplayValue(date: Date): string {
+  return format(date, 'yyyy MMM d');
+}
+
 function getVisibleMonth(value: string | undefined, fallbackValue?: string): Date {
   const parsed = parseDatePickerFieldValue(value);
   if (parsed) return new Date(parsed.getFullYear(), parsed.getMonth(), 1);
@@ -226,7 +230,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   value,
   onValueChange,
   placeholder = 'Pick a date',
-  displayFormat = 'MMM d, yyyy',
+  displayFormat = 'yyyy MMM d',
   displayValue,
   popoverAlign = 'start',
   minDate,

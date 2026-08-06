@@ -149,7 +149,7 @@ describe('DatePickerField', () => {
       expect(container.querySelector('input')).toBeNull();
       const trigger = container.querySelector('#shared-date') as HTMLButtonElement | null;
       expect(trigger?.tagName).toBe('BUTTON');
-      expect(trigger?.textContent).toContain('Mar 2, 2026');
+      expect(trigger?.textContent).toContain('2026 Mar 2');
       expect(trigger).toHaveClass('text-sm');
       expect(trigger).not.toHaveClass('text-base');
 
@@ -185,7 +185,7 @@ describe('DatePickerField', () => {
 
     try {
       expect(container.querySelector('#display-date')).toHaveTextContent('Tomorrow');
-      expect(container.querySelector('#display-date')).not.toHaveTextContent('Mar 2, 2026');
+      expect(container.querySelector('#display-date')).not.toHaveTextContent('2026 Mar 2');
     } finally {
       unmount(root, container);
     }
@@ -215,7 +215,7 @@ describe('DatePickerField', () => {
       expect(empty).toHaveTextContent('No Date');
       expect(empty).toHaveClass('text-muted-foreground');
       expect(empty?.className).not.toContain('hover:');
-      expect(populated).toHaveTextContent('Mar 2, 2026');
+      expect(populated).toHaveTextContent('2026 Mar 2');
       expect(populated).toHaveClass('text-foreground');
       expect(populated?.className).not.toContain('hover:');
     } finally {

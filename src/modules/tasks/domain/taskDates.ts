@@ -114,9 +114,9 @@ export function formatTaskRelativeCalendarDate(
   const offset = calendarEpochDay(value) - calendarEpochDay(planningDate);
   if (offset === 0) return 'Today';
   if (offset === 1) return 'Tomorrow';
-  if (offset === -1) return '1 day ago';
-  if (offset > 1 && offset <= 9) return `${offset} days left`;
-  if (offset < -1 && offset >= -9) return `${Math.abs(offset)} days ago`;
+  if (offset === -1) return '-1 day';
+  if (offset > 1 && offset <= 9) return `${offset} days`;
+  if (offset < -1 && offset >= -9) return `${offset} days`;
 
   return formatTaskCalendarDate(value, locale, false);
 }
@@ -124,21 +124,27 @@ export function formatTaskRelativeCalendarDate(
 export function formatTaskCompactCalendarDayOffset(
   value: string,
   planningDate: string,
-  locale?: string,
+  _locale?: string,
 ): string {
   if (!isTaskCalendarDate(value) || !isTaskCalendarDate(planningDate)) return value;
   const offset = calendarEpochDay(value) - calendarEpochDay(planningDate);
 
   if (offset === 0) return 'Today';
-  if (Math.abs(offset) > 9) return formatTaskCalendarDate(value, locale, false);
+  if (Math.abs(offset) > 9) return formatTaskNumericMonthDay(value);
 
-  return `${offset} ${Math.abs(offset) === 1 ? 'day' : 'days'}`;
+  return `${offset}d`;
+}
+
+export function formatTaskNumericMonthDay(value: string): string {
+  if (!isTaskCalendarDate(value)) return value;
+  const [, month, day] = value.split('-').map(Number);
+  return `${month}-${day}`;
 }
 
 export function formatTaskDateControlLabel(
   value: string,
   planningDate: string,
-  locale?: string,
+  _locale?: string,
 ): string {
   if (!isTaskCalendarDate(value) || !isTaskCalendarDate(planningDate)) return value;
   const offset = calendarEpochDay(value) - calendarEpochDay(planningDate);
@@ -146,7 +152,12 @@ export function formatTaskDateControlLabel(
   if (offset === 0) return 'Today';
   if (offset === 1) return 'Tomorrow';
 
-  return formatTaskCalendarDate(value, locale, true);
+  const [year, month, day] = value.split('-').map(Number);
+  const monthName = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+  return `${year} ${monthName} ${day}`;
 }
 
 export function formatTaskMonthDay(

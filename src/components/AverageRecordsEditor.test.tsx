@@ -146,7 +146,7 @@ describe('AverageRecordsEditor', () => {
 
       const amountInput = container.querySelector('input[type="number"]') as HTMLInputElement | null;
       expect(amountInput?.value).toBe('');
-      expect(container.textContent).toContain('Mar 2, 2026');
+      expect(container.textContent).toContain('2026 Mar 2');
 
       const active = document.activeElement as HTMLElement | null;
       expect(active?.getAttribute('data-average-record-primary-input')).toBe('true');
@@ -237,7 +237,7 @@ describe('AverageRecordsEditor', () => {
 
     try {
       const trigger = Array.from(container.querySelectorAll('button'))
-        .find((button) => button.textContent?.includes('Mar 2, 2026')) as HTMLButtonElement | undefined;
+        .find((button) => button.textContent?.includes('2026 Mar 2')) as HTMLButtonElement | undefined;
       act(() => {
         trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
@@ -252,7 +252,7 @@ describe('AverageRecordsEditor', () => {
       });
       await flushUi();
 
-      expect(container.textContent).toContain('Mar 18, 2026');
+      expect(container.textContent).toContain('2026 Mar 18');
     } finally {
       unmount(root, container);
     }
@@ -276,7 +276,7 @@ describe('AverageRecordsEditor', () => {
 
     try {
       const trigger = Array.from(container.querySelectorAll('button'))
-        .find((button) => button.textContent?.includes('Mar 2, 2026')) as HTMLButtonElement | undefined;
+        .find((button) => button.textContent?.includes('2026 Mar 2')) as HTMLButtonElement | undefined;
       act(() => {
         trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
@@ -324,7 +324,7 @@ describe('AverageRecordsEditor', () => {
 
     try {
       const trigger = Array.from(container.querySelectorAll('button'))
-        .find((button) => button.textContent?.includes('Mar 2, 2026')) as HTMLButtonElement | undefined;
+        .find((button) => button.textContent?.includes('2026 Mar 2')) as HTMLButtonElement | undefined;
       expect(trigger).toBeTruthy();
 
       act(() => {
@@ -342,7 +342,7 @@ describe('AverageRecordsEditor', () => {
       await flushUi();
 
       const updatedTrigger = Array.from(container.querySelectorAll('button'))
-        .find((button) => button.textContent?.includes('Mar 18, 2026')) as HTMLButtonElement | undefined;
+        .find((button) => button.textContent?.includes('2026 Mar 18')) as HTMLButtonElement | undefined;
       expect(updatedTrigger).toBeTruthy();
       expect(document.activeElement).toBe(updatedTrigger);
     } finally {

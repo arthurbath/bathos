@@ -71,7 +71,7 @@
     --mobile-bottom-nav-border: 0 0% 28%;
     --mobile-bottom-nav-bottom-offset: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
     --bathos-toast-bottom-offset: 1rem;
-    --bathos-toast-desktop-right-offset: max(1rem, calc((100vw - 64rem) / 2 + 1rem));
+    --bathos-toast-desktop-right-offset: 1rem;
   }
 }
 

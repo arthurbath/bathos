@@ -76,6 +76,13 @@ import {
   TaskImmediateDragHandle,
 } from '@/modules/tasks/components/TaskImmediateDragHandle';
 import {
+  alignOpenedTaskToVisibleContent,
+  getTaskEditorMotionClassName,
+  TASK_EDITOR_EXPANSION_DURATION_MS,
+  useTaskEditorMotion,
+} from '@/modules/tasks/components/taskEditorMotion';
+import { useTouchScrollDismissMenu } from '@/modules/tasks/components/useTouchScrollDismissMenu';
+import {
   dispatchToTaskImmediateDragTarget,
   useTaskImmediateDragTarget,
 } from '@/modules/tasks/components/TaskImmediateDragTarget';
@@ -83,11 +90,11 @@ import {
   addTaskCalendarDays,
   formatTaskCompactCalendarDayOffset,
   formatTaskDateControlLabel,
-  formatTaskMonthDay,
   formatTaskRelativeCalendarDate,
   isTaskCalendarDate,
   taskCalendarDateInTimeZone,
 } from '@/modules/tasks/domain/taskDates';
+import { TaskStartMetadata } from '@/modules/tasks/components/TaskStartMetadata';
 import {
   TaskKeyboardHelpDialog,
   TaskBulkCommandDialog,
@@ -232,6 +239,7 @@ import {
   generateTaskOrderKey,
 } from '@/modules/tasks/domain/taskOrder';
 import {
+  compareTaskUpcomingSectionRows,
   getTaskUpcomingDate,
   getTaskUpcomingCanonicalStart,
   getTaskUpcomingGroup,
@@ -342,15 +350,20 @@ function getUpcomingSelectableRowIds(
 ): string[] {
   const sections = new Map<string, {
     date: string;
-    rows: Array<{ id: string; orderKey: string }>;
+    kind: ReturnType<typeof getTaskUpcomingGroup>['kind'];
+    rows: Array<{ id: string; controllingDate: string; orderKey: string }>;
   }>();
-  const append = (date: string, row: { id: string; orderKey: string }) => {
+  const append = (
+    date: string,
+    row: { id: string; controllingDate: string; orderKey: string },
+  ) => {
     const group = getTaskUpcomingGroup(date, planningDate);
     const existing = sections.get(group.key);
     if (existing) existing.rows.push(row);
     else {
       sections.set(group.key, {
         date: getTaskUpcomingCanonicalStart(group, planningDate),
+        kind: group.kind,
         rows: [row],
       });
     }
@@ -361,19 +374,23 @@ function getUpcomingSelectableRowIds(
     if (date === null) continue;
     append(date, {
       id: task.id,
+      controllingDate: date,
       orderKey: task.upcoming_order_key ?? task.order_key,
     });
   }
   for (const prototype of recurrencePrototypes) {
     append(prototype.scheduledDate, {
       id: recurrenceSelectionId(prototype.definition.id),
+      controllingDate: prototype.scheduledDate,
       orderKey: prototype.definition.upcoming_order_key
         ?? prototype.revision.prototype_snapshot.root.order_key,
     });
   }
   return [...sections.values()]
     .sort((left, right) => left.date.localeCompare(right.date))
-    .flatMap(({ rows }) => rows.sort(compareTaskOrder).map(({ id }) => id));
+    .flatMap(({ kind, rows }) => rows
+      .sort((left, right) => compareTaskUpcomingSectionRows(kind, left, right))
+      .map(({ id }) => id));
 }
 
 const TaskMarkdownNotes = lazy(async () => {
@@ -382,7 +399,6 @@ const TaskMarkdownNotes = lazy(async () => {
 });
 
 const TASK_EDITOR_TEXT_AUTOSAVE_DELAY_MS = 400;
-const TASK_EDITOR_EXPANSION_DURATION_MS = 220;
 const TASK_POST_CLOSE_SETTLE_DELAY_MS = 180;
 const TASK_PLACEMENT_ANIMATION_DURATION_MS = 240;
 const TASK_TERMINAL_SETTLE_DELAY_MS = 180;
@@ -426,24 +442,6 @@ function taskMotionAllowed(): boolean {
 function waitForTaskMotion(milliseconds: number): Promise<void> {
   if (!taskMotionAllowed()) return Promise.resolve();
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-}
-
-function alignOpenedTaskToVisibleContent(
-  taskRow: HTMLElement | null,
-  behavior: ScrollBehavior,
-): void {
-  const summaryRow = taskRow?.querySelector<HTMLElement>('[data-task-row-header]') ?? taskRow;
-  if (summaryRow === null) return;
-  const stickyBoundary = document.querySelector<HTMLElement>('[data-topline-header]')
-    ?.getBoundingClientRect().bottom ?? 0;
-  const targetTop = Math.max(0, stickyBoundary) + 44;
-  const scrollDelta = summaryRow.getBoundingClientRect().top - targetTop;
-  if (!Number.isFinite(scrollDelta) || Math.abs(scrollDelta) < 1) return;
-  window.scrollBy({
-    top: scrollDelta,
-    left: 0,
-    behavior,
-  });
 }
 
 type TaskEditorFocusField = 'notes' | 'link' | 'checklist';
@@ -3612,6 +3610,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       if (draggedTaskIds.length === 1) {
         const draggedTask = selectedTasks[0];
         if (!draggedTask) return;
+        if (view === 'today' && indicator.targetTaskId === draggedTask.id) return;
         const sourceAreaId = getTaskEffectiveAreaId(draggedTask);
         const organizationPatch = indicator.targetAreaId !== undefined
           && sourceAreaId !== indicator.targetAreaId
@@ -3777,11 +3776,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const taskDragPlacement = taskDropIndicator?.targetTaskId === task.id
       ? taskDropIndicator.placement
       : null;
-    const upcomingStartDate = view === 'upcoming'
-      && task.start_date !== null
-      && isTaskCalendarDate(task.start_date)
-      && task.start_date > addTaskCalendarDays(planningDate, 7)
-      ? task.start_date
+    const upcomingControllingDate = view === 'upcoming'
+      ? getTaskUpcomingDate(task, planningDate)
+      : null;
+    const upcomingStartDate = upcomingControllingDate !== null
+      && getTaskUpcomingGroup(upcomingControllingDate, planningDate).kind === 'month'
+      ? upcomingControllingDate
       : null;
     return (
       <TaskRow
@@ -3940,7 +3940,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onTaskDragOver={(pointerPlacement) => {
           const draggedTaskId = activeDraggedTaskIdRef.current;
           if (draggedTaskId === null) return;
-          if (activeDraggedTaskIdsRef.current.includes(task.id)) return;
+          if (activeDraggedTaskIdsRef.current.includes(task.id)) {
+            if (
+              view === 'today'
+              && activeDraggedTaskIdsRef.current.length === 1
+              && task.id === draggedTaskId
+            ) {
+              updateTaskDropIndicator({
+                draggedTaskId,
+                targetTaskId: task.id,
+                placement: pointerPlacement,
+                targetAreaId,
+              });
+            }
+            return;
+          }
           if (view === 'upcoming') {
             updateTaskDropIndicator({
               draggedTaskId,
@@ -6551,11 +6565,13 @@ function UpcomingTaskSections({
         const orderedRows = [
           ...orderedEntries.map((entry) => ({
             kind: 'task' as const,
+            controllingDate: entry.controllingDate,
             orderKey: entry.item.upcoming_order_key ?? entry.item.order_key,
             entry,
           })),
           ...section.prototypes.map((prototype) => ({
             kind: 'prototype' as const,
+            controllingDate: prototype.scheduledDate,
             orderKey: prototype.definition.upcoming_order_key
               ?? prototype.revision.prototype_snapshot.root.order_key,
             prototype,
@@ -6569,9 +6585,10 @@ function UpcomingTaskSections({
           const rightId = right.kind === 'task'
             ? `task:${right.entry.item.id}`
             : `recurrence:${right.prototype.definition.id}`;
-          return compareTaskOrder(
-            { id: leftId, orderKey: left.orderKey },
-            { id: rightId, orderKey: right.orderKey },
+          return compareTaskUpcomingSectionRows(
+            section.kind,
+            { id: leftId, controllingDate: left.controllingDate, orderKey: left.orderKey },
+            { id: rightId, controllingDate: right.controllingDate, orderKey: right.orderKey },
           );
         });
         const sectionDropRows = orderedRows.flatMap<UpcomingSectionDropRow>((row) => {
@@ -6882,16 +6899,10 @@ function TaskRow({
   const [touchSwipeOffset, setTouchSwipeOffset] = useState(0);
   const [touchSwipeActive, setTouchSwipeActive] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [editorMounted, setEditorMounted] = useState(selected);
-  const [editorExpanded, setEditorExpanded] = useState(selected);
   const [visibleTitle, setVisibleTitle] = useState(task.title);
   const articleRef = useRef<HTMLElement>(null);
   const summaryRowRef = useRef<HTMLDivElement>(null);
   const editorRegionRef = useRef<HTMLDivElement>(null);
-  const editorAnimationFrameRef = useRef<number | null>(null);
-  const editorRevealTimerRef = useRef<number | null>(null);
-  const editorScrollFrameRef = useRef<number | null>(null);
-  const editorUnmountTimerRef = useRef<number | null>(null);
   const actionMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const touchSelectionGestureRef = useRef<{
@@ -6911,6 +6922,18 @@ function TaskRow({
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
   const inBulkSelection = bulkSelection !== undefined;
+  const {
+    collapseImmediately: collapseEditorImmediately,
+    expanded: editorExpanded,
+    mounted: editorMounted,
+    restoreImmediately: restoreEditorImmediately,
+  } = useTaskEditorMotion({
+    disabled: inBulkSelection,
+    immediate: quickEntry,
+    open: selected,
+    regionRef: editorRegionRef,
+    rowRef: articleRef,
+  });
   const areaLabel = showAreaMetadata ? getTaskAreaLabel(task, hierarchy) : null;
   const taskLabel = visibleTitle || 'New Task';
   const todayMarkerPresentation = todayMarker
@@ -6925,6 +6948,10 @@ function TaskRow({
     || completionRequested
     || completionGraceActive
     || terminalSettling;
+  const handleActionMenuPointerDown = useTouchScrollDismissMenu(() => {
+    suppressClickUntilRef.current = Date.now() + 500;
+    setActionMenuOpen(false);
+  });
 
   const handleImmediateTaskTarget = useCallback(({ clientY }: { clientY: number }) => {
     if (!draggableTask) return;
@@ -6981,82 +7008,6 @@ function TaskRow({
       );
     };
   }, [openTemporalPicker, task.id]);
-
-  useEffect(() => {
-    const cancelScheduledMotion = () => {
-      if (editorAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(editorAnimationFrameRef.current);
-        editorAnimationFrameRef.current = null;
-      }
-      if (editorRevealTimerRef.current !== null) {
-        window.clearTimeout(editorRevealTimerRef.current);
-        editorRevealTimerRef.current = null;
-      }
-      if (editorScrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(editorScrollFrameRef.current);
-        editorScrollFrameRef.current = null;
-      }
-      if (editorUnmountTimerRef.current !== null) {
-        window.clearTimeout(editorUnmountTimerRef.current);
-        editorUnmountTimerRef.current = null;
-      }
-    };
-    cancelScheduledMotion();
-
-    if (inBulkSelection) {
-      setEditorExpanded(false);
-      setEditorMounted(false);
-      return cancelScheduledMotion;
-    }
-
-    const reducedMotion = quickEntry
-      || (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? true);
-    if (selected) {
-      setEditorMounted(true);
-      if (reducedMotion) {
-        setEditorExpanded(true);
-        editorScrollFrameRef.current = window.requestAnimationFrame(() => {
-          editorScrollFrameRef.current = null;
-          alignOpenedTaskToVisibleContent(articleRef.current, 'auto');
-        });
-        return cancelScheduledMotion;
-      }
-
-      setEditorExpanded(false);
-      editorAnimationFrameRef.current = window.requestAnimationFrame(() => {
-        editorAnimationFrameRef.current = window.requestAnimationFrame(() => {
-          editorAnimationFrameRef.current = null;
-          setEditorExpanded(true);
-          editorRevealTimerRef.current = window.setTimeout(() => {
-            editorRevealTimerRef.current = null;
-            editorScrollFrameRef.current = window.requestAnimationFrame(() => {
-              editorScrollFrameRef.current = null;
-              alignOpenedTaskToVisibleContent(articleRef.current, 'smooth');
-            });
-          }, TASK_EDITOR_EXPANSION_DURATION_MS);
-        });
-      });
-      return cancelScheduledMotion;
-    }
-
-    setEditorExpanded(false);
-    if (reducedMotion) {
-      setEditorMounted(false);
-      return cancelScheduledMotion;
-    }
-    editorUnmountTimerRef.current = window.setTimeout(() => {
-      editorUnmountTimerRef.current = null;
-      setEditorMounted(false);
-    }, TASK_EDITOR_EXPANSION_DURATION_MS);
-    return cancelScheduledMotion;
-  }, [inBulkSelection, quickEntry, selected]);
-
-  useLayoutEffect(() => {
-    const region = editorRegionRef.current;
-    if (region === null) return;
-    if (selected) region.removeAttribute('inert');
-    else region.setAttribute('inert', '');
-  }, [editorMounted, selected]);
 
   const run = async (operation: () => Promise<void>): Promise<boolean> => {
     if (pendingRef.current) {
@@ -7308,11 +7259,10 @@ function TaskRow({
     setDragActive(true);
     suppressClickUntilRef.current = Date.now() + 1_000;
     if (selected) {
-      setEditorExpanded(false);
+      collapseEditorImmediately();
       void onCloseEditor().then((closed) => {
         if (closed) return;
-        setEditorMounted(true);
-        setEditorExpanded(true);
+        restoreEditorImmediately();
       });
     }
     onTaskDragStart();
@@ -7739,14 +7689,10 @@ function TaskRow({
                 </span>
               ) : null}
               {upcomingStartDate ? (
-                <span
-                  className="inline-flex shrink-0 items-center gap-1"
-                  aria-label={`Start ${formatTaskMonthDay(upcomingStartDate)}`}
-                  data-task-metadata-kind="start"
-                >
-                  <TASK_ICONS.Start className="h-3.5 w-3.5" aria-hidden="true" />
-                  {formatTaskMonthDay(upcomingStartDate)}
-                </span>
+                <TaskStartMetadata
+                  startDate={upcomingStartDate}
+                  planningDate={planningDate}
+                />
               ) : null}
               {todayMarker && TodayMarkerIcon && todayMarkerPresentation ? (
                 <span
@@ -7770,7 +7716,9 @@ function TaskRow({
                   data-task-metadata-kind="reminder"
                 >
                   <TASK_ICONS.Reminder className="h-3.5 w-3.5" aria-hidden="true" />
-                  {formatReminderRowTime(reminder)}
+                  <span className="hidden sm:inline" aria-hidden="true" data-task-reminder-time>
+                    {formatReminderRowTime(reminder)}
+                  </span>
                 </span>
               ) : null}
               {task.actionability === 'waiting' ? (
@@ -7850,31 +7798,38 @@ function TaskRow({
               <>
                 <TaskSourceIndicator task={task} compact />
                 <DropdownMenu
-              open={actionMenuOpen}
-              onOpenChange={(open) => {
-                setActionMenuOpen(open);
-                if (open) return;
-                const mode = pendingMenuTemporalPickerRef.current;
-                if (mode === null) return;
-                pendingMenuTemporalPickerRef.current = null;
-                window.queueMicrotask(() => {
-                  setTemporalPicker({ mode, origin: 'menu' });
-                });
-              }}
-            >
-              <DropdownMenuTrigger asChild>
-                <Button
-                  ref={actionMenuTriggerRef}
-                  type="button"
-                  variant="clear"
-                  size="icon"
-                  disabled={pending}
-                  aria-label={`Actions for ${taskLabel}`}
-                  className="h-8 w-8 text-muted-foreground"
+                  modal={false}
+                  open={actionMenuOpen}
+                  onOpenChange={(open) => {
+                    setActionMenuOpen(open);
+                    if (open) return;
+                    const mode = pendingMenuTemporalPickerRef.current;
+                    if (mode === null) return;
+                    pendingMenuTemporalPickerRef.current = null;
+                    window.queueMicrotask(() => {
+                      setTemporalPicker({ mode, origin: 'menu' });
+                    });
+                  }}
                 >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      ref={actionMenuTriggerRef}
+                      type="button"
+                      variant="clear"
+                      size="icon"
+                      disabled={pending}
+                      aria-label={`Actions for ${taskLabel}`}
+                      className="h-8 w-8 text-muted-foreground"
+                      onPointerDown={handleActionMenuPointerDown}
+                      onClickCapture={(event) => {
+                        if (Date.now() > suppressClickUntilRef.current) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
                 onCloseAutoFocus={(event) => {
@@ -7994,13 +7949,11 @@ function TaskRow({
           data-task-editor-region
           data-state={selected ? (editorExpanded ? 'open' : 'opening') : 'closing'}
           aria-hidden={selected ? undefined : true}
-          className={[
-            'grid overflow-hidden transition-[grid-template-rows,opacity,padding-top] ease-out motion-reduce:transition-none',
-            editorExpanded
-              ? `grid-rows-[1fr] opacity-100 ${quickEntry ? 'pt-0' : 'pt-[6px]'}`
-              : 'grid-rows-[0fr] pt-0 opacity-0',
-            selected ? '' : 'pointer-events-none',
-          ].filter(Boolean).join(' ')}
+          className={getTaskEditorMotionClassName({
+            expanded: editorExpanded,
+            interactive: selected,
+            topPadding: !quickEntry,
+          })}
           style={{ transitionDuration: `${TASK_EDITOR_EXPANSION_DURATION_MS}ms` }}
         >
           <div className="min-h-0" data-task-editor-content>

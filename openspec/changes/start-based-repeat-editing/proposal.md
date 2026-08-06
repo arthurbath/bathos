@@ -4,7 +4,7 @@ The repeat editor currently exposes Deadline-anchored implementation details and
 
 ## What Changes
 
-- Redesign the Tasks repeat modal around a static task Summary, a phrasal repeat-type Select and schedule controls, a Tasks Have Deadlines toggle, sentence-style basis and date entry, balanced content padding, and a simplified control order.
+- Redesign the Tasks repeat modal around a static task Summary, a phrasal repeat-type Select and schedule controls, a Tasks Have Deadlines toggle, sentence-style basis and date entry that reads `Starts on` or `Due on`, balanced content padding, and a simplified control order.
 - Restrict the anchor date picker to dates that satisfy the configured calendar cadence while allowing any legal date for after-completion repeats.
 - Consolidate monthly and yearly schedules into ordinal plus day-type rules, add multi-month yearly schedules, singularize interval units, and define clamping and missing-ordinal behavior.
 - Add immutable recurrence-revision date basis and canonical version-2 rule configuration while retaining legacy reads and cached-client compatibility.

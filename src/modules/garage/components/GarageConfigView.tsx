@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
-import { DatePickerField } from '@/components/ui/date-picker-field';
+import { DatePickerField, formatDatePickerDisplayValue } from '@/components/ui/date-picker-field';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
@@ -235,7 +235,7 @@ function VehicleDateCell({
             !value && 'text-muted-foreground',
           )}
         >
-          <span className="truncate">{parsedDate ? format(parsedDate, 'MMM d, yyyy') : GRID_NULL_PLACEHOLDER}</span>
+          <span className="truncate">{parsedDate ? formatDatePickerDisplayValue(parsedDate) : GRID_NULL_PLACEHOLDER}</span>
           <CalendarIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground opacity-50" />
         </button>
       </PopoverTrigger>
@@ -701,7 +701,6 @@ export function GarageConfigView({
                     setVehicleForm((prev) => ({ ...prev, in_service_date: value }));
                   }}
                   placeholder="No Date"
-                  displayFormat="MMMM d, yyyy"
                   clearable
                 />
               </div>

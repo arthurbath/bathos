@@ -1,4 +1,5 @@
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import { compareTaskOrder } from '@/modules/tasks/domain/taskOrder';
 
 type UpcomingDatedItem = Pick<TaskTodo, 'start_date' | 'deadline'>;
 
@@ -18,6 +19,12 @@ export type TaskUpcomingEntry = {
 
 export type TaskUpcomingSection = TaskUpcomingGroup & {
   entries: TaskUpcomingEntry[];
+};
+
+export type TaskUpcomingOrderedRow = {
+  id: string;
+  controllingDate: string;
+  orderKey: string;
 };
 
 export function getTaskUpcomingDate(
@@ -100,6 +107,18 @@ export function compareTaskUpcomingDates(
 ): number {
   return (getTaskUpcomingDate(left, planningDate) ?? '')
     .localeCompare(getTaskUpcomingDate(right, planningDate) ?? '');
+}
+
+export function compareTaskUpcomingSectionRows(
+  groupKind: TaskUpcomingGroup['kind'],
+  left: TaskUpcomingOrderedRow,
+  right: TaskUpcomingOrderedRow,
+): number {
+  if (groupKind === 'month') {
+    const dateComparison = left.controllingDate.localeCompare(right.controllingDate);
+    if (dateComparison !== 0) return dateComparison;
+  }
+  return compareTaskOrder(left, right);
 }
 
 export function getTaskUpcomingSections(

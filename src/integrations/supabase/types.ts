@@ -2564,6 +2564,15 @@ export type Database = {
         Args: { _request_id: string; _through_at: string }
         Returns: Json
       }
+      tasks_claim_due_reminders_v2: {
+        Args: {
+          _request_id: string
+          _surface_key: string
+          _surface_label: string
+          _through_at: string
+        }
+        Returns: Json
+      }
       tasks_claim_web_push_deliveries: {
         Args: { _limit?: number; _through_at: string }
         Returns: Json

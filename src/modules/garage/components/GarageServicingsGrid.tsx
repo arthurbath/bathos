@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
-import { DatePickerField } from '@/components/ui/date-picker-field';
+import { DatePickerField, formatDatePickerDisplayValue } from '@/components/ui/date-picker-field';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -176,7 +176,7 @@ function ServicingDateCell({
           )}
         >
           <span className="truncate">
-            {parsedDate ? format(parsedDate, 'MMM d, yyyy') : (value || 'Pick a date')}
+            {parsedDate ? formatDatePickerDisplayValue(parsedDate) : (value || 'Pick a date')}
           </span>
           <CalendarIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground opacity-50" />
         </button>

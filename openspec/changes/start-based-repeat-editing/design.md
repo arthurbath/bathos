@@ -63,7 +63,7 @@ Shared Dialog and AlertDialog content use square, borderless edges at the existi
 
 ### Present date basis as part of the date sentence
 
-The repeat editor expresses basis through the generated-date sentence instead of a separate Schedule Based On field. Without deadlines the sentence is Next Starts plus its date. With deadlines, Next is followed by a Starts or Due Select and the corresponding anchor date. The offset sentence then reads With Deadlines N Days After for Start basis or And Starts N Days Prior for Deadline basis. The stored basis and derivation rules remain unchanged.
+The repeat editor expresses basis through the generated-date sentence instead of a separate Schedule Based On field. Without deadlines the sentence is Next Starts on plus its date. With deadlines, Next is followed by a Starts or Due Select, the lowercase preposition on, and the corresponding anchor date. The offset sentence then reads With Deadlines N Days After for Start basis or And Starts N Days Prior for Deadline basis. The stored basis and derivation rules remain unchanged.
 
 Reminder entry reuses the visual and menu paradigms of the Start picker reminder control. Preview dates use the stable `YYYY Mon D` display, independent of relative-date labels.
 
@@ -76,6 +76,8 @@ The repeat type and cadence controls read as one compact Mad Libs-style phrase. 
 Selected weekdays use the filled Success treatment. All seven weekday buttons divide the available weekday-row width evenly at every breakpoint, including when tablet-and-wider labels use three-letter abbreviations. The yearly month trigger summarizes one through seven selected months as comma-separated three-letter names and shortens selections of eight or more after the seventh name with an ellipsis while retaining full month names in the menu.
 
 The interval-count input retains its raw editing string while focused so the user can replace its final digit without fighting an eager minimum-value clamp. Domain preview and save logic consume a normalized positive whole number, and blur writes that normalized value back to the field, defaulting empty, fractional, nonnumeric, or nonpositive input to `1`.
+
+The Tasks Have Deadlines row uses the same major-concept separation beneath it as above it so the toggle feels centered between the cadence phrase and generated-date phrase.
 
 ## Risks / Trade-offs
 

@@ -28,3 +28,10 @@
 - [x] 5.2 Acknowledge persistent fallback toasts only after manual dismissal.
 - [x] 5.3 Add frontend and database regression coverage for denied surfaces and cross-target provider acceptance.
 - [x] 5.4 Verify the blocked settings state in the running app and the fallback presentation behavior in the rendered integration test.
+
+## 6. Multi-surface Fallback Regression
+
+- [x] 6.1 Define stable surface-scoped fallback identities for browser and native Tasks installations.
+- [x] 6.2 Add a compatible versioned claim RPC and update the reminder client to use the surface-scoped delivery target.
+- [x] 6.3 Add client and database coverage proving one fallback surface cannot lease a reminder away from another.
+- [x] 6.4 Run focused tests, database tests, lint, build, and strict OpenSpec validation.

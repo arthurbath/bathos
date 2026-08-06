@@ -9,6 +9,7 @@ The Tasks list currently reserves page space for a due-reminders panel even thou
 - Allow multiple reminder toasts to remain visible together without one reminder evicting another.
 - Suppress in-app reminder presentation when the current surface has browser or native notifications enabled without falsely acknowledging an unseen notification.
 - Preserve an open surface's in-app fallback opportunity when a different registered Web Push target accepts the reminder.
+- Give each browser or native installation its own in-app fallback delivery so one open Tasks surface cannot lease the reminder away from another.
 - Keep reminder toasts scoped to Tasks routes and dismiss them when the Tasks surface unmounts.
 - Preserve content-free acknowledgement failure reporting and make a failed acknowledgement available for another manual dismissal attempt.
 - Extend the native Tasks context with an explicit notification-authorization signal that currently defaults to disabled until native notification delivery is implemented.
@@ -29,4 +30,5 @@ None.
 - Affects Tasks reminder presentation and acknowledgement handling.
 - Affects the shared toast reducer, renderer, and semantic variants.
 - Adds a forward-compatible native notification capability flag without enabling native notification delivery.
+- Adds a versioned, surface-scoped in-app reminder claim contract while retaining the legacy account-scoped RPC for cached clients.
 - Does not change reminder scheduling, Web Push registration, or native notification authorization.

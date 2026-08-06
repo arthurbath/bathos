@@ -71,6 +71,15 @@ describe('useTaskReminders', () => {
       await Promise.resolve();
     });
     expect(reminderService.claimDue).toHaveBeenCalledTimes(1);
+    expect(reminderService.claimDue).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      expect.objectContaining({
+        endpointKey: expect.stringMatching(/^browser:/),
+        label: 'This Browser',
+      }),
+    );
     expect(result.current.dueItems).toEqual([dueReminder]);
     expect(result.current.byRootId.get('task-a')).toEqual(taskReminderFixture());
 
@@ -202,6 +211,38 @@ describe('useTaskReminders', () => {
     });
 
     expect(reminderService.claimDue).not.toHaveBeenCalled();
+  });
+
+  it('claims the surface-scoped fallback when browser notifications are denied', async () => {
+    const reminderService = {
+      claimDue: vi.fn().mockResolvedValue({
+        outcome: 'accepted',
+        through_at: '2026-07-20T16:00:00.000Z',
+        items: [],
+      }),
+      save: vi.fn(),
+      cancel: vi.fn(),
+      acknowledge: vi.fn(),
+    };
+    mocks.useTaskWebPush.mockReturnValue({ status: 'denied' });
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      reminderService,
+    });
+
+    renderHook(() => useTaskReminders('owner-a'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(reminderService.claimDue).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      expect.objectContaining({ endpointKey: expect.stringMatching(/^browser:/) }),
+    );
   });
 
   it('does not claim the in-app delivery channel when native notifications are enabled', async () => {

@@ -9,6 +9,7 @@ import {
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskReminder } from '@/modules/tasks/types/tasks';
 import { useTaskWebPush } from '@/modules/tasks/hooks/useTaskWebPush';
+import { getTaskInAppReminderSurface } from '@/modules/tasks/domain/taskReminderSurface';
 
 const CLAIM_INTERVAL_MS = 60_000;
 
@@ -29,6 +30,7 @@ export function useTaskReminders(
   const [optimistic, setOptimistic] = useState<Record<string, TaskReminder | null>>({});
   const [dueItems, setDueItems] = useState<TaskDueReminder[]>([]);
   const [claimError, setClaimError] = useState<Error | null>(null);
+  const [inAppSurface] = useState(() => getTaskInAppReminderSurface());
   const claiming = useRef(false);
   const inAppFallbackEnabled = !nativeNotificationsEnabled
     && webPush.status !== 'checking'
@@ -80,7 +82,7 @@ export function useTaskReminders(
     ) return;
     claiming.current = true;
     try {
-      const result = await reminderService.claimDue();
+      const result = await reminderService.claimDue(undefined, undefined, undefined, inAppSurface);
       if (result.items.length > 0) {
         setDueItems((current) => {
           const rows = new Map(current.map((item) => [item.delivery_id, item]));
@@ -96,7 +98,7 @@ export function useTaskReminders(
     } finally {
       claiming.current = false;
     }
-  }, [inAppFallbackEnabled, mode, reminderService]);
+  }, [inAppFallbackEnabled, inAppSurface, mode, reminderService]);
 
   useEffect(() => {
     if (mode !== 'connected' || !inAppFallbackEnabled) return;

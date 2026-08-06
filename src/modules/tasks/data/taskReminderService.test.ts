@@ -160,8 +160,76 @@ describe('TaskReminderService', () => {
       '10000000-0000-4000-8000-000000000001',
     );
     expect(claim.items).toHaveLength(1);
+    expect(rpc).toHaveBeenNthCalledWith(1, 'tasks_claim_due_reminders', {
+      _through_at: '2026-07-20T16:00:00Z',
+      _request_id: '10000000-0000-4000-8000-000000000001',
+    });
     await expect(service.acknowledge(delivery.id)).resolves.toMatchObject({
       outcome: 'accepted', delivery: { status: 'acknowledged' },
+    });
+  });
+
+  it('claims through a surface-scoped delivery target', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        outcome: 'accepted',
+        through_at: '2026-07-20T16:00:00Z',
+        items: [],
+      },
+      error: null,
+    });
+    const service = new TaskReminderService({ rpc } as never);
+
+    await service.claimDue(
+      '2026-07-20T16:00:00Z',
+      '10000000-0000-4000-8000-000000000001',
+      1_000,
+      {
+        endpointKey: 'browser:20000000-0000-4000-8000-000000000002',
+        label: 'This Browser',
+      },
+    );
+
+    expect(rpc).toHaveBeenCalledWith('tasks_claim_due_reminders_v2', {
+      _through_at: '2026-07-20T16:00:00Z',
+      _request_id: '10000000-0000-4000-8000-000000000001',
+      _surface_key: 'browser:20000000-0000-4000-8000-000000000002',
+      _surface_label: 'This Browser',
+    });
+  });
+
+  it('falls back to the compatible account claim until the v2 RPC is deployed', async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: 'PGRST202',
+          message: 'Could not find the function public.tasks_claim_due_reminders_v2',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          outcome: 'accepted',
+          through_at: '2026-07-20T16:00:00Z',
+          items: [],
+        },
+        error: null,
+      });
+    const service = new TaskReminderService({ rpc } as never);
+
+    await expect(service.claimDue(
+      '2026-07-20T16:00:00Z',
+      '10000000-0000-4000-8000-000000000001',
+      1_000,
+      {
+        endpointKey: 'browser:20000000-0000-4000-8000-000000000002',
+        label: 'This Browser',
+      },
+    )).resolves.toMatchObject({ outcome: 'accepted', items: [] });
+
+    expect(rpc).toHaveBeenNthCalledWith(2, 'tasks_claim_due_reminders', {
+      _through_at: '2026-07-20T16:00:00Z',
+      _request_id: '10000000-0000-4000-8000-000000000001',
     });
   });
 

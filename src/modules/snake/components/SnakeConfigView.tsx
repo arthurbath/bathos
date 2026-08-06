@@ -8,6 +8,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataGrid, GridEditableCell, GridSelectValue, GRID_NULL_PLACEHOLDER, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid } from '@/components/ui/data-grid';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
+import { DatePickerField, formatDatePickerDisplayValue } from '@/components/ui/date-picker-field';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -175,7 +176,7 @@ function SnakeDateCell({
             !value && 'text-muted-foreground',
           )}
         >
-          <span className="truncate">{parsedDate ? format(parsedDate, 'MMM d, yyyy') : GRID_NULL_PLACEHOLDER}</span>
+          <span className="truncate">{parsedDate ? formatDatePickerDisplayValue(parsedDate) : GRID_NULL_PLACEHOLDER}</span>
           <CalendarIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground opacity-50" />
         </button>
       </PopoverTrigger>
@@ -649,11 +650,10 @@ export function SnakeConfigView({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <DataGridAddFormLabel htmlFor="snake-birthday" required>Birthday</DataGridAddFormLabel>
-                <Input
+                <DatePickerField
                   id="snake-birthday"
-                  type="date"
                   value={form.birthday}
-                  onChange={(event) => setForm((current) => ({ ...current, birthday: event.target.value }))}
+                  onValueChange={(value) => setForm((current) => ({ ...current, birthday: value }))}
                 />
               </div>
               <div className="space-y-1.5">

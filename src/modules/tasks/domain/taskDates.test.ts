@@ -5,6 +5,7 @@ import {
   addTaskCalendarDays,
   formatTaskCompactCalendarDayOffset,
   formatTaskDateControlLabel,
+  formatTaskNumericMonthDay,
   formatTaskRelativeCalendarDate,
   isTaskCalendarDate,
   isTaskPlanningTimeZone,
@@ -65,10 +66,10 @@ describe('task calendar dates', () => {
     const planningDate = '2026-07-22';
     expect(formatTaskRelativeCalendarDate('2026-07-22', planningDate, 'en-US')).toBe('Today');
     expect(formatTaskRelativeCalendarDate('2026-07-23', planningDate, 'en-US')).toBe('Tomorrow');
-    expect(formatTaskRelativeCalendarDate('2026-07-21', planningDate, 'en-US')).toBe('1 day ago');
-    expect(formatTaskRelativeCalendarDate('2026-07-28', planningDate, 'en-US')).toBe('6 days left');
-    expect(formatTaskRelativeCalendarDate('2026-07-31', planningDate, 'en-US')).toBe('9 days left');
-    expect(formatTaskRelativeCalendarDate('2026-07-13', planningDate, 'en-US')).toBe('9 days ago');
+    expect(formatTaskRelativeCalendarDate('2026-07-21', planningDate, 'en-US')).toBe('-1 day');
+    expect(formatTaskRelativeCalendarDate('2026-07-28', planningDate, 'en-US')).toBe('6 days');
+    expect(formatTaskRelativeCalendarDate('2026-07-31', planningDate, 'en-US')).toBe('9 days');
+    expect(formatTaskRelativeCalendarDate('2026-07-13', planningDate, 'en-US')).toBe('-9 days');
   });
 
   it('uses short month and day outside the 9-day relative window', () => {
@@ -78,18 +79,24 @@ describe('task calendar dates', () => {
     expect(formatTaskRelativeCalendarDate('2026-07-11', '2026-07-22', 'en-US')).toBe('Jul 11');
   });
 
-  it('formats compact signed offsets within 9 days and short dates beyond that window', () => {
+  it('formats compact d offsets within 9 days and numeric dates beyond that window', () => {
     const planningDate = '2026-07-22';
     expect(formatTaskCompactCalendarDayOffset('2026-07-22', planningDate)).toBe('Today');
-    expect(formatTaskCompactCalendarDayOffset('2026-07-23', planningDate)).toBe('1 day');
-    expect(formatTaskCompactCalendarDayOffset('2026-07-21', planningDate)).toBe('-1 day');
-    expect(formatTaskCompactCalendarDayOffset('2026-07-26', planningDate)).toBe('4 days');
-    expect(formatTaskCompactCalendarDayOffset('2026-07-18', planningDate)).toBe('-4 days');
-    expect(formatTaskCompactCalendarDayOffset('2026-07-31', planningDate)).toBe('9 days');
-    expect(formatTaskCompactCalendarDayOffset('2026-07-13', planningDate)).toBe('-9 days');
-    expect(formatTaskCompactCalendarDayOffset('2026-08-01', planningDate, 'en-US')).toBe('Aug 1');
-    expect(formatTaskCompactCalendarDayOffset('2026-07-12', planningDate, 'en-US')).toBe('Jul 12');
-    expect(formatTaskCompactCalendarDayOffset('2026-08-27', planningDate, 'en-US')).toBe('Aug 27');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-23', planningDate)).toBe('1d');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-21', planningDate)).toBe('-1d');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-26', planningDate)).toBe('4d');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-18', planningDate)).toBe('-4d');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-31', planningDate)).toBe('9d');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-13', planningDate)).toBe('-9d');
+    expect(formatTaskCompactCalendarDayOffset('2026-08-01', planningDate, 'en-US')).toBe('8-1');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-12', planningDate, 'en-US')).toBe('7-12');
+    expect(formatTaskCompactCalendarDayOffset('2026-08-27', planningDate, 'en-US')).toBe('8-27');
+  });
+
+  it('formats unpadded numeric month-day copy for mobile metadata', () => {
+    expect(formatTaskNumericMonthDay('2026-08-31')).toBe('8-31');
+    expect(formatTaskNumericMonthDay('2026-01-05')).toBe('1-5');
+    expect(formatTaskNumericMonthDay('not-a-date')).toBe('not-a-date');
   });
 
   it('masks only yesterday, today, and tomorrow in date-control labels', () => {
@@ -97,6 +104,6 @@ describe('task calendar dates', () => {
     expect(formatTaskDateControlLabel('2026-07-21', planningDate, 'en-US')).toBe('Yesterday');
     expect(formatTaskDateControlLabel('2026-07-22', planningDate, 'en-US')).toBe('Today');
     expect(formatTaskDateControlLabel('2026-07-23', planningDate, 'en-US')).toBe('Tomorrow');
-    expect(formatTaskDateControlLabel('2026-07-24', planningDate, 'en-US')).toBe('Jul 24, 2026');
+    expect(formatTaskDateControlLabel('2026-07-24', planningDate, 'en-US')).toBe('2026 Jul 24');
   });
 });

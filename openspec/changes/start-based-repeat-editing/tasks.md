@@ -22,6 +22,8 @@
 - [x] 3.8 Allow temporary empty or invalid repeat intervals and normalize them to one on blur
 - [x] 3.9 Fold repeat type into the cadence phrase and preserve equal-width weekday buttons at tablet and wider breakpoints
 - [x] 3.10 Balance repeat-modal body padding and disable reminders when an empty or unparseable reminder time is committed
+- [x] 3.11 Add `on` between the repeat anchor type and date so both deadline and non-deadline date phrases read as natural sentences
+- [x] 3.12 Balance the vertical separation above and below the Tasks Have Deadlines row
 
 ## 4. Verification and rollout
 
@@ -34,3 +36,7 @@
 - [x] 4.7 Run targeted repeat-interval editing and normalization verification
 - [x] 4.8 Run targeted and rendered verification for the complete repeat phrase and responsive weekday distribution
 - [x] 4.9 Run targeted and rendered verification for balanced repeat-modal padding and reminder-time normalization
+- [x] 4.10 Run focused repeat-editor verification for the `Starts on` and `Due on` anchor phrases
+- [x] 4.11 Run focused and rendered verification for the balanced deadline-toggle spacing
+
+Focused dialog tests and rendered Upcoming verification confirmed that deadline-based schedules read `Next Due on [date]`, Start-based deadline schedules read `Next Starts on [date]`, and schedules without deadlines read `Next Starts on [date]`. The live verification was canceled without saving changes.

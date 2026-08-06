@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { TaskInAppReminderSurface } from '@/modules/tasks/domain/taskReminderSurface';
+
 import type { Database } from '@/integrations/supabase/types';
 import { isTaskCalendarDate } from '@/modules/tasks/domain/taskDates';
 import {
@@ -157,26 +159,55 @@ export class TaskReminderService {
     throughAt = new Date().toISOString(),
     requestId = crypto.randomUUID(),
     timeoutMs = TASK_REMINDER_CLAIM_TIMEOUT_MS,
+    surface?: TaskInAppReminderSurface,
   ): Promise<TaskReminderClaimResult> {
     if (Number.isNaN(new Date(throughAt).valueOf())) {
       throw new InvalidTaskReminderError('A valid reminder claim time is required');
     }
-    const controller = new AbortController();
-    const request = this.client.rpc('tasks_claim_due_reminders', {
-      _through_at: throughAt,
-      _request_id: requestId,
-    });
+    let controller = new AbortController();
+    if (surface && (!surface.endpointKey.trim() || !surface.label.trim())) {
+      throw new InvalidTaskReminderError('A valid reminder surface is required');
+    }
+    const request = surface
+      ? this.client.rpc('tasks_claim_due_reminders_v2', {
+        _through_at: throughAt,
+        _request_id: requestId,
+        _surface_key: surface.endpointKey.trim(),
+        _surface_label: surface.label.trim(),
+      })
+      : this.client.rpc('tasks_claim_due_reminders', {
+        _through_at: throughAt,
+        _request_id: requestId,
+      });
     const abortableRequest = request as typeof request & {
       abortSignal?: (signal: AbortSignal) => typeof request;
     };
     const boundedRequest = typeof abortableRequest.abortSignal === 'function'
       ? abortableRequest.abortSignal(controller.signal)
       : request;
-    const { data, error } = await settleReminderClaim(
+    let { data, error } = await settleReminderClaim(
       boundedRequest,
       controller,
       timeoutMs,
     );
+    if (surface && isMissingSurfaceClaimRpc(error)) {
+      controller = new AbortController();
+      const legacyRequest = this.client.rpc('tasks_claim_due_reminders', {
+        _through_at: throughAt,
+        _request_id: requestId,
+      });
+      const abortableLegacyRequest = legacyRequest as typeof legacyRequest & {
+        abortSignal?: (signal: AbortSignal) => typeof legacyRequest;
+      };
+      const boundedLegacyRequest = typeof abortableLegacyRequest.abortSignal === 'function'
+        ? abortableLegacyRequest.abortSignal(controller.signal)
+        : legacyRequest;
+      ({ data, error } = await settleReminderClaim(
+        boundedLegacyRequest,
+        controller,
+        timeoutMs,
+      ));
+    }
     if (error) throw error;
     const result = requireRecord(data, 'Reminder claim returned an invalid result');
     const items = requireArray(result.items, 'Reminder claim items are invalid')
@@ -288,6 +319,14 @@ function isPendingRootPlanningError(error: unknown): boolean {
   return record.code === '22023'
     && typeof record.message === 'string'
     && record.message.startsWith('A reminder requires');
+}
+
+function isMissingSurfaceClaimRpc(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const record = error as { code?: unknown; message?: unknown };
+  return record.code === 'PGRST202'
+    && typeof record.message === 'string'
+    && record.message.includes('tasks_claim_due_reminders_v2');
 }
 
 function normalizeReminderServiceError(error: unknown, fallback: string): Error {

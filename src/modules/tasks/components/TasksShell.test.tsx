@@ -6700,6 +6700,87 @@ describe('TasksShell', () => {
     }
   });
 
+  it('lets the final task in a Today horizon return to its own source position', async () => {
+    const nowTask = taskTodoFixture({
+      ...task,
+      id: 'task-now',
+      title: 'Now task',
+      today_section: 'now',
+      order_key: 'a1',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [task, nowTask] };
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskDragHandleVisibility.mockReturnValue({
+      visibility: 'always',
+      loading: false,
+      error: null,
+      pending: false,
+      setVisibility: vi.fn().mockResolvedValue(undefined),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const source = container.querySelector('[data-task-id="task-a"]')?.closest('article');
+      const target = container.querySelector('[data-task-id="task-now"]')?.closest('article');
+      const sourceHandle = source?.querySelector<HTMLElement>('[data-task-drag-handle]');
+      if (!source || !target || !sourceHandle) {
+        throw new Error('Expected draggable tasks in separate Today horizons');
+      }
+      const bounds = {
+        top: 0,
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 100,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      };
+      vi.spyOn(source, 'getBoundingClientRect').mockReturnValue(bounds);
+      vi.spyOn(target, 'getBoundingClientRect').mockReturnValue(bounds);
+      const dataTransfer = {
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: vi.fn(),
+        getData: vi.fn(() => ''),
+      } as unknown as DataTransfer;
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragOverTarget = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOverTarget, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 75 },
+      });
+      const dragOverSource = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOverSource, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 75 },
+      });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+
+      await act(async () => {
+        sourceHandle.dispatchEvent(dragStart);
+        target.dispatchEvent(dragOverTarget);
+        source.dispatchEvent(dragOverSource);
+      });
+
+      expect(source).toHaveAttribute('data-drag-placement', 'after');
+      expect(source.querySelector('[data-task-drop-indicator]')).toBeTruthy();
+
+      await act(async () => {
+        source.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+
+      expect(taskList.reorderTaskTo).not.toHaveBeenCalled();
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('targets the final task through blank list space and dims the complete source row', async () => {
     const secondTask = taskTodoFixture({
       ...task,
@@ -9958,7 +10039,7 @@ describe('TasksShell', () => {
         completeMetadata?.querySelector('[data-task-metadata-kind="horizon"]'),
       ).toHaveClass('text-task-horizon-next');
       expect(completeMetadata).toHaveTextContent('1:30 PM');
-      expect(completeMetadata).toHaveTextContent('5 days left');
+      expect(completeMetadata).toHaveTextContent('5 days');
       expect(completeMetadata).not.toHaveTextContent('Waiting');
       expect(
         completeMetadata?.querySelector('[data-task-metadata-kind="actionability"]'),
@@ -10019,7 +10100,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('uses signed nearby offsets and short distant dates in mobile Deadline copy while preserving full wording', async () => {
+  it('uses compact d offsets and numeric distant dates in mobile Deadline copy while preserving full wording', async () => {
     const overdueTask = taskTodoFixture({
       ...task,
       id: 'task-overdue',
@@ -10073,21 +10154,21 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/anytime');
 
     try {
-      expect(container.querySelector('[aria-label="Deadline 1 day ago"]')).toHaveClass('text-destructive');
+      expect(container.querySelector('[aria-label="Deadline -1 day"]')).toHaveClass('text-destructive');
       expect(container.querySelector('[aria-label="Deadline Today"]')).toHaveClass('text-destructive');
       expect(container.querySelector('[aria-label="Deadline Tomorrow"]')).not.toHaveClass('text-destructive');
-      expect(container.querySelector('[aria-label="Deadline 1 day ago"] [data-task-deadline-compact]'))
-        .toHaveTextContent('-1 day');
+      expect(container.querySelector('[aria-label="Deadline -1 day"] [data-task-deadline-compact]'))
+        .toHaveTextContent('-1d');
       expect(container.querySelector('[aria-label="Deadline Today"] [data-task-deadline-compact]'))
         .toHaveTextContent('Today');
       expect(container.querySelector('[aria-label="Deadline Tomorrow"] [data-task-deadline-compact]'))
-        .toHaveTextContent('1 day');
+        .toHaveTextContent('1d');
       expect(container.querySelector('[aria-label="Deadline Jul 10"] [data-task-deadline-compact]'))
-        .toHaveTextContent('Jul 10');
+        .toHaveTextContent('7-10');
       expect(container.querySelector('[aria-label="Deadline Jul 10"] [data-task-deadline-full]'))
         .toHaveTextContent('Jul 10');
       expect(container.querySelector('[aria-label="Deadline Jul 30"] [data-task-deadline-compact]'))
-        .toHaveTextContent('Jul 30');
+        .toHaveTextContent('7-30');
       expect(container.querySelector('[aria-label="Deadline Jul 30"] [data-task-deadline-full]'))
         .toHaveTextContent('Jul 30');
       expect(container.querySelector('[aria-label="Deadline Today"]'))
@@ -10106,12 +10187,12 @@ describe('TasksShell', () => {
         'items-center',
         'gap-1',
       );
-      expect(container.querySelector('[aria-label="Deadline 1 day ago"] [data-task-deadline-compact]'))
+      expect(container.querySelector('[aria-label="Deadline -1 day"] [data-task-deadline-compact]'))
         .toHaveClass('sm:hidden');
-      expect(container.querySelector('[aria-label="Deadline 1 day ago"] [data-task-deadline-full]'))
+      expect(container.querySelector('[aria-label="Deadline -1 day"] [data-task-deadline-full]'))
         .toHaveClass('hidden', 'sm:inline');
-      expect(container.querySelector('[aria-label="Deadline 1 day ago"] [data-task-deadline-full]'))
-        .toHaveTextContent('1 day ago');
+      expect(container.querySelector('[aria-label="Deadline -1 day"] [data-task-deadline-full]'))
+        .toHaveTextContent('-1 day');
       expect(container.querySelector('[aria-label="Deadline Today"] [data-task-deadline-full]'))
         .toHaveTextContent('Today');
       expect(container.querySelector('[aria-label="Deadline Tomorrow"] [data-task-deadline-full]'))
@@ -12725,6 +12806,7 @@ describe('TasksShell', () => {
       pending: false,
       setVisibility: vi.fn().mockResolvedValue(undefined),
     });
+    const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
     const { container, root } = renderShell('/tasks/upcoming');
 
     try {
@@ -12738,10 +12820,18 @@ describe('TasksShell', () => {
       expect(row.querySelector('[data-task-drag-handle]')).toHaveAttribute('draggable', 'true');
       expect(row).toHaveAttribute('data-task-row-id', `recurrence:${definition.id}`);
       expect(row.querySelector('[data-task-metadata-kind="area"]')).toHaveTextContent('Work');
+      expect(row.querySelector('[data-task-metadata-kind="start"]'))
+        .toHaveAccessibleName('Start Aug 1');
+      expect(row.querySelector('[data-task-start-compact]')).toHaveTextContent('8-1');
+      expect(row.querySelector('[data-task-start-full]')).toHaveTextContent('Aug 1');
       expect(row.querySelector('[data-task-metadata-kind="actionability"]'))
         .toHaveAttribute('aria-label', 'Rechecking');
       expect(row.querySelector('[data-task-metadata-kind="deadline"]'))
         .toHaveAttribute('aria-label', 'Deadline Aug 4');
+      expect(row.querySelector('[data-task-deadline-compact]'))
+        .toHaveTextContent('8-4');
+      expect(row.querySelector('[data-task-deadline-full]'))
+        .toHaveTextContent('Aug 4');
       expect(row.querySelector('[data-task-metadata-kind="notes"]')).toBeTruthy();
       expect(row.querySelector('[data-task-metadata-kind="checklist"]')).toBeTruthy();
 
@@ -12797,7 +12887,25 @@ describe('TasksShell', () => {
         }));
         row.querySelector<HTMLButtonElement>('button[aria-label="Open Quarterly Review"]')?.click();
       });
+      const openingEditor = row.querySelector<HTMLElement>(
+        '[data-task-recurrence-prototype-editor]',
+      )!;
+      expect(openingEditor).toHaveAttribute('data-state', 'opening');
+      expect(openingEditor).toHaveClass(
+        'grid-rows-[0fr]',
+        'pt-0',
+        'opacity-0',
+        'transition-[grid-template-rows,opacity,padding-top]',
+      );
+      await waitFor(() => {
+        expect(openingEditor).toHaveAttribute('data-state', 'open');
+        expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+      });
       const editor = row.querySelector<HTMLElement>('[data-task-recurrence-prototype-editor]')!;
+      expect(editor).toHaveClass('grid-rows-[1fr]', 'pt-[6px]', 'opacity-100');
+      expect(editor.style.transitionDuration).toBe('220ms');
+      expect(editor.querySelector('[data-task-editor-content]')).toHaveClass('min-h-0');
+      const prototypeOpenMotionClass = editor.className;
       const prototypeHighlightSurface = row.querySelector<HTMLElement>(
         '[data-task-open-highlight-surface]',
       )!;
@@ -12806,7 +12914,7 @@ describe('TasksShell', () => {
       )!;
       expect(prototypeHighlightSurface).toHaveClass('bg-inherit');
       expect(prototypeHighlightSurface.className).toBe(ordinaryHighlightSurface.className);
-      expect(editor.querySelector('[data-task-metadata-drawer-fields]')).toHaveClass('pt-[6px]');
+      expect(editor.querySelector('[data-task-metadata-drawer-fields]')).not.toHaveClass('pt-[6px]');
       expect(editor.querySelector('[data-task-editor-form]')).toBeTruthy();
       expect(editor.querySelector('[data-task-checklist]')).toBeTruthy();
       expect(editor.querySelector('input[aria-label="Checklist Item"]')).toHaveClass('h-8');
@@ -12864,10 +12972,27 @@ describe('TasksShell', () => {
         await Promise.resolve();
       });
       await waitFor(() => {
+        expect(editor).toHaveAttribute('data-state', 'closing');
+      });
+      expect(editor).toHaveAttribute('aria-hidden', 'true');
+      expect(editor).toHaveAttribute('inert');
+      expect(editor).toHaveClass(
+        'grid-rows-[0fr]',
+        'pt-0',
+        'opacity-0',
+        'pointer-events-none',
+      );
+      await waitFor(() => {
         expect(row.querySelector('[data-task-recurrence-prototype-editor]')).toBeNull();
         expect(container.querySelector('[data-task-planning-card][data-task-row-id="ordinary-upcoming-task"] [data-task-editor-form]'))
           .toBeTruthy();
       });
+      const ordinaryEditor = container.querySelector<HTMLElement>(
+        '[data-task-planning-card][data-task-row-id="ordinary-upcoming-task"] [data-task-editor-region]',
+      )!;
+      await waitFor(() => expect(ordinaryEditor).toHaveAttribute('data-state', 'open'));
+      expect(ordinaryEditor.className).toBe(prototypeOpenMotionClass);
+      expect(ordinaryEditor.style.transitionDuration).toBe(editor.style.transitionDuration);
 
       await act(async () => {
         row.querySelector<HTMLButtonElement>('button[aria-label^="Open Quarterly Review"]')
@@ -12891,6 +13016,127 @@ describe('TasksShell', () => {
       expect(dialog.querySelector('input[aria-label="Summary"]')).toBeNull();
       expect(dialog.querySelector('input[aria-label="Link"]')).toBeNull();
       expect(dialog.querySelector('[aria-label="Checklist"]')).toBeNull();
+    } finally {
+      scrollBy.mockRestore();
+      cleanup(root, container);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('replaces an open recurrence prototype with another from one title click', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    const firstDefinition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-first-open',
+      name: 'First Repeat',
+      next_occurrence_date: '2026-08-01',
+      upcoming_order_key: 'a0',
+    });
+    const secondDefinition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-second-open',
+      name: 'Second Repeat',
+      next_occurrence_date: '2026-08-01',
+      upcoming_order_key: 'b0',
+    });
+    const firstRevision = taskRecurrenceRevisionFixture({
+      recurrence_id: firstDefinition.id,
+      start_date: '2026-08-01',
+      prototype_snapshot: {
+        version: 2,
+        kind: 'todo',
+        root: {
+          node_id: 'first-repeat-root',
+          title: 'First Repeat',
+          notes: '',
+          primary_link: null,
+          actionability: 'ready',
+          destination: 'anytime',
+          today_section: null,
+          order_key: 'a0',
+          start_offset_days: 0,
+          deadline_offset_days: null,
+          checklist: [],
+        },
+      },
+    });
+    const secondRevision = taskRecurrenceRevisionFixture({
+      recurrence_id: secondDefinition.id,
+      start_date: '2026-08-01',
+      prototype_snapshot: {
+        version: 2,
+        kind: 'todo',
+        root: {
+          node_id: 'second-repeat-root',
+          title: 'Second Repeat',
+          notes: '',
+          primary_link: null,
+          actionability: 'ready',
+          destination: 'anytime',
+          today_section: null,
+          order_key: 'b0',
+          start_offset_days: 0,
+          deadline_offset_days: null,
+          checklist: [],
+        },
+      },
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [] });
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [firstDefinition, secondDefinition],
+      revisions: new Map([
+        [firstDefinition.id, firstRevision],
+        [secondDefinition.id, secondRevision],
+      ]),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
+      datedPrototypes: [
+        { definition: firstDefinition, revision: firstRevision, scheduledDate: '2026-08-01' },
+        { definition: secondDefinition, revision: secondRevision, scheduledDate: '2026-08-01' },
+      ],
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: null,
+      createFromTask: vi.fn(),
+      edit: vi.fn().mockResolvedValue(undefined),
+      setStatus: vi.fn().mockResolvedValue(undefined),
+      evaluate: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const firstRow = container.querySelector<HTMLElement>(
+        `[data-task-recurrence-prototype="${firstDefinition.id}"]`,
+      )!;
+      const secondRow = container.querySelector<HTMLElement>(
+        `[data-task-recurrence-prototype="${secondDefinition.id}"]`,
+      )!;
+      const firstTitle = firstRow.querySelector<HTMLButtonElement>('[data-task-title-control]')!;
+      const secondTitle = secondRow.querySelector<HTMLButtonElement>('[data-task-title-control]')!;
+
+      await act(async () => firstTitle.click());
+      await waitFor(() => {
+        expect(firstRow.querySelector('[data-task-recurrence-prototype-editor]')).toBeTruthy();
+      });
+
+      await act(async () => {
+        secondTitle.dispatchEvent(new MouseEvent('pointerdown', {
+          bubbles: true,
+          cancelable: true,
+        }));
+        secondTitle.click();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(firstRow.querySelector('[data-task-recurrence-prototype-editor]')).toBeNull();
+        expect(secondRow.querySelector('[data-task-recurrence-prototype-editor]')).toBeTruthy();
+      });
     } finally {
       cleanup(root, container);
       vi.unstubAllGlobals();
@@ -12975,6 +13221,90 @@ describe('TasksShell', () => {
 
       expect(reorderProjection).toHaveBeenCalledWith(definition, expect.any(String));
       expect(reorderProjection.mock.calls[0][1]).not.toBe(definition.upcoming_order_key);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('groups mixed month rows by effective Start before applying Upcoming rank', () => {
+    const earlyDefinition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-month-early',
+      name: 'Early Repeat',
+      next_occurrence_date: '2026-08-10',
+      upcoming_order_key: 'a0',
+    });
+    const lateDefinition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-month-late',
+      name: 'Late Repeat',
+      next_occurrence_date: '2026-08-20',
+      upcoming_order_key: 'a0',
+    });
+    const earlyRevision = taskRecurrenceRevisionFixture({
+      recurrence_id: earlyDefinition.id,
+      start_date: '2026-08-10',
+    });
+    const lateRevision = taskRecurrenceRevisionFixture({
+      recurrence_id: lateDefinition.id,
+      start_date: '2026-08-20',
+    });
+    const earlyTask = taskTodoFixture({
+      id: 'task-month-early',
+      title: 'Early Task',
+      start_date: '2026-08-10',
+      today_section: null,
+      upcoming_order_key: 'a1',
+    });
+    const lateDeadlineOnlyTask = taskTodoFixture({
+      id: 'task-month-late',
+      title: 'Late Deadline Task',
+      start_date: null,
+      deadline: '2026-08-20',
+      today_section: null,
+      upcoming_order_key: 'a1',
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [lateDeadlineOnlyTask, earlyTask],
+    });
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [lateDefinition, earlyDefinition],
+      revisions: new Map([
+        [earlyDefinition.id, earlyRevision],
+        [lateDefinition.id, lateRevision],
+      ]),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
+      datedPrototypes: [
+        { definition: lateDefinition, revision: lateRevision, scheduledDate: '2026-08-20' },
+        { definition: earlyDefinition, revision: earlyRevision, scheduledDate: '2026-08-10' },
+      ],
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: null,
+      createFromTask: vi.fn(),
+      edit: vi.fn(),
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+      reorderProjection: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const augustSection = container.querySelector(
+        '[aria-labelledby="tasks-month-2026-08-heading"] [data-task-planning-list]',
+      );
+      expect(Array.from(
+        augustSection?.querySelectorAll<HTMLElement>(':scope > [data-task-row-id]') ?? [],
+        (row) => row.dataset.taskRowId,
+      )).toEqual([
+        `recurrence:${earlyDefinition.id}`,
+        earlyTask.id,
+        `recurrence:${lateDefinition.id}`,
+        lateDeadlineOnlyTask.id,
+      ]);
     } finally {
       cleanup(root, container);
     }
@@ -16165,7 +16495,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('shows a distant Upcoming Start after Area and before Reminder while omitting nearby Start', () => {
+  it('shows explicit and deadline-implied Starts in Upcoming month buckets while omitting nearby Starts', () => {
     const nearbyTask = taskTodoFixture({
       ...task,
       id: 'task-nearby',
@@ -16181,6 +16511,24 @@ describe('TasksShell', () => {
       start_date: '2026-08-03',
       deadline: null,
     });
+    const nearbyMonthTask = taskTodoFixture({
+      ...task,
+      id: 'task-nearby-month',
+      title: 'Nearby month task',
+      notes: '',
+      area_id: null,
+      start_date: '2026-07-29',
+      deadline: null,
+    });
+    const deadlineOnlyTask = taskTodoFixture({
+      ...task,
+      id: 'task-deadline-only',
+      title: 'Deadline-only task',
+      notes: '',
+      area_id: null,
+      start_date: null,
+      deadline: '2026-08-05',
+    });
     const reminder = taskReminderFixture({
       task_id: distantTask.id,
       local_date: distantTask.start_date!,
@@ -16188,7 +16536,7 @@ describe('TasksShell', () => {
     });
     mockTaskList.mockReturnValue({
       ...defaultTaskList(),
-      tasks: [nearbyTask, distantTask],
+      tasks: [nearbyTask, distantTask, nearbyMonthTask, deadlineOnlyTask],
     });
     mockTaskHierarchy.mockReturnValue({
       areas: [taskAreaFixture({ id: 'area-work', title: 'Work' })],
@@ -16213,7 +16561,16 @@ describe('TasksShell', () => {
       expect(container.querySelector(
         '[data-task-id="task-nearby"] [data-task-metadata-kind="start"]',
       )).toBeNull();
-      expect(container.querySelector('[aria-label="Deadline 5 days left"]')).toBeTruthy();
+      expect(container.querySelector('[aria-label="Deadline 5 days"]')).toBeTruthy();
+      const nearbyMonthMetadata = container.querySelector(
+        '[data-task-id="task-nearby-month"] [data-task-row-metadata]',
+      );
+      expect(nearbyMonthMetadata?.querySelector('[data-task-metadata-kind="start"]'))
+        .toHaveAccessibleName('Start 9 days');
+      expect(nearbyMonthMetadata?.querySelector('[data-task-start-compact]'))
+        .toHaveTextContent('9d');
+      expect(nearbyMonthMetadata?.querySelector('[data-task-start-full]'))
+        .toHaveTextContent('9 days');
       const metadata = container.querySelector(
         '[data-task-id="task-distant"] [data-task-row-metadata]',
       );
@@ -16222,8 +16579,26 @@ describe('TasksShell', () => {
       ))).toEqual(['area', 'start', 'reminder']);
       expect(metadata?.querySelector('[data-task-metadata-kind="start"]'))
         .toHaveAccessibleName('Start Aug 3');
+      expect(metadata?.querySelector('[data-task-start-compact]')).toHaveTextContent('8-3');
+      expect(metadata?.querySelector('[data-task-start-compact]')).toHaveClass('sm:hidden');
+      expect(metadata?.querySelector('[data-task-start-full]')).toHaveTextContent('Aug 3');
+      expect(metadata?.querySelector('[data-task-start-full]')).toHaveClass('hidden', 'sm:inline');
+      expect(metadata?.querySelector('[data-task-metadata-kind="reminder"]'))
+        .toHaveAccessibleName('Reminder 9:30 AM');
+      expect(metadata?.querySelector('[data-task-reminder-time]')).toHaveTextContent('9:30 AM');
+      expect(metadata?.querySelector('[data-task-reminder-time]')).toHaveClass('hidden', 'sm:inline');
       expect(metadata?.querySelector('[data-task-metadata-kind="start"] svg'))
         .toHaveClass('lucide-play');
+      const deadlineOnlyMetadata = container.querySelector(
+        '[data-task-id="task-deadline-only"] [data-task-row-metadata]',
+      );
+      expect(Array.from(deadlineOnlyMetadata?.children ?? [], (item) => (
+        item.getAttribute('data-task-metadata-kind')
+      ))).toEqual(['start', 'deadline']);
+      expect(deadlineOnlyMetadata?.querySelector('[data-task-metadata-kind="start"]'))
+        .toHaveAccessibleName('Start Aug 5');
+      expect(deadlineOnlyMetadata?.querySelector('[data-task-start-compact]'))
+        .toHaveTextContent('8-5');
     } finally {
       cleanup(root, container);
     }

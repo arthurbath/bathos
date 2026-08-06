@@ -32,6 +32,12 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **THEN** Tasks shows the persistent in-app reminder toast on that surface
 - **AND** the earlier provider acceptance does not count as manual acknowledgement
 
+#### Scenario: Preserve fallback delivery across open surfaces
+- **GIVEN** two Tasks surfaces without browser or native notifications enabled are open for the same account
+- **WHEN** one surface claims a due reminder for in-app presentation before the other surface polls
+- **THEN** the other surface can independently claim and show the same logical reminder
+- **AND** dismissing the reminder on either surface acknowledges the occurrence and retires its delivery on every surface
+
 #### Scenario: Defer to native notifications
 - **WHEN** the current native Tasks surface reports that operating-system notification delivery is enabled
 - **THEN** Tasks does not show an in-app reminder toast for that delivery

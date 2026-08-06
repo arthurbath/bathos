@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(43);
+SELECT plan(49);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -55,6 +55,11 @@ SELECT has_function(
   'public', 'tasks_record_web_push_delivery_result',
   ARRAY['uuid', 'text', 'text', 'text', 'boolean'],
   'records provider outcomes separately from acknowledgement'
+);
+SELECT has_function(
+  'public', 'tasks_claim_due_reminders_v2',
+  ARRAY['timestamp with time zone', 'uuid', 'text', 'text'],
+  'claims in-app reminders through a surface-scoped delivery target'
 );
 
 SET LOCAL ROLE authenticated;
@@ -267,8 +272,11 @@ SELECT set_config(
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT set_config(
   'test.in_app_fallback_claim',
-  public.tasks_claim_due_reminders(
-    '2099-01-01 08:30:00+00', '98000000-0000-4000-8000-000000000041'
+  public.tasks_claim_due_reminders_v2(
+    '2099-01-01 08:30:00+00',
+    '98000000-0000-4000-8000-000000000041',
+    'browser:98000000-0000-4000-8000-000000000051',
+    'Synthetic ChatGPT Browser'
   )::text,
   false
 );
@@ -278,6 +286,11 @@ SELECT is(
   ),
   1,
   'claims an in-app fallback after another browser accepts Web Push'
+);
+SELECT is(
+  current_setting('test.in_app_fallback_claim')::jsonb ->> 'surface_key',
+  'browser:98000000-0000-4000-8000-000000000051',
+  'reports the surface that owns the fallback claim'
 );
 SELECT is(
   (
@@ -290,6 +303,44 @@ SELECT is(
   ),
   'attempted',
   'keeps the in-app fallback pending until the user dismisses it'
+);
+SELECT set_config(
+  'test.in_app_native_claim',
+  public.tasks_claim_due_reminders_v2(
+    '2099-01-01 08:30:00+00',
+    '98000000-0000-4000-8000-000000000042',
+    'macos:98000000-0000-4000-8000-000000000052',
+    'Synthetic Mac App'
+  )::text,
+  false
+);
+SELECT is(
+  jsonb_array_length(
+    current_setting('test.in_app_native_claim')::jsonb -> 'items'
+  ),
+  1,
+  'allows another fallback surface to claim the same unacknowledged occurrence'
+);
+SELECT isnt(
+  current_setting('test.in_app_fallback_claim')::jsonb #>> '{items,0,delivery_id}',
+  current_setting('test.in_app_native_claim')::jsonb #>> '{items,0,delivery_id}',
+  'gives each fallback surface its own delivery identity'
+);
+SELECT is(
+  (
+    SELECT count(DISTINCT target.endpoint_key)
+    FROM public.tasks_reminder_deliveries AS delivery
+    JOIN public.tasks_delivery_targets AS target
+      ON target.id = delivery.target_id
+     AND target.owner_id = delivery.owner_id
+    WHERE delivery.occurrence_id = (
+      current_setting('test.in_app_fallback_claim')::jsonb
+      #>> '{items,0,occurrence_id}'
+    )::uuid
+      AND target.channel = 'in_app'
+  ),
+  2::bigint,
+  'persists distinct fallback targets for the browser and native app surfaces'
 );
 SELECT is(
   public.tasks_acknowledge_reminder_delivery(
@@ -306,6 +357,19 @@ SELECT is(
   ),
   'acknowledged',
   'records user acknowledgement separately from provider acceptance'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_reminder_deliveries AS delivery
+    WHERE delivery.occurrence_id = (
+      current_setting('test.in_app_fallback_claim')::jsonb
+      #>> '{items,0,occurrence_id}'
+    )::uuid
+      AND delivery.status <> 'acknowledged'
+  ),
+  0::bigint,
+  'acknowledging one surface retires every delivery for the logical reminder'
 );
 SELECT is(
   jsonb_array_length(

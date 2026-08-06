@@ -31,10 +31,17 @@ import {
   TaskImmediateDragHandle,
 } from '@/modules/tasks/components/TaskImmediateDragHandle';
 import { useTaskImmediateDragTarget } from '@/modules/tasks/components/TaskImmediateDragTarget';
+import {
+  getTaskEditorMotionClassName,
+  TASK_EDITOR_EXPANSION_DURATION_MS,
+  useTaskEditorMotion,
+} from '@/modules/tasks/components/taskEditorMotion';
 import { TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS } from '@/modules/tasks/components/taskPlanningStyles';
+import { useTouchScrollDismissMenu } from '@/modules/tasks/components/useTouchScrollDismissMenu';
 import {
   TASK_ICONS,
 } from '@/modules/tasks/components/taskIconography';
+import { TaskStartMetadata } from '@/modules/tasks/components/TaskStartMetadata';
 import { TaskRepeatDialog } from '@/modules/tasks/components/TaskRepeatDialog';
 import type {
   TaskRecurrenceEditInput,
@@ -47,6 +54,7 @@ import {
 } from '@/modules/tasks/domain/taskDates';
 import { isMacControlTaskSelectionPointer } from '@/modules/tasks/domain/taskSelection';
 import { planChecklistGroupMove } from '@/modules/tasks/domain/taskChecklistOrder';
+import { getTaskUpcomingGroup } from '@/modules/tasks/domain/taskUpcoming';
 import {
   buildRecurrencePrototypeEditInput,
   type RecurrencePrototypeMetadataPatch,
@@ -187,14 +195,25 @@ function RecurrencePrototypeRow({
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [visibleTitle, setVisibleTitle] = useState(definition.name);
   const [dragActive, setDragActive] = useState(false);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const rowRef = useRef<HTMLElement>(null);
   const summaryRowRef = useRef<HTMLDivElement>(null);
+  const editorRegionRef = useRef<HTMLDivElement>(null);
   const actionMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const editorFlushRef = useRef<() => Promise<void>>(async () => undefined);
   const currentDefinitionRef = useRef(definition);
   const currentRevisionRef = useRef(revision);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const {
+    expanded: editorExpanded,
+    mounted: editorMounted,
+  } = useTaskEditorMotion({
+    disabled: Boolean(bulkSelection),
+    open: editorOpen,
+    regionRef: editorRegionRef,
+    rowRef,
+  });
 
   useEffect(() => {
     if (definition.record_revision >= currentDefinitionRef.current.record_revision) {
@@ -215,6 +234,11 @@ function RecurrencePrototypeRow({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [focusRequested, onFocusFulfilled]);
+
+  const handleActionMenuPointerDown = useTouchScrollDismissMenu(() => {
+    suppressClickUntilRef.current = Date.now() + 500;
+    setActionMenuOpen(false);
+  });
 
   const savePrototype = useCallback((patch: RecurrencePrototypeMetadataPatch) => {
     const save = saveQueueRef.current.then(async () => {
@@ -404,6 +428,7 @@ function RecurrencePrototypeRow({
           )}
           {navigationHref ? <a
             href={navigationHref}
+            data-task-title-control
             className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onMouseDown={handleMacControlSelectionMouseDown}
             onContextMenu={handleMacControlSelectionContextMenu}
@@ -425,12 +450,14 @@ function RecurrencePrototypeRow({
             <RecurrencePrototypeMetadata
               definition={definition}
               revision={revision}
+              scheduledDate={scheduledDate}
               areas={areas}
               planningDate={planningDate}
               waiting={waiting}
             />
           </a> : <button
             type="button"
+            data-task-title-control
             draggable={Boolean(draggable)}
             data-task-drag-handle={draggable ? 'true' : undefined}
             onDragStart={draggable ? (event: DragEvent<HTMLButtonElement>) => {
@@ -467,6 +494,7 @@ function RecurrencePrototypeRow({
             <RecurrencePrototypeMetadata
               definition={definition}
               revision={revision}
+              scheduledDate={scheduledDate}
               areas={areas}
               planningDate={planningDate}
               waiting={waiting}
@@ -475,7 +503,11 @@ function RecurrencePrototypeRow({
           {(!bulkSelection || (draggable && showDragHandles)) ? (
             <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
               {!bulkSelection ? (
-                <DropdownMenu>
+                <DropdownMenu
+                  modal={false}
+                  open={actionMenuOpen}
+                  onOpenChange={setActionMenuOpen}
+                >
                   <DropdownMenuTrigger asChild>
                     <Button
                       ref={actionMenuTriggerRef}
@@ -484,6 +516,12 @@ function RecurrencePrototypeRow({
                       size="icon"
                       className="h-8 w-8 text-muted-foreground"
                       aria-label={`Actions for ${visibleTitle}`}
+                      onPointerDown={handleActionMenuPointerDown}
+                      onClickCapture={(event) => {
+                        if (Date.now() > suppressClickUntilRef.current) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
@@ -529,20 +567,34 @@ function RecurrencePrototypeRow({
             </div>
           ) : null}
         </div>
-        {editorOpen ? (
-          <SharedRecurrencePrototypeEditor
-            definition={definition}
-            revision={revision}
-            areas={areas}
-            onSave={savePrototype}
-            onTitleChange={setVisibleTitle}
-            onRegisterFlush={(flush) => {
-              editorFlushRef.current = flush ?? (async () => undefined);
-              onRegisterEditorFlush(definition.id, flush);
-            }}
-            onEditRepeat={() => void openRepeatEditor()}
-            showDragHandles={showDragHandles}
-          />
+        {editorMounted ? (
+          <div
+            ref={editorRegionRef}
+            data-task-recurrence-prototype-editor
+            data-state={editorOpen ? (editorExpanded ? 'open' : 'opening') : 'closing'}
+            aria-hidden={editorOpen ? undefined : true}
+            className={getTaskEditorMotionClassName({
+              expanded: editorExpanded,
+              interactive: editorOpen,
+            })}
+            style={{ transitionDuration: `${TASK_EDITOR_EXPANSION_DURATION_MS}ms` }}
+          >
+            <div className="min-h-0" data-task-editor-content>
+              <SharedRecurrencePrototypeEditor
+                definition={definition}
+                revision={revision}
+                areas={areas}
+                onSave={savePrototype}
+                onTitleChange={setVisibleTitle}
+                onRegisterFlush={(flush) => {
+                  editorFlushRef.current = flush ?? (async () => undefined);
+                  onRegisterEditorFlush(definition.id, flush);
+                }}
+                onEditRepeat={() => void openRepeatEditor()}
+                showDragHandles={showDragHandles}
+              />
+            </div>
+          </div>
         ) : null}
         </div>
       </article>
@@ -563,12 +615,14 @@ function RecurrencePrototypeRow({
 function RecurrencePrototypeMetadata({
   definition,
   revision,
+  scheduledDate,
   areas,
   planningDate,
   waiting,
 }: {
   definition: TaskRecurrenceDefinition;
   revision: TaskRecurrenceRevision;
+  scheduledDate: string | null;
   areas: ReadonlyArray<{ id: string; title: string }>;
   planningDate: string;
   waiting: boolean;
@@ -581,8 +635,11 @@ function RecurrencePrototypeMetadata({
     : revision.date_basis === 'start'
       ? addTaskCalendarDays(definition.next_occurrence_date, deadlineOffset)
       : definition.next_occurrence_date;
+  const showStart = scheduledDate !== null
+    && getTaskUpcomingGroup(scheduledDate, planningDate).kind === 'month';
   const hasMetadata = waiting
     || areaLabel !== null
+    || showStart
     || prototype.actionability !== 'actionable'
     || deadline !== null
     || prototype.notes.length > 0
@@ -603,6 +660,9 @@ function RecurrencePrototypeMetadata({
         <span className="rounded bg-foreground/[0.08] px-1.5 py-0.5" data-task-metadata-kind="recurrence-waiting">
           Waiting
         </span>
+      ) : null}
+      {showStart ? (
+        <TaskStartMetadata startDate={scheduledDate} planningDate={planningDate} />
       ) : null}
       {prototype.actionability === 'waiting' ? (
         <MetadataIcon label="Waiting" kind="actionability" className="text-admin">
@@ -866,7 +926,7 @@ function SharedRecurrencePrototypeEditor({
   };
 
   return (
-    <div data-task-recurrence-prototype-editor>
+    <div>
       <TaskMetadataDrawerFields
         editorId={`recurrence-${definition.id}`}
         title={title}
@@ -920,7 +980,6 @@ function SharedRecurrencePrototypeEditor({
           void saveImmediate({ root: { actionability: value } });
         }}
         titleInputRef={titleInputRef}
-        className="pt-[6px]"
       />
     </div>
   );

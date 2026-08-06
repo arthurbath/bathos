@@ -8,7 +8,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataGrid, GridEditableCell, gridMenuTriggerProps, gridNavProps, useDataGrid } from '@/components/ui/data-grid';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
-import { DatePickerField } from '@/components/ui/date-picker-field';
+import { DatePickerField, formatDatePickerDisplayValue } from '@/components/ui/date-picker-field';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -223,7 +223,7 @@ function WeightRecordDateCell({
           )}
         >
           <span className="truncate">
-            {parsedDate ? format(parsedDate, 'MMM d, yyyy') : (value || 'Pick a date')}
+            {parsedDate ? formatDatePickerDisplayValue(parsedDate) : (value || 'Pick a date')}
           </span>
           <CalendarIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground opacity-50" />
         </button>
