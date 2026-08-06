@@ -1,12 +1,66 @@
 import AppKit
 import Carbon
 import SwiftUI
+import UserNotifications
 import WebKit
 import XCTest
 @testable import TasksMac
 
 @MainActor
 final class TasksMacTests: XCTestCase {
+    func testNativeNotificationStatusMapsAppleAuthorization() {
+        XCTAssertEqual(
+            TaskNativeNotificationAuthorizationState.resolve(.notDetermined),
+            .notDetermined
+        )
+        XCTAssertEqual(
+            TaskNativeNotificationAuthorizationState.resolve(.denied),
+            .denied
+        )
+        XCTAssertEqual(
+            TaskNativeNotificationAuthorizationState.resolve(.authorized),
+            .enabled
+        )
+    }
+
+    func testNativeReminderProjectionKeepsTheEarliestFutureItems() throws {
+        let now = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-08-06T16:00:00Z")
+        )
+        let first = TaskNativeReminderProjectionItem(
+            id: UUID(),
+            taskId: UUID(),
+            summary: "First",
+            resolvedAt: "2026-08-06T17:00:00Z"
+        )
+        let second = TaskNativeReminderProjectionItem(
+            id: UUID(),
+            taskId: UUID(),
+            summary: "Second",
+            resolvedAt: "2026-08-06T18:00:00Z"
+        )
+        let projection = TaskNativeReminderProjection(
+            ownerId: UUID(),
+            generatedAt: "2026-08-06T16:00:00Z",
+            reminders: [second, first]
+        )
+
+        XCTAssertTrue(projection.isValid)
+        XCTAssertEqual(projection.scheduledItems(after: now, limit: 1), [first])
+
+        let request = try XCTUnwrap(
+            TaskNativeNotificationCoordinator.notificationRequest(
+                ownerId: projection.ownerId,
+                item: first,
+                now: now
+            )
+        )
+        XCTAssertEqual(request.content.title, "Reminder")
+        XCTAssertEqual(request.content.body, "First")
+        let trigger = try XCTUnwrap(request.trigger as? UNTimeIntervalNotificationTrigger)
+        XCTAssertEqual(trigger.timeInterval, 3_600, accuracy: 0.001)
+    }
+
     func testWebViewAcceptsTheFirstMouseEventFromAnInactiveWindow() {
         let webView = TasksFirstMouseWebView(
             frame: .zero,
@@ -829,27 +883,20 @@ final class TasksMacTests: XCTestCase {
         )
     }
 
-    func testLockScreenRowsReserveWidthForTheSummary() {
-        XCTAssertEqual(
-            TaskWidgetPresentationPolicy.lockScreenLeadingSystemImageName,
-            "square"
-        )
-    }
-
     func testPrimaryLinkPresentationRemainsProtocolAware() {
         XCTAssertEqual(
             TaskWidgetPrimaryLink(
                 href: "https://example.atlassian.net/browse/PF-1",
                 kind: .link
-            ).systemImageName,
-            "bolt"
+            ).iconKind,
+            .jira
         )
         XCTAssertEqual(
             TaskWidgetPrimaryLink(
                 href: "obsidian://open?vault=Personal",
                 kind: .link
-            ).systemImageName,
-            "doc.text"
+            ).iconKind,
+            .obsidian
         )
     }
 

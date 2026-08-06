@@ -4,9 +4,12 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { TaskQuickFilter } from '@/modules/tasks/domain/taskQuickFilters';
 import {
   buildTaskNativeWidgetSnapshot,
+  buildTaskNativeReminderProjection,
   publishTaskNativeQuickEntryCredential,
+  publishTaskNativeReminderProjection,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
+  type TaskNativeReminderProjectionRow,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
 import {
   maintainTaskNativeQuickEntryCredential,
@@ -54,6 +57,22 @@ export function useTaskNativeWidgetBridge({
      ORDER BY id`,
     [ownerId],
   );
+  const reminderQuery = useQuery<TaskNativeReminderProjectionRow>(
+    `SELECT reminder.id, reminder.task_id, reminder.resolved_at, todo.title
+     FROM tasks_reminders AS reminder
+     JOIN tasks_todos AS todo
+       ON todo.id = reminder.task_id
+      AND todo.owner_id = reminder.owner_id
+     WHERE reminder.owner_id = ?
+       AND reminder.status = 'active'
+       AND reminder.task_id IS NOT NULL
+       AND todo.start_date = reminder.local_date
+       AND todo.disposition = 'present'
+       AND todo.lifecycle = 'open'
+       AND todo.recurrence_superseded_at IS NULL
+     ORDER BY reminder.resolved_at, reminder.id`,
+    [ownerId],
+  );
   const snapshot = useMemo(() => buildTaskNativeWidgetSnapshot({
     ownerId,
     planningDate,
@@ -71,6 +90,10 @@ export function useTaskNativeWidgetBridge({
     quickFilter,
     recurrencePrototypes,
   ]);
+  const reminderProjection = useMemo(() => buildTaskNativeReminderProjection({
+    ownerId,
+    rows: reminderQuery.data,
+  }), [ownerId, reminderQuery.data]);
 
   useEffect(() => {
     if (
@@ -82,6 +105,15 @@ export function useTaskNativeWidgetBridge({
     query.error,
     query.isLoading,
     snapshot,
+  ]);
+
+  useEffect(() => {
+    if (reminderQuery.isLoading || reminderQuery.error) return;
+    publishTaskNativeReminderProjection(reminderProjection);
+  }, [
+    reminderProjection,
+    reminderQuery.error,
+    reminderQuery.isLoading,
   ]);
 
   useEffect(() => {

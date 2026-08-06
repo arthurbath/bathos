@@ -26,6 +26,7 @@ struct TasksWatchProgressProvider: TimelineProvider {
         completion: @escaping (Timeline<TasksWatchProgressEntry>) -> Void
     ) {
         Task {
+            await TaskWatchPushRegistrationSynchronizer().synchronize()
             var progress = try? TaskWatchProgressStore()?.load()
             if let credential = try? TaskWatchCredentialStore()?.load(),
                let refreshed = try? await TaskWatchActionsClient().fetchProgress(
@@ -62,8 +63,8 @@ struct TasksWatchProgressView: View {
                 )
                 .rotationEffect(.degrees(-90))
 
-            Image(systemName: "checkmark")
-                .font(.system(size: 16, weight: .black))
+            TaskWidgetLucideIconView(icon: .complicationCheck)
+                .frame(width: 20, height: 20)
                 .foregroundStyle(.primary)
         }
         .padding(3)
@@ -76,12 +77,34 @@ struct TasksWatchComplication: Widget {
     let kind = TaskCompanionConstants.watchComplicationKind
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: TasksWatchProgressProvider()) { entry in
+        tasksWatchProgressConfiguration().pushHandler(TasksWatchWidgetPushHandler.self)
+    }
+}
+
+private func tasksWatchProgressConfiguration() -> some WidgetConfiguration {
+    StaticConfiguration(
+            kind: TaskCompanionConstants.watchComplicationKind,
+            provider: TasksWatchProgressProvider()
+        ) { entry in
             TasksWatchProgressView(entry: entry)
         }
         .configurationDisplayName("Today Progress")
         .description("Shows the share of today's Tasks that are complete.")
         .supportedFamilies([.accessoryCircular])
+}
+
+@available(watchOS 26.0, *)
+struct TasksWatchWidgetPushHandler: WidgetPushHandler {
+    init() {}
+
+    func pushTokenDidChange(_ pushInfo: WidgetPushInfo, widgets: [WidgetInfo]) {
+        let registration = TaskWatchPushRegistration(
+            schemaVersion: TaskWatchPushRegistration.schemaVersion,
+            deviceToken: pushInfo.token.map { String(format: "%02x", $0) }.joined(),
+            enabled: !widgets.isEmpty
+        )
+        try? TaskWatchPushRegistrationStore()?.storePending(registration)
+        Task { await TaskWatchPushRegistrationSynchronizer().synchronize() }
     }
 }
 

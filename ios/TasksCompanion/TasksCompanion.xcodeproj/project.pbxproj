@@ -24,6 +24,8 @@
 		AA0000000000000000001106 /* TaskCompanionConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000303 /* TaskCompanionConstants.swift */; };
 		AA0000000000000000001107 /* NewTaskControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000206 /* NewTaskControl.swift */; };
 		AA0000000000000000001108 /* NewTaskControlIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000304 /* NewTaskControlIntent.swift */; };
+		AA0000000000000000001109 /* TaskWidgetLucideIcon.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000305 /* TaskWidgetLucideIcon.generated.swift */; };
+		AA0000000000000000001110 /* TasksWidgetIcons.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000306 /* TasksWidgetIcons.xcassets */; };
 		AA0000000000000000001201 /* TasksCompanionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000401 /* TasksCompanionTests.swift */; };
 		AA0000000000000000001301 /* TasksWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000009 /* TasksWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		BB0000000000000000001001 /* TaskWatchConnectivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000101 /* TaskWatchConnectivityCoordinator.swift */; };
@@ -36,6 +38,8 @@
 		BB0000000000000000001201 /* TasksWatchComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000301 /* TasksWatchComplication.swift */; };
 		BB0000000000000000001202 /* TaskWatchSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000102 /* TaskWatchSupport.swift */; };
 		BB0000000000000000001203 /* TaskCompanionConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000303 /* TaskCompanionConstants.swift */; };
+		BB0000000000000000001204 /* TaskWidgetLucideIcon.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000305 /* TaskWidgetLucideIcon.generated.swift */; };
+		BB0000000000000000001205 /* TasksWidgetIcons.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000306 /* TasksWidgetIcons.xcassets */; };
 		BB0000000000000000001301 /* TasksWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000002 /* TasksWatchWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		BB0000000000000000001302 /* TasksWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000001 /* TasksWatch.app */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -128,6 +132,8 @@
 		AA0000000000000000000302 /* TaskNativeRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskNativeRoute.swift; sourceTree = "<group>"; };
 		AA0000000000000000000303 /* TaskCompanionConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCompanionConstants.swift; sourceTree = "<group>"; };
 		AA0000000000000000000304 /* NewTaskControlIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTaskControlIntent.swift; sourceTree = "<group>"; };
+		AA0000000000000000000305 /* TaskWidgetLucideIcon.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskWidgetLucideIcon.generated.swift; sourceTree = "<group>"; };
+		AA0000000000000000000306 /* TasksWidgetIcons.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = TasksWidgetIcons.xcassets; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* TasksCompanionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksCompanionTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000001 /* TasksWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000000002 /* TasksWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TasksWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -241,6 +247,8 @@
 				AA0000000000000000000302 /* TaskNativeRoute.swift */,
 				AA0000000000000000000303 /* TaskCompanionConstants.swift */,
 				AA0000000000000000000304 /* NewTaskControlIntent.swift */,
+				AA0000000000000000000305 /* TaskWidgetLucideIcon.generated.swift */,
+				AA0000000000000000000306 /* TasksWidgetIcons.xcassets */,
 				BB0000000000000000000102 /* TaskWatchSupport.swift */,
 			);
 			path = Shared;
@@ -434,6 +442,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000001110 /* TasksWidgetIcons.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -457,6 +466,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB0000000000000000001205 /* TasksWidgetIcons.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -491,6 +501,7 @@
 				AA0000000000000000001106 /* TaskCompanionConstants.swift in Sources */,
 				AA0000000000000000001107 /* NewTaskControl.swift in Sources */,
 				AA0000000000000000001108 /* NewTaskControlIntent.swift in Sources */,
+				AA0000000000000000001109 /* TaskWidgetLucideIcon.generated.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -519,6 +530,7 @@
 				BB0000000000000000001201 /* TasksWatchComplication.swift in Sources */,
 				BB0000000000000000001202 /* TaskWatchSupport.swift in Sources */,
 				BB0000000000000000001203 /* TaskCompanionConstants.swift in Sources */,
+				BB0000000000000000001204 /* TaskWidgetLucideIcon.generated.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -695,6 +707,7 @@
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TasksWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -706,6 +719,7 @@
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				TASKS_WIDGET_APNS_ENVIRONMENT = development;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -719,6 +733,7 @@
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TasksWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -730,6 +745,7 @@
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				TASKS_WIDGET_APNS_ENVIRONMENT = production;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -840,8 +856,9 @@
 				SUPPORTED_PLATFORMS = "watchos watchsimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				TASKS_WIDGET_APNS_ENVIRONMENT = development;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Debug;
 		};
@@ -867,8 +884,9 @@
 				SUPPORTED_PLATFORMS = "watchos watchsimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				TASKS_WIDGET_APNS_ENVIRONMENT = production;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
 		};

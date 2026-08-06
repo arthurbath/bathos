@@ -54,8 +54,6 @@ enum TaskWidgetPresentationPolicy {
     static let lockScreenTaskRowMinimumHeight: CGFloat = 16
     static let lockScreenTaskRowSpacing: CGFloat = 4
     static let lockScreenTaskFontSize: CGFloat = 13
-    static let lockScreenLeadingSystemImageName = "square"
-    static let emptyStateSystemImageName = "sparkles"
 
     static func verticallyCentersLockScreenTasks(taskCount: Int) -> Bool {
         taskCount >= lockScreenTaskLimit
@@ -166,19 +164,6 @@ struct TaskWidgetPrimaryLink: Codable, Equatable {
             return Self.isJiraWebURL(url) ? .jira : .link
         default:
             return .link
-        }
-    }
-
-    var systemImageName: String {
-        switch iconKind {
-        case .mail:
-            return "envelope"
-        case .jira:
-            return "bolt"
-        case .obsidian:
-            return "doc.text"
-        case .link:
-            return "link"
         }
     }
 
@@ -810,6 +795,7 @@ struct TaskWidgetBackgroundRefresher {
 
     func refresh(now: Date = Date()) async -> TaskWidgetSnapshot? {
         let cachedSnapshot = try? snapshotStore.load()
+        await TaskWidgetPushRegistrationSynchronizer()?.synchronize(now: now)
         guard let credential = try? credentialStore.load(now: now),
               let refreshedSnapshot = await client.fetch(credential: credential) else {
             return cachedSnapshot
@@ -820,6 +806,187 @@ struct TaskWidgetBackgroundRefresher {
         } catch {
             return cachedSnapshot
         }
+    }
+}
+
+struct TaskWidgetPushRegistration: Codable, Equatable {
+    static let schemaVersion = 1
+
+    let schemaVersion: Int
+    let deviceToken: String
+    let platform: String
+    let environment: String
+    let topic: String
+    let enabled: Bool
+
+    func validate() throws {
+        let allowedPlatforms = ["ios", "macos"]
+        let expectedTopic = "garden.bath.tasks.push-type.widgets"
+        guard schemaVersion == Self.schemaVersion,
+              allowedPlatforms.contains(platform),
+              ["development", "production"].contains(environment),
+              topic == expectedTopic,
+              deviceToken.range(
+                of: #"^[0-9a-f]{64,512}$"#,
+                options: .regularExpression
+              ) != nil,
+              deviceToken.count.isMultiple(of: 2) else {
+            throw TaskWidgetSnapshotError.invalidCredential
+        }
+    }
+}
+
+private struct TaskWidgetPushRegistrationAcceptance: Codable, Equatable {
+    let registration: TaskWidgetPushRegistration
+    let ownerId: UUID
+    let installationId: UUID
+}
+
+struct TaskWidgetPushRegistrationStore {
+    static let pendingFileName = "task-widget-push-registration-pending-v1.json"
+    static let acceptedFileName = "task-widget-push-registration-accepted-v1.json"
+
+    let pendingURL: URL
+    let acceptedURL: URL
+
+    init?(appGroupIdentifier: String = TaskCompanionConstants.appGroupIdentifier) {
+        guard let directory = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: appGroupIdentifier
+        ) else { return nil }
+        self.init(directoryURL: directory)
+    }
+
+    init(directoryURL: URL) {
+        pendingURL = directoryURL.appendingPathComponent(Self.pendingFileName)
+        acceptedURL = directoryURL.appendingPathComponent(Self.acceptedFileName)
+    }
+
+    func storePending(_ value: TaskWidgetPushRegistration) throws {
+        try value.validate()
+        try FileManager.default.createDirectory(
+            at: pendingURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try JSONEncoder().encode(value).write(to: pendingURL, options: .atomic)
+    }
+
+    func loadPending() throws -> TaskWidgetPushRegistration? {
+        guard FileManager.default.fileExists(atPath: pendingURL.path) else { return nil }
+        let value = try JSONDecoder().decode(
+            TaskWidgetPushRegistration.self,
+            from: Data(contentsOf: pendingURL)
+        )
+        try value.validate()
+        return value
+    }
+
+    func isAccepted(
+        _ value: TaskWidgetPushRegistration,
+        credential: TaskWidgetCredential
+    ) -> Bool {
+        guard let data = try? Data(contentsOf: acceptedURL),
+              let accepted = try? JSONDecoder().decode(
+                TaskWidgetPushRegistrationAcceptance.self,
+                from: data
+              ) else { return false }
+        return accepted == TaskWidgetPushRegistrationAcceptance(
+            registration: value,
+            ownerId: credential.ownerId,
+            installationId: credential.installationId
+        )
+    }
+
+    func markAccepted(
+        _ value: TaskWidgetPushRegistration,
+        credential: TaskWidgetCredential
+    ) throws {
+        let acceptance = TaskWidgetPushRegistrationAcceptance(
+            registration: value,
+            ownerId: credential.ownerId,
+            installationId: credential.installationId
+        )
+        try JSONEncoder().encode(acceptance).write(to: acceptedURL, options: .atomic)
+    }
+}
+
+struct TaskWidgetPushRegistrationClient {
+    typealias Transport = (URLRequest) async throws -> (Data, URLResponse)
+    let endpoint: URL
+    let transport: Transport
+
+    init(
+        endpoint: URL = TaskCompanionConstants.widgetActionsURL,
+        transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }
+    ) {
+        self.endpoint = endpoint
+        self.transport = transport
+    }
+
+    func register(
+        _ value: TaskWidgetPushRegistration,
+        credential: TaskWidgetCredential
+    ) async -> Bool {
+        do {
+            try value.validate()
+            try credential.validate()
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 8
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(
+                "Widget \(credential.credential)",
+                forHTTPHeaderField: "Authorization"
+            )
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "action": "registerPushToken",
+                "deviceToken": value.deviceToken,
+                "platform": value.platform,
+                "environment": value.environment,
+                "topic": value.topic,
+                "enabled": value.enabled,
+            ])
+            let (data, response) = try await transport(request)
+            guard let http = response as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  data.count <= 2_048,
+                  let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  ["registered", "disabled"].contains(body["outcome"] as? String) else {
+                return false
+            }
+            return true
+        } catch { return false }
+    }
+}
+
+struct TaskWidgetPushRegistrationSynchronizer {
+    let registrationStore: TaskWidgetPushRegistrationStore
+    let credentialStore: TaskWidgetCredentialStore
+    let client: TaskWidgetPushRegistrationClient
+
+    init?() {
+        guard let registrationStore = TaskWidgetPushRegistrationStore(),
+              let credentialStore = TaskWidgetCredentialStore() else { return nil }
+        self.registrationStore = registrationStore
+        self.credentialStore = credentialStore
+        client = TaskWidgetPushRegistrationClient()
+    }
+
+    init(
+        registrationStore: TaskWidgetPushRegistrationStore,
+        credentialStore: TaskWidgetCredentialStore,
+        client: TaskWidgetPushRegistrationClient
+    ) {
+        self.registrationStore = registrationStore
+        self.credentialStore = credentialStore
+        self.client = client
+    }
+
+    func synchronize(now: Date = Date()) async {
+        guard let value = try? registrationStore.loadPending(),
+              let credential = try? credentialStore.load(now: now),
+              !registrationStore.isAccepted(value, credential: credential),
+              await client.register(value, credential: credential) else { return }
+        try? registrationStore.markAccepted(value, credential: credential)
     }
 }
 

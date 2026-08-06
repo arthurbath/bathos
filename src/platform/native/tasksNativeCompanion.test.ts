@@ -1,7 +1,10 @@
 import {
+  configureTasksNativeNotifications,
+  getTasksNativeNotificationAuthorizationStatus,
   getTasksNativeMessageHandler,
   getTasksNativeNotificationsEnabled,
   isTasksNativeCompanion,
+  requestTasksNativeNotificationStatus,
   TASKS_NATIVE_BRIDGE_HANDLER,
 } from './tasksNativeCompanion';
 
@@ -46,5 +49,32 @@ describe('tasksNativeCompanion', () => {
       __bathosTasksNative: { notificationsEnabled: true },
     } as unknown as Window)).toBe(false);
     expect(getTasksNativeNotificationsEnabled(nativeCompanionWindow(vi.fn()))).toBe(false);
+  });
+
+  it('reads authorization status and posts only versioned notification commands', () => {
+    const messages: unknown[] = [];
+    const target = nativeCompanionWindow((message) => messages.push(message)) as Window & {
+      __bathosTasksNative?: {
+        schemaVersion: number;
+        installationId: string;
+        notificationsEnabled: boolean;
+        notificationAuthorizationStatus: string;
+      };
+    };
+    target.__bathosTasksNative = {
+      schemaVersion: 2,
+      installationId: '30000000-0000-4000-8000-000000000001',
+      notificationsEnabled: false,
+      notificationAuthorizationStatus: 'denied',
+    };
+
+    expect(getTasksNativeNotificationAuthorizationStatus(target)).toBe('denied');
+    expect(requestTasksNativeNotificationStatus(target)).toBe(true);
+    expect(configureTasksNativeNotifications(target)).toBe(true);
+    expect(messages).toEqual([
+      { type: 'request-notification-status', schemaVersion: 2 },
+      { type: 'configure-notifications', schemaVersion: 2 },
+    ]);
+    expect(requestTasksNativeNotificationStatus(nativeCompanionWindow(vi.fn()))).toBe(false);
   });
 });

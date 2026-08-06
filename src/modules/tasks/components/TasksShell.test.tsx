@@ -2382,6 +2382,7 @@ describe('TasksShell', () => {
         }));
         await Promise.resolve();
       });
+      expect(search.value).toBe('');
       expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Search');
       expect(container.querySelector<HTMLInputElement>(
         '[aria-label="Search All Tasks"]',
@@ -2401,6 +2402,8 @@ describe('TasksShell', () => {
           key: 'e', bubbles: true, cancelable: true,
         }));
       });
+      const search = document.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')!;
+      await act(async () => setInputValue(search, 'Existing'));
       const dismissLayer = document.querySelector<HTMLElement>(
         '[data-task-quick-find-dismiss-layer]',
       )!;
@@ -2415,6 +2418,12 @@ describe('TasksShell', () => {
       expect(dismiss.defaultPrevented).toBe(true);
       expect(document.querySelector('[data-task-quick-find]')).toBeNull();
       expect(document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`)).toBeNull();
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button[aria-label="Quick Find Tasks"]')?.click();
+        await Promise.resolve();
+      });
+      expect(document.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')?.value).toBe('');
     } finally {
       cleanup(root, container);
     }
@@ -2501,6 +2510,7 @@ describe('TasksShell', () => {
         result?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
+      expect(search.value).toBe('');
       expect(mockTaskList).toHaveBeenLastCalledWith(
         'owner-a',
         'upcoming',
@@ -2511,6 +2521,46 @@ describe('TasksShell', () => {
       );
       await waitFor(() => {
         expect(container.querySelector('#task-title-task-future')).toBeTruthy();
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('clears the Quick Find query before keyboard-activating a task result', async () => {
+    const matchingTask = {
+      ...task,
+      id: 'task-keyboard-quick-find',
+      title: 'Keyboard Quick Find Result',
+      destination: 'anytime' as const,
+    };
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [matchingTask] });
+    mockTaskSearch.mockReturnValue({ tasks: [matchingTask], loading: false, error: null });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'k', bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      const search = document.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')!;
+      await act(async () => setInputValue(search, 'Keyboard Quick Find'));
+      await waitFor(() => {
+        expect(document.querySelectorAll('[data-task-compact-row]')).toHaveLength(1);
+      });
+
+      await act(async () => {
+        search.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+
+      expect(search.value).toBe('');
+      await waitFor(() => {
+        expect(container.querySelector('#task-title-task-keyboard-quick-find')).toBeTruthy();
       });
     } finally {
       cleanup(root, container);
@@ -7691,6 +7741,54 @@ describe('TasksShell', () => {
     }
   });
 
+  it('reports blocked native notifications and delegates Enable to system settings', async () => {
+    const messages: unknown[] = [];
+    mockTaskList.mockReturnValue(defaultTaskList());
+    Object.assign(window, {
+      __bathosNativeApp: {
+        schemaVersion: 2,
+        moduleId: 'tasks',
+        platform: 'macos',
+      },
+      __bathosTasksNative: {
+        schemaVersion: 2,
+        installationId: '30000000-0000-4000-8000-000000000001',
+        notificationsEnabled: false,
+        notificationAuthorizationStatus: 'denied',
+      },
+      webkit: {
+        messageHandlers: {
+          bathosTasksWidget: {
+            postMessage: (message: unknown) => messages.push(message),
+          },
+        },
+      },
+    });
+    const native = renderShell('/tasks/config');
+
+    try {
+      expect(native.container.textContent).toContain('Blocked in System Settings');
+      expect(native.container.querySelector('[role="switch"][aria-label="Notifications"]'))
+        .toBeNull();
+      const enable = Array.from(native.container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'Enable');
+      await act(async () => enable?.click());
+      expect(messages).toContainEqual({
+        type: 'request-notification-status',
+        schemaVersion: 2,
+      });
+      expect(messages).toContainEqual({
+        type: 'configure-notifications',
+        schemaVersion: 2,
+      });
+    } finally {
+      cleanup(native.root, native.container);
+      Reflect.deleteProperty(window, '__bathosNativeApp');
+      Reflect.deleteProperty(window, '__bathosTasksNative');
+      Reflect.deleteProperty(window, 'webkit');
+    }
+  });
+
   it('persists the single automatic sorting preference from Settings', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const setEnabled = vi.fn().mockResolvedValue(undefined);
@@ -11567,7 +11665,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('uses a toggle for active browser notifications', async () => {
+  it('reports active browser notifications without an application-owned toggle', () => {
     const disable = vi.fn().mockResolvedValue(undefined);
     mockTaskList.mockReturnValue(defaultTaskList());
     mockTaskReminders.mockReturnValue({
@@ -11582,12 +11680,9 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/config');
 
     try {
-      const toggle = container.querySelector<HTMLButtonElement>(
-        '[role="switch"][aria-label="Notifications"]',
-      );
-      expect(toggle).toHaveAttribute('data-state', 'checked');
-      await act(async () => toggle?.click());
-      expect(disable).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('Enabled');
+      expect(container.querySelector('[role="switch"][aria-label="Notifications"]')).toBeNull();
+      expect(disable).not.toHaveBeenCalled();
     } finally {
       cleanup(root, container);
     }

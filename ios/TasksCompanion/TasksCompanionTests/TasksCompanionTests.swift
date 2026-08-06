@@ -1,9 +1,92 @@
 import Foundation
+import UserNotifications
 import WebKit
 import XCTest
 @testable import TasksCompanion
 
 final class TasksCompanionTests: XCTestCase {
+    func testNativeNotificationStatusMapsAppleAuthorization() {
+        XCTAssertEqual(
+            TaskNativeNotificationAuthorizationState.resolve(.notDetermined),
+            .notDetermined
+        )
+        XCTAssertEqual(
+            TaskNativeNotificationAuthorizationState.resolve(.denied),
+            .denied
+        )
+        XCTAssertEqual(
+            TaskNativeNotificationAuthorizationState.resolve(.authorized),
+            .enabled
+        )
+    }
+
+    func testNativeReminderProjectionKeepsTheEarliestFutureItems() throws {
+        let now = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-08-06T16:00:00Z")
+        )
+        let ownerID = UUID()
+        let first = TaskNativeReminderProjectionItem(
+            id: UUID(),
+            taskId: UUID(),
+            summary: "First",
+            resolvedAt: "2026-08-06T17:00:00Z"
+        )
+        let second = TaskNativeReminderProjectionItem(
+            id: UUID(),
+            taskId: UUID(),
+            summary: "Second",
+            resolvedAt: "2026-08-06T18:00:00Z"
+        )
+        let past = TaskNativeReminderProjectionItem(
+            id: UUID(),
+            taskId: UUID(),
+            summary: "Past",
+            resolvedAt: "2026-08-06T15:00:00Z"
+        )
+        let projection = TaskNativeReminderProjection(
+            ownerId: ownerID,
+            generatedAt: "2026-08-06T16:00:00Z",
+            reminders: [second, past, first]
+        )
+
+        XCTAssertTrue(projection.isValid)
+        XCTAssertEqual(projection.scheduledItems(after: now, limit: 1), [first])
+        XCTAssertTrue(
+            TaskNativeNotificationCoordinator.notificationIdentifier(
+                ownerId: ownerID,
+                reminderId: first.id
+            ).hasPrefix(TaskNativeNotificationCoordinator.identifierPrefix)
+        )
+
+        let request = try XCTUnwrap(
+            TaskNativeNotificationCoordinator.notificationRequest(
+                ownerId: ownerID,
+                item: first,
+                now: now
+            )
+        )
+        XCTAssertEqual(request.content.title, "Reminder")
+        XCTAssertEqual(request.content.body, "First")
+        XCTAssertEqual(
+            request.content.userInfo["taskId"] as? String,
+            first.taskId.uuidString.lowercased()
+        )
+        let trigger = try XCTUnwrap(request.trigger as? UNTimeIntervalNotificationTrigger)
+        XCTAssertEqual(trigger.timeInterval, 3_600, accuracy: 0.001)
+
+        let invalidProjection = TaskNativeReminderProjection(
+            ownerId: ownerID,
+            generatedAt: "2026-08-06T16:00:00.000Z",
+            reminders: [TaskNativeReminderProjectionItem(
+                id: UUID(),
+                taskId: UUID(),
+                summary: "   ",
+                resolvedAt: "2026-08-06T17:00:00.000Z"
+            )]
+        )
+        XCTAssertFalse(invalidProjection.isValid)
+    }
+
     func testWatchComplicationCaptureRouteIsExact() {
         XCTAssertEqual(
             TaskWatchCaptureLaunchPolicy.captureURL.absoluteString,
@@ -191,14 +274,10 @@ final class TasksCompanionTests: XCTestCase {
         )
 
         XCTAssertEqual(mail.iconKind, .mail)
-        XCTAssertEqual(mail.systemImageName, "envelope")
         XCTAssertEqual(jiraProtocol.iconKind, .jira)
         XCTAssertEqual(jiraURL.iconKind, .jira)
-        XCTAssertEqual(jiraURL.systemImageName, "bolt")
         XCTAssertEqual(confluenceURL.iconKind, .link)
-        XCTAssertEqual(confluenceURL.systemImageName, "link")
         XCTAssertEqual(obsidian.iconKind, .obsidian)
-        XCTAssertEqual(obsidian.systemImageName, "doc.text")
     }
 
     func testCredentialStorePersistsOnlyAValidUnexpiredCapability() throws {
@@ -872,10 +951,6 @@ final class TasksCompanionTests: XCTestCase {
         )
         XCTAssertEqual(TaskWidgetPresentationPolicy.lockScreenTaskFontSize, 13)
         XCTAssertEqual(
-            TaskWidgetPresentationPolicy.emptyStateSystemImageName,
-            "sparkles"
-        )
-        XCTAssertEqual(
             tasks.prefix(
                 TaskWidgetPresentationPolicy.lockScreenTaskLimit
             ).map(\.summary),
@@ -1339,6 +1414,139 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertFalse(model.isLoading)
         XCTAssertFalse(model.hasLoadedContent)
         XCTAssertEqual(model.loadError, loadError.localizedDescription)
+    }
+
+    func testWidgetPushRegistrationStoreTracksTokenAndCredentialIdentity() throws {
+        let directory = temporaryDirectory()
+        let store = TaskWidgetPushRegistrationStore(directoryURL: directory)
+        let owner = UUID()
+        let installation = UUID()
+        let credential = makeWidgetCredential(ownerID: owner, installationID: installation)
+        let registration = makeWidgetPushRegistration(tokenCharacter: "a")
+
+        try store.storePending(registration)
+        XCTAssertEqual(try store.loadPending(), registration)
+        XCTAssertFalse(store.isAccepted(registration, credential: credential))
+
+        try store.markAccepted(registration, credential: credential)
+        XCTAssertTrue(store.isAccepted(registration, credential: credential))
+        XCTAssertFalse(
+            store.isAccepted(
+                registration,
+                credential: makeWidgetCredential(
+                    ownerID: UUID(),
+                    installationID: installation
+                )
+            )
+        )
+        XCTAssertFalse(
+            store.isAccepted(
+                makeWidgetPushRegistration(tokenCharacter: "b"),
+                credential: credential
+            )
+        )
+    }
+
+    func testWidgetPushRegistrationWaitsForCredentialThenRegisters() async throws {
+        let directory = temporaryDirectory()
+        let registrationStore = TaskWidgetPushRegistrationStore(directoryURL: directory)
+        let credentialStore = TaskWidgetCredentialStore(directoryURL: directory)
+        let registration = makeWidgetPushRegistration(tokenCharacter: "c")
+        try registrationStore.storePending(registration)
+        var requests = [URLRequest]()
+        let client = TaskWidgetPushRegistrationClient(
+            endpoint: URL(string: "https://example.test/tasks-widget-actions")!,
+            transport: { request in
+                requests.append(request)
+                return (
+                    try JSONSerialization.data(withJSONObject: ["outcome": "registered"]),
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                )
+            }
+        )
+        let synchronizer = TaskWidgetPushRegistrationSynchronizer(
+            registrationStore: registrationStore,
+            credentialStore: credentialStore,
+            client: client
+        )
+
+        await synchronizer.synchronize()
+        XCTAssertTrue(requests.isEmpty)
+
+        let credential = makeWidgetCredential()
+        try credentialStore.store(credential)
+        await synchronizer.synchronize()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertTrue(registrationStore.isAccepted(registration, credential: credential))
+        XCTAssertEqual(
+            requests[0].value(forHTTPHeaderField: "Authorization"),
+            "Widget \(credential.credential)"
+        )
+    }
+
+    func testWidgetPushDisablementUsesTheRegistrationAction() async throws {
+        let registration = TaskWidgetPushRegistration(
+            schemaVersion: TaskWidgetPushRegistration.schemaVersion,
+            deviceToken: String(repeating: "d", count: 64),
+            platform: "ios",
+            environment: "development",
+            topic: "garden.bath.tasks.push-type.widgets",
+            enabled: false
+        )
+        var capturedBody: [String: Any] = [:]
+        let client = TaskWidgetPushRegistrationClient(
+            endpoint: URL(string: "https://example.test/tasks-widget-actions")!,
+            transport: { request in
+                capturedBody = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any]
+                )
+                return (
+                    try JSONSerialization.data(withJSONObject: ["outcome": "disabled"]),
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                )
+            }
+        )
+
+        let registered = await client.register(registration, credential: makeWidgetCredential())
+        XCTAssertTrue(registered)
+        XCTAssertEqual(capturedBody["action"] as? String, "registerPushToken")
+        XCTAssertEqual(capturedBody["enabled"] as? Bool, false)
+    }
+
+    private func makeWidgetCredential(
+        ownerID: UUID = UUID(),
+        installationID: UUID = UUID()
+    ) -> TaskWidgetCredential {
+        TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: ownerID,
+            installationId: installationID,
+            credential: "twc_\(String(repeating: "A", count: 43))",
+            expiresAt: "2099-01-01T00:00:00.000Z"
+        )
+    }
+
+    private func makeWidgetPushRegistration(
+        tokenCharacter: Character
+    ) -> TaskWidgetPushRegistration {
+        TaskWidgetPushRegistration(
+            schemaVersion: TaskWidgetPushRegistration.schemaVersion,
+            deviceToken: String(repeating: tokenCharacter, count: 64),
+            platform: "ios",
+            environment: "development",
+            topic: "garden.bath.tasks.push-type.widgets",
+            enabled: true
+        )
     }
 
     private func makeSnapshot(

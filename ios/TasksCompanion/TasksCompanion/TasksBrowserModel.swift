@@ -1,7 +1,13 @@
 import Foundation
 import OSLog
+@preconcurrency import UserNotifications
 import WebKit
 import WidgetKit
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 @MainActor
 final class TasksBrowserModel: NSObject, ObservableObject {
@@ -15,6 +21,11 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         "clear-quick-entry-shortcut"
     static let quickEntryCredentialMessageType = "quick-entry-credential"
     static let contentReadyMessageType = "content-ready"
+    static let requestNotificationStatusMessageType =
+        "request-notification-status"
+    static let configureNotificationsMessageType =
+        "configure-notifications"
+    static let syncRemindersMessageType = "sync-reminders"
     static let newTaskSummaryInputIdentifier = "task-title-task-draft:new"
     static let newTaskSummaryFocusJavaScript = """
     (() => {
@@ -129,6 +140,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
 
     func attach(_ webView: WKWebView) {
         self.webView = webView
+        TaskNativeNotificationCoordinator.shared.bind(to: self)
         if webView.url == nil {
             hasLoadedContent = false
             webView.load(URLRequest(url: requestedURL))
@@ -199,6 +211,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
 
     func notifyNativeAppBecameActive() {
         webView?.evaluateJavaScript(Self.nativeAppActiveJavaScript)
+        TaskNativeNotificationCoordinator.shared.refreshAuthorization()
     }
 
     func didStartLoading() {
@@ -502,6 +515,33 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             )
             return
         }
+        if envelope.type == Self.requestNotificationStatusMessageType {
+            TaskNativeNotificationCoordinator.shared.bind(to: self)
+            TaskNativeNotificationCoordinator.shared.refreshAuthorization()
+            Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
+            return
+        }
+        if envelope.type == Self.configureNotificationsMessageType {
+            TaskNativeNotificationCoordinator.shared.bind(to: self)
+            TaskNativeNotificationCoordinator.shared.configureNotifications()
+            Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
+            return
+        }
+        if envelope.type == Self.syncRemindersMessageType {
+            guard let reminderProjection = try? JSONDecoder().decode(
+                TaskNativeReminderProjection.self,
+                from: data
+            ), reminderProjection.isValid else {
+                Self.recordBridgeDiagnostic("Rejected: invalid reminder projection")
+                return
+            }
+            TaskNativeNotificationCoordinator.shared.bind(to: self)
+            TaskNativeNotificationCoordinator.shared.synchronize(reminderProjection)
+            Self.recordBridgeDiagnostic(
+                "Accepted: \(envelope.type); reminders=\(reminderProjection.reminders.count)"
+            )
+            return
+        }
         guard let store = TaskWidgetStore() else {
             Self.recordBridgeDiagnostic("Rejected: App Group store unavailable")
             return
@@ -511,6 +551,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             let changed: Bool
             if envelope.type == "clear" {
                 changed = try store.clear()
+                TaskNativeNotificationCoordinator.shared.clearScheduledReminders()
 #if os(iOS)
                 TaskWatchConnectivityCoordinator.shared.publish(nil)
 #endif
@@ -626,6 +667,25 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         ));
         """)
     }
+
+    func sendNativeNotificationStatus(
+        _ status: TaskNativeNotificationAuthorizationState
+    ) {
+        let enabled = status == .enabled ? "true" : "false"
+        webView?.evaluateJavaScript("""
+        (() => {
+          const status = "\(status.rawValue)";
+          if (window.__bathosTasksNative) {
+            window.__bathosTasksNative.notificationsEnabled = \(enabled);
+            window.__bathosTasksNative.notificationAuthorizationStatus = status;
+          }
+          window.dispatchEvent(new CustomEvent(
+            "bathos:tasks-native-notification-status",
+            { detail: { status, enabled: \(enabled) } }
+          ));
+        })();
+        """)
+    }
 }
 
 private struct TaskBridgeEnvelope: Decodable {
@@ -668,4 +728,317 @@ struct TaskQuickEntryShortcutResponse: Codable, Equatable {
 
 private struct TaskQuickEntryShortcutBridgeMessage: Decodable {
     let shortcut: TaskQuickEntryShortcutPayload
+}
+
+enum TaskNativeNotificationAuthorizationState: String, Equatable {
+    case checking
+    case notDetermined = "not-determined"
+    case denied
+    case enabled
+    case unavailable
+    case error
+
+    static func resolve(_ status: UNAuthorizationStatus) -> Self {
+        switch status {
+        case .notDetermined:
+            return .notDetermined
+        case .denied:
+            return .denied
+        case .authorized, .provisional:
+            return .enabled
+#if os(iOS)
+        case .ephemeral:
+            return .enabled
+#endif
+        @unknown default:
+            return .unavailable
+        }
+    }
+}
+
+struct TaskNativeReminderProjection: Decodable, Equatable {
+    static let maximumReminderCount = 256
+
+    let ownerId: UUID
+    let generatedAt: String
+    let reminders: [TaskNativeReminderProjectionItem]
+
+    var isValid: Bool {
+        reminders.count <= Self.maximumReminderCount
+            && parseTaskNativeReminderDate(generatedAt) != nil
+            && reminders.allSatisfy(\.isValid)
+    }
+
+    func scheduledItems(
+        after now: Date,
+        limit: Int = TaskNativeNotificationCoordinator.maximumScheduledReminders
+    ) -> [TaskNativeReminderProjectionItem] {
+        reminders.compactMap { item -> (TaskNativeReminderProjectionItem, Date)? in
+            guard let date = item.resolvedDate, date > now else {
+                return nil
+            }
+            return (item, date)
+        }
+        .sorted { left, right in
+            left.1 == right.1
+                ? left.0.id.uuidString < right.0.id.uuidString
+                : left.1 < right.1
+        }
+        .prefix(max(0, limit))
+        .map(\.0)
+    }
+}
+
+struct TaskNativeReminderProjectionItem: Decodable, Equatable {
+    let id: UUID
+    let taskId: UUID
+    let summary: String
+    let resolvedAt: String
+
+    var resolvedDate: Date? {
+        parseTaskNativeReminderDate(resolvedAt)
+    }
+
+    var isValid: Bool {
+        !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && summary.count <= 500
+            && resolvedDate != nil
+    }
+}
+
+private func parseTaskNativeReminderDate(_ value: String) -> Date? {
+    let fractionalFormatter = ISO8601DateFormatter()
+    fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return fractionalFormatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+}
+
+@MainActor
+final class TaskNativeNotificationCoordinator: NSObject,
+    UNUserNotificationCenterDelegate
+{
+    static let shared = TaskNativeNotificationCoordinator()
+    nonisolated static let maximumScheduledReminders = 60
+    nonisolated static let identifierPrefix = "garden.bath.tasks.reminder."
+
+    private let center = UNUserNotificationCenter.current()
+    private weak var browserModel: TasksBrowserModel?
+    private var latestProjection: TaskNativeReminderProjection?
+
+    private override init() {
+        super.init()
+        center.delegate = self
+    }
+
+    func bind(to browserModel: TasksBrowserModel) {
+        self.browserModel = browserModel
+        center.delegate = self
+    }
+
+    func refreshAuthorization() {
+        browserModel?.sendNativeNotificationStatus(.checking)
+        center.getNotificationSettings { [weak self] settings in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+                let status = TaskNativeNotificationAuthorizationState.resolve(
+                    settings.authorizationStatus
+                )
+                self.browserModel?.sendNativeNotificationStatus(status)
+                if status == .enabled, let projection = self.latestProjection {
+                    self.reconcile(projection)
+                }
+            }
+        }
+    }
+
+    func configureNotifications() {
+        center.getNotificationSettings { [weak self] settings in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+                switch TaskNativeNotificationAuthorizationState.resolve(
+                    settings.authorizationStatus
+                ) {
+                case .notDetermined:
+                    self.requestAuthorization()
+                case .denied:
+                    self.openSystemNotificationSettings()
+                    self.browserModel?.sendNativeNotificationStatus(.denied)
+                case .enabled:
+                    self.browserModel?.sendNativeNotificationStatus(.enabled)
+                    if let projection = self.latestProjection {
+                        self.reconcile(projection)
+                    }
+                case .checking, .unavailable, .error:
+                    self.browserModel?.sendNativeNotificationStatus(.unavailable)
+                }
+            }
+        }
+    }
+
+    func synchronize(_ projection: TaskNativeReminderProjection) {
+        latestProjection = projection
+        center.getNotificationSettings { [weak self] settings in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+                let status = TaskNativeNotificationAuthorizationState.resolve(
+                    settings.authorizationStatus
+                )
+                self.browserModel?.sendNativeNotificationStatus(status)
+                if status == .enabled {
+                    self.reconcile(projection)
+                } else {
+                    self.removeAppOwnedRequests()
+                }
+            }
+        }
+    }
+
+    func clearScheduledReminders() {
+        latestProjection = nil
+        removeAppOwnedRequests()
+    }
+
+    private func requestAuthorization() {
+        center.requestAuthorization(options: [.alert, .sound]) { [weak self] _, error in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+                if error != nil {
+                    self.browserModel?.sendNativeNotificationStatus(.error)
+                } else {
+                    self.refreshAuthorization()
+                }
+            }
+        }
+    }
+
+    private func reconcile(_ projection: TaskNativeReminderProjection) {
+        let items = projection.scheduledItems(after: Date())
+        let desiredIdentifiers = Set(items.map {
+            Self.notificationIdentifier(ownerId: projection.ownerId, reminderId: $0.id)
+        })
+        let notificationCenter = center
+        let identifierPrefix = Self.identifierPrefix
+        let ownerId = projection.ownerId
+
+        notificationCenter.getPendingNotificationRequests { requests in
+            let obsolete = requests.map(\.identifier).filter {
+                $0.hasPrefix(identifierPrefix) && !desiredIdentifiers.contains($0)
+            }
+            notificationCenter.removePendingNotificationRequests(withIdentifiers: obsolete)
+
+            for item in items {
+                guard let request = Self.notificationRequest(
+                    ownerId: ownerId,
+                    item: item,
+                    now: Date()
+                ) else {
+                    continue
+                }
+                notificationCenter.add(request)
+            }
+        }
+
+        notificationCenter.getDeliveredNotifications { notifications in
+            let obsolete = notifications.map { $0.request.identifier }.filter {
+                $0.hasPrefix(identifierPrefix) && !desiredIdentifiers.contains($0)
+            }
+            notificationCenter.removeDeliveredNotifications(withIdentifiers: obsolete)
+        }
+    }
+
+    private func removeAppOwnedRequests() {
+        let notificationCenter = center
+        let identifierPrefix = Self.identifierPrefix
+        notificationCenter.getPendingNotificationRequests { requests in
+            let identifiers = requests.map(\.identifier).filter {
+                $0.hasPrefix(identifierPrefix)
+            }
+            notificationCenter.removePendingNotificationRequests(withIdentifiers: identifiers)
+        }
+        notificationCenter.getDeliveredNotifications { notifications in
+            let identifiers = notifications.map { $0.request.identifier }.filter {
+                $0.hasPrefix(identifierPrefix)
+            }
+            notificationCenter.removeDeliveredNotifications(withIdentifiers: identifiers)
+        }
+    }
+
+    private func openSystemNotificationSettings() {
+#if os(iOS)
+        let settingsURL = URL(string: UIApplication.openNotificationSettingsURLString)
+            ?? URL(string: UIApplication.openSettingsURLString)
+        if let settingsURL {
+            UIApplication.shared.open(settingsURL)
+        }
+#elseif os(macOS)
+        if let settingsURL = URL(
+            string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+        ) {
+            NSWorkspace.shared.open(settingsURL)
+        }
+#endif
+    }
+
+    nonisolated static func notificationIdentifier(ownerId: UUID, reminderId: UUID) -> String {
+        "\(identifierPrefix)\(ownerId.uuidString.lowercased()).\(reminderId.uuidString.lowercased())"
+    }
+
+    nonisolated static func notificationRequest(
+        ownerId: UUID,
+        item: TaskNativeReminderProjectionItem,
+        now: Date
+    ) -> UNNotificationRequest? {
+        guard let date = item.resolvedDate, date > now else {
+            return nil
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "Reminder"
+        content.body = item.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        content.sound = .default
+        content.userInfo = [
+            "taskId": item.taskId.uuidString.lowercased(),
+            "ownerId": ownerId.uuidString.lowercased(),
+        ]
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: max(1, date.timeIntervalSince(now)),
+            repeats: false
+        )
+        return UNNotificationRequest(
+            identifier: notificationIdentifier(ownerId: ownerId, reminderId: item.id),
+            content: content,
+            trigger: trigger
+        )
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (
+            UNNotificationPresentationOptions
+        ) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let taskId = response.notification.request.content.userInfo["taskId"] as? String
+        Task { @MainActor [weak self] in
+            defer { completionHandler() }
+            guard let taskId, let identifier = UUID(uuidString: taskId) else {
+                return
+            }
+            self?.browserModel?.open(.task(identifier, list: .today))
+        }
+    }
 }

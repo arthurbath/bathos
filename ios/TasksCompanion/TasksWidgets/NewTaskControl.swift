@@ -10,7 +10,12 @@ struct NewTaskControl: ControlWidget {
             ControlWidgetButton(
                 action: OpenNewTaskIntent(target: .todayInbox)
             ) {
-                Label("New Task", systemImage: "plus.square")
+                Label {
+                    Text("New Task")
+                } icon: {
+                    TaskWidgetLucideIconView(icon: .addTask)
+                        .frame(width: 18, height: 18)
+                }
             }
         }
         .displayName("New Task")

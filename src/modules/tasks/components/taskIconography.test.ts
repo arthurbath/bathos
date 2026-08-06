@@ -68,6 +68,20 @@ describe('Tasks iconography', () => {
     expect(TASK_ICONS.Ready).toBe(ArrowBigRightDash);
   });
 
+  it('keeps native widget roles aligned with the canonical registry', () => {
+    const nativeContract = JSON.parse(readFileSync(
+      resolve(process.cwd(), 'contracts/tasks-native-widget-iconography-v1.json'),
+      'utf8',
+    )) as {
+      roles: Record<string, { concept: TaskIconConcept | null; lucide: string }>;
+    };
+
+    for (const { concept, lucide } of Object.values(nativeContract.roles)) {
+      if (concept === null) continue;
+      expect(TASK_ICON_NAMES[concept]).toBe(lucide);
+    }
+  });
+
   it('records every registered concept in the human iconography reference', () => {
     const documentation = readFileSync(
       resolve(process.cwd(), 'docs/human/TASKS_ICONOGRAPHY.md'),

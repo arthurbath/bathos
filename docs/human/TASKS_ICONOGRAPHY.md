@@ -94,3 +94,5 @@ Source icons describe provenance. A File source is distinct from a task Attachme
 | Import | `Upload` | Import task data |
 | CloudSync | `Cloud` | Remote synchronization state |
 | LocalStorage | `HardDrive` | Local task storage state |
+
+The Apple Watch Today-progress complication uses Lucide `Check` as a native-only mark. It is not a reusable Tasks application concept.

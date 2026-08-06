@@ -108,7 +108,12 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
 
 struct TaskListWidget: Widget {
     var body: some WidgetConfiguration {
-        AppIntentConfiguration(
+        taskListWidgetConfiguration().pushHandler(TaskListWidgetPushHandler.self)
+    }
+}
+
+private func taskListWidgetConfiguration() -> some WidgetConfiguration {
+    AppIntentConfiguration(
             kind: TaskCompanionConstants.widgetKind,
             intent: TaskListSelectionIntent.self,
             provider: TaskListWidgetProvider()
@@ -119,6 +124,30 @@ struct TaskListWidget: Widget {
         .description("Show a selected BathOS task list.")
         .supportedFamilies(TaskWidgetPlatformPolicy.supportedFamilies)
         .contentMarginsDisabled()
+}
+
+@available(iOS 26.0, macOS 26.0, *)
+struct TaskListWidgetPushHandler: WidgetPushHandler {
+    init() {}
+
+    func pushTokenDidChange(_ pushInfo: WidgetPushInfo, widgets: [WidgetInfo]) {
+#if os(macOS)
+        let platform = "macos"
+#else
+        let platform = "ios"
+#endif
+        let registration = TaskWidgetPushRegistration(
+            schemaVersion: TaskWidgetPushRegistration.schemaVersion,
+            deviceToken: pushInfo.token.map { String(format: "%02x", $0) }.joined(),
+            platform: platform,
+            environment: Bundle.main.object(
+                forInfoDictionaryKey: "TasksWidgetAPNSEnvironment"
+            ) as? String ?? "development",
+            topic: "garden.bath.tasks.push-type.widgets",
+            enabled: !widgets.isEmpty
+        )
+        try? TaskWidgetPushRegistrationStore()?.storePending(registration)
+        Task { await TaskWidgetPushRegistrationSynchronizer()?.synchronize() }
     }
 }
 
@@ -173,9 +202,8 @@ private struct TaskListLockScreenWidgetView: View {
                             visibleTasks
                         ) { task in
                             HStack(spacing: 5) {
-                                Image(systemName: TaskWidgetPresentationPolicy
-                                    .lockScreenLeadingSystemImageName)
-                                .font(.system(size: 10, weight: .regular))
+                                TaskWidgetLucideIconView(icon: .openTask)
+                                    .frame(width: 10, height: 10)
                                 Text(task.summary)
                                     .font(.system(
                                         size: TaskWidgetPresentationPolicy
@@ -218,11 +246,10 @@ private struct TaskListLockScreenWidgetView: View {
 
     private func emptyState(_ message: String) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: entry.snapshot == nil
-                ? "rectangle.and.hand.point.up.left"
-                : "checkmark"
+            TaskWidgetLucideIconView(
+                icon: entry.snapshot == nil ? .task : .emptyState
             )
-            .font(.system(size: 11, weight: .regular))
+            .frame(width: 11, height: 11)
             Text(message)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
@@ -255,7 +282,7 @@ private struct TaskListWidgetView: View {
         HStack(spacing: 8) {
             Link(destination: TaskNativeRoute.list(entry.listID).deepLinkURL) {
                 HStack(spacing: 8) {
-                    TaskWidgetLucideListIcon(listID: entry.listID)
+                    TaskWidgetLucideIconView(icon: entry.listID.lucideIcon)
                         .frame(width: 17, height: 17)
                     Text(entry.listID.title)
                         .font(.headline)
@@ -269,8 +296,8 @@ private struct TaskListWidgetView: View {
                     for: entry.listID
                 )
             ) {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
+                TaskWidgetLucideIconView(icon: .addTask)
+                    .frame(width: 15, height: 15)
                     .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
@@ -291,9 +318,9 @@ private struct TaskListWidgetView: View {
                         HStack(spacing: 9) {
                             if task.isRecurrenceProjection == true
                                 && entry.listID == .upcoming {
-                                Image(systemName: "repeat")
-                                    .font(.system(size: 14, weight: .regular))
+                                TaskWidgetLucideIconView(icon: .recurrence)
                                     .foregroundStyle(.secondary)
+                                    .frame(width: 14, height: 14)
                                     .frame(width: 28, height: 28)
                                     .accessibilityLabel("Repeating Schedule")
                             } else if task.terminalState == nil {
@@ -310,9 +337,10 @@ private struct TaskListWidgetView: View {
                                 ))
                                 .accessibilityLabel("Complete \(task.summary)")
                             } else {
-                                Image(systemName: taskSymbol(task))
-                                    .font(.system(size: 14, weight: .regular))
+                                TaskWidgetLucideIconView(icon: taskIcon(task))
                                     .foregroundStyle(taskColor(task))
+                                    .frame(width: 14, height: 14)
+                                    .frame(width: 28, height: 28)
                             }
                             TaskWidgetListContext(
                                 listID: entry.listID,
@@ -357,20 +385,34 @@ private struct TaskListWidgetView: View {
     }
 
     private func primaryLinkLabel(_ primaryLink: TaskWidgetPrimaryLink) -> some View {
-        Image(systemName: primaryLink.systemImageName)
-        .font(.system(size: 13))
+        TaskWidgetLucideIconView(icon: primaryLinkIcon(primaryLink))
+        .frame(width: 13, height: 13)
         .foregroundStyle(.blue)
         .frame(width: 28, height: 28)
         .contentShape(Rectangle())
     }
 
+    private func primaryLinkIcon(
+        _ primaryLink: TaskWidgetPrimaryLink
+    ) -> TaskWidgetLucideIcon {
+        switch primaryLink.iconKind {
+        case .mail:
+            return .mailLink
+        case .jira:
+            return .jiraLink
+        case .obsidian:
+            return .obsidianLink
+        case .link:
+            return .primaryLink
+        }
+    }
+
     private func emptyState(_ message: String) -> some View {
         VStack(spacing: 8) {
-            Image(systemName: entry.snapshot == nil
-                ? "rectangle.and.hand.point.up.left"
-                : TaskWidgetPresentationPolicy.emptyStateSystemImageName
+            TaskWidgetLucideIconView(
+                icon: entry.snapshot == nil ? .task : .emptyState
             )
-                .font(.title2)
+                .frame(width: 22, height: 22)
                 .foregroundStyle(.secondary)
             Text(message)
                 .font(.subheadline)
@@ -383,14 +425,14 @@ private struct TaskListWidgetView: View {
         )
     }
 
-    private func taskSymbol(_ task: TaskWidgetTask) -> String {
+    private func taskIcon(_ task: TaskWidgetTask) -> TaskWidgetLucideIcon {
         if task.terminalState == "deleted" {
-            return "trash"
+            return .deletedTask
         }
         if task.terminalState != nil {
-            return "checkmark.square"
+            return .completedTask
         }
-        return entry.listID == .someday ? "square.dashed" : "square"
+        return entry.listID == .someday ? .somedayTask : .openTask
     }
 
     private func taskColor(_ task: TaskWidgetTask) -> Color {
@@ -436,26 +478,22 @@ private struct TaskWidgetHorizonMarker: View {
     let horizon: String
 
     var body: some View {
-        Group {
-            if horizon == "inbox" {
-                TaskWidgetInboxMarker()
-            } else {
-                TaskWidgetClockMarker(hour: hour)
-            }
-        }
+        TaskWidgetLucideIconView(icon: icon)
         .foregroundStyle(color)
         .frame(width: 15, height: 15)
         .accessibilityLabel(accessibilityLabel)
     }
 
-    private var hour: Int {
+    private var icon: TaskWidgetLucideIcon {
         switch horizon {
+        case "inbox":
+            return .inbox
         case "now":
-            return 2
+            return .now
         case "later":
-            return 8
+            return .later
         default:
-            return 5
+            return .next
         }
     }
 
@@ -474,75 +512,6 @@ private struct TaskWidgetHorizonMarker: View {
 
     private var accessibilityLabel: String {
         horizon.prefix(1).uppercased() + horizon.dropFirst()
-    }
-}
-
-private struct TaskWidgetInboxMarker: View {
-    var body: some View {
-        Canvas { context, size in
-            let x = { (value: Double) in value * size.width / 15 }
-            let y = { (value: Double) in value * size.height / 15 }
-            var tray = Path()
-            tray.move(to: CGPoint(x: x(2), y: y(8.5)))
-            tray.addLine(to: CGPoint(x: x(3.4), y: y(3.6)))
-            tray.addLine(to: CGPoint(x: x(11.6), y: y(3.6)))
-            tray.addLine(to: CGPoint(x: x(13), y: y(8.5)))
-            tray.addLine(to: CGPoint(x: x(11.8), y: y(11.4)))
-            tray.addLine(to: CGPoint(x: x(3.2), y: y(11.4)))
-            tray.closeSubpath()
-            tray.move(to: CGPoint(x: x(2.2), y: y(8.5)))
-            tray.addLine(to: CGPoint(x: x(5.4), y: y(8.5)))
-            tray.addCurve(
-                to: CGPoint(x: x(9.6), y: y(8.5)),
-                control1: CGPoint(x: x(6.1), y: y(10.1)),
-                control2: CGPoint(x: x(8.9), y: y(10.1))
-            )
-            tray.addLine(to: CGPoint(x: x(12.8), y: y(8.5)))
-            context.stroke(
-                tray,
-                with: .foreground,
-                style: StrokeStyle(
-                    lineWidth: 1.6,
-                    lineCap: .round,
-                    lineJoin: .round
-                )
-            )
-        }
-    }
-}
-
-private struct TaskWidgetClockMarker: View {
-    let hour: Int
-
-    var body: some View {
-        Canvas { context, size in
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let radius = min(size.width, size.height) * 0.42
-            var clock = Path()
-            clock.addEllipse(in: CGRect(
-                x: center.x - radius,
-                y: center.y - radius,
-                width: radius * 2,
-                height: radius * 2
-            ))
-            clock.move(to: center)
-            clock.addLine(to: CGPoint(x: center.x, y: center.y - radius * 0.58))
-            let angle = CGFloat(hour) * .pi / 6 - .pi / 2
-            clock.move(to: center)
-            clock.addLine(to: CGPoint(
-                x: center.x + cos(angle) * radius * 0.52,
-                y: center.y + sin(angle) * radius * 0.52
-            ))
-            context.stroke(
-                clock,
-                with: .foreground,
-                style: StrokeStyle(
-                    lineWidth: 1.6,
-                    lineCap: .round,
-                    lineJoin: .round
-                )
-            )
-        }
     }
 }
 
@@ -629,12 +598,13 @@ private struct TaskWidgetCompletionToggleStyle: ToggleStyle {
         Button {
             configuration.isOn.toggle()
         } label: {
-            Image(systemName: configuration.isOn
-                ? "checkmark.square"
-                : someday ? "square.dashed" : "square"
+            TaskWidgetLucideIconView(
+                icon: configuration.isOn
+                    ? .completedTask
+                    : someday ? .somedayTask : .openTask
             )
-            .font(.system(size: 14, weight: .regular))
             .foregroundStyle(configuration.isOn ? Color.green : Color.secondary)
+            .frame(width: 14, height: 14)
             .frame(width: 28, height: 28)
             .contentShape(Rectangle())
         }
@@ -642,93 +612,14 @@ private struct TaskWidgetCompletionToggleStyle: ToggleStyle {
     }
 }
 
-private struct TaskWidgetLucideListIcon: View {
-    let listID: TaskWidgetListID
-
-    var body: some View {
-        Canvas { context, size in
-            var path = Path()
-            let x = { (value: Double) in value * size.width / 24 }
-            let y = { (value: Double) in value * size.height / 24 }
-            let point = { (xValue: Double, yValue: Double) in
-                CGPoint(x: x(xValue), y: y(yValue))
-            }
-
-            switch listID {
-            case .today:
-                let center = point(12, 12)
-                let outerRadius = min(size.width, size.height) * 0.42
-                let innerRadius = outerRadius * 0.46
-                for index in 0..<10 {
-                    let angle = -Double.pi / 2 + Double(index) * Double.pi / 5
-                    let radius = index.isMultiple(of: 2) ? outerRadius : innerRadius
-                    let vertex = CGPoint(
-                        x: center.x + CGFloat(cos(angle)) * radius,
-                        y: center.y + CGFloat(sin(angle)) * radius
-                    )
-                    index == 0 ? path.move(to: vertex) : path.addLine(to: vertex)
-                }
-                path.closeSubpath()
-            case .upcoming:
-                path.addRoundedRect(
-                    in: CGRect(x: x(3), y: y(4), width: x(18), height: y(18)),
-                    cornerSize: CGSize(width: x(2), height: y(2))
-                )
-                addLine(&path, from: point(16, 2), to: point(16, 6))
-                addLine(&path, from: point(3, 10), to: point(21, 10))
-                addLine(&path, from: point(8, 2), to: point(8, 6))
-                addLine(&path, from: point(17, 14), to: point(11, 14))
-                addLine(&path, from: point(13, 18), to: point(7, 18))
-                addLine(&path, from: point(7, 14), to: point(7.01, 14))
-                addLine(&path, from: point(17, 18), to: point(17.01, 18))
-            case .anytime:
-                addLine(&path, from: point(13, 5), to: point(21, 5))
-                addLine(&path, from: point(13, 12), to: point(21, 12))
-                addLine(&path, from: point(13, 19), to: point(21, 19))
-                path.move(to: point(3, 17))
-                path.addLine(to: point(5, 19))
-                path.addLine(to: point(9, 15))
-                path.addRoundedRect(
-                    in: CGRect(x: x(3), y: y(4), width: x(6), height: y(6)),
-                    cornerSize: CGSize(width: x(1), height: y(1))
-                )
-            case .someday:
-                path.addRoundedRect(
-                    in: CGRect(x: x(3), y: y(3), width: x(18), height: y(18)),
-                    cornerSize: CGSize(width: x(2), height: y(2))
-                )
-            case .done:
-                addLine(&path, from: point(13, 5), to: point(21, 5))
-                addLine(&path, from: point(13, 12), to: point(21, 12))
-                addLine(&path, from: point(13, 19), to: point(21, 19))
-                path.move(to: point(3, 5))
-                path.addLine(to: point(5, 7))
-                path.addLine(to: point(9, 3))
-                path.move(to: point(3, 12))
-                path.addLine(to: point(5, 14))
-                path.addLine(to: point(9, 10))
-                path.move(to: point(3, 19))
-                path.addLine(to: point(5, 21))
-                path.addLine(to: point(9, 17))
-            }
-
-            let dash: [CGFloat] = listID == .someday ? [2.2, 3.2] : []
-            context.stroke(
-                path,
-                with: .color(.primary),
-                style: StrokeStyle(
-                    lineWidth: max(1.4, size.width / 12),
-                    lineCap: .round,
-                    lineJoin: .round,
-                    dash: dash
-                )
-            )
+private extension TaskWidgetListID {
+    var lucideIcon: TaskWidgetLucideIcon {
+        switch self {
+        case .today: .today
+        case .upcoming: .upcoming
+        case .anytime: .anytime
+        case .someday: .someday
+        case .done: .done
         }
-        .accessibilityHidden(true)
-    }
-
-    private func addLine(_ path: inout Path, from: CGPoint, to: CGPoint) {
-        path.move(to: from)
-        path.addLine(to: to)
     }
 }

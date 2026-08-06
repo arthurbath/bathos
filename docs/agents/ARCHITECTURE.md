@@ -78,7 +78,7 @@ The widget cache contains only the owner identifier needed for replacement seman
 
 The `TasksWidgets` extension offers one configurable `systemLarge` widget through App Intents. Today, Upcoming, Anytime, Someday, and Done are supported. Widget taps use allowlisted `bathostasks://` list and task routes. The app translates those routes back to production web routes, and task links open only after the authenticated web projection proves that the task is visible to the current owner.
 
-Widget freshness is event-driven while the companion is running: accepted content changes reload WidgetKit timelines. WidgetKit owns later scheduling, and the extension does not independently authenticate or query Supabase while the companion is dormant.
+Widget freshness has three layers. Accepted content changes reload WidgetKit timelines while the companion is running. OS 26 widget extensions register owner-and-installation-bound push tokens so a private dispatcher can send content-free invalidations after authoritative changes from any client. Every timeline still uses the narrow widget credential to request the bounded server projection, and the existing 30-minute requested timeline plus last-valid cache remain fallbacks because WidgetKit owns scheduling and may delay either refresh opportunity.
 
 ## Security
 

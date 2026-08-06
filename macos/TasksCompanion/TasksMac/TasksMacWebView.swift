@@ -139,11 +139,12 @@ private struct TasksMacWebViewRepresentable: NSViewRepresentable {
         """
         if let installationID = try? TaskWidgetInstallationStore()?.identifier() {
             nativeContextScript += """
-            window.__bathosTasksNative = Object.freeze({
+            window.__bathosTasksNative = {
               schemaVersion: 2,
               installationId: "\(installationID.uuidString.lowercased())",
-              notificationsEnabled: false
-            });
+              notificationsEnabled: false,
+              notificationAuthorizationStatus: "checking"
+            };
             """
         }
         userContentController.addUserScript(WKUserScript(

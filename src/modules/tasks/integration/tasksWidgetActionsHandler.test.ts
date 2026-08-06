@@ -19,6 +19,7 @@ function setup(overrides?: {
   createInboxTask?: WidgetActionRpcClient['createInboxTask'];
   todayProgress?: WidgetActionRpcClient['todayProgress'];
   revoke?: WidgetActionRpcClient['revoke'];
+  registerPushToken?: WidgetActionRpcClient['registerPushToken'];
   issueQuickEntry?: WidgetActionRpcClient['issueQuickEntry'];
   quickEntryBootstrap?: WidgetActionRpcClient['quickEntryBootstrap'];
   createQuickEntry?: WidgetActionRpcClient['createQuickEntry'];
@@ -69,6 +70,9 @@ function setup(overrides?: {
       error: null,
     })),
     revoke: overrides?.revoke ?? vi.fn(async () => ({ data: { outcome: 'revoked' }, error: null })),
+    registerPushToken: overrides?.registerPushToken ?? vi.fn(async () => ({
+      data: { outcome: 'registered' }, error: null,
+    })),
     issueQuickEntry: overrides?.issueQuickEntry ?? vi.fn(async () => ({
       data: { outcome: 'issued' },
       error: null,
@@ -123,6 +127,48 @@ function setup(overrides?: {
 }
 
 describe('tasks widget action handler', () => {
+  it('registers an allowlisted WidgetKit push token through widget authority', async () => {
+    const { handler, rpc } = setup();
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: {
+        Authorization: `Widget twc_${'A'.repeat(43)}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'registerPushToken',
+        platform: 'ios',
+        environment: 'development',
+        topic: 'garden.bath.tasks.push-type.widgets',
+        deviceToken: 'a'.repeat(64),
+        enabled: true,
+      }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ outcome: 'registered' });
+    expect(rpc.registerPushToken).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a WidgetKit push topic outside the Tasks allowlist', async () => {
+    const { handler, rpc } = setup();
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: {
+        Authorization: `Widget twc_${'A'.repeat(43)}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'registerPushToken',
+        platform: 'ios',
+        environment: 'development',
+        topic: 'garden.bath.other.push-type.widgets',
+        deviceToken: 'a'.repeat(64),
+        enabled: true,
+      }),
+    }));
+    expect(response.status).toBe(400);
+    expect(rpc.registerPushToken).not.toHaveBeenCalled();
+  });
   it('issues an expiring installation-bound credential to an authenticated user', async () => {
     const { handler, rpc } = setup();
     const response = await handler(new Request('https://example.test', {

@@ -75,13 +75,13 @@ Plan and complete personal tasks through a private-first, keyboard-focused workf
 - Single-click animated autosaved editing with outside-click close, editable Primary Link, safe live-styled Markdown notes, modifier-based range selection, and cross-horizon Today drag reordering with keyboard alternatives
 - First-full-sync status, bounded local reliability history, and content-free production warnings
 - Narrow task-domain MCP tools and Raycast capture commands
-- A thin iOS web companion with a configurable large Home Screen widget for Today, Upcoming, Anytime, Someday, or Done
+- Thin Apple web companions with configurable native widgets that combine bounded background snapshots, scheduled timeline refreshes, and content-free server-triggered refresh opportunities
 
-Accessible at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Production synchronization and browser reminder delivery are active.
+Accessible at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Production synchronization, browser reminder delivery, and locally scheduled iOS/macOS companion reminders are supported.
 
 See the [Tasks Guide](docs/human/TASKS_GUIDE.md) for setup, daily workflow, keyboard commands, reminders, backup, recovery, and the current parallel-use boundary.
 
-The native iOS source lives under `ios/TasksCompanion/`. It deliberately reuses the production web application for task editing and shares only a bounded, privacy-reduced list projection with WidgetKit. Provisioning the App Group and completing physical-device acceptance remain Apple-team setup steps.
+The native Apple sources live under `ios/TasksCompanion/` and `macos/TasksCompanion/`. They deliberately reuse the production web application for task editing and share only bounded, privacy-reduced projections with WidgetKit. Widget extensions require Apple OS 26 for server-triggered WidgetKit refreshes, while the containing apps retain their earlier deployment targets. Provisioning the App Group, Push Notifications capability, and physical-device acceptance remain Apple-team setup steps.
 
 ### Wardrobe
 

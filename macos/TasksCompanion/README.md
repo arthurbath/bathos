@@ -106,6 +106,8 @@ LaunchServices database or unregister unrelated applications.
 
 ## Native Behavior
 
+- Tasks Settings reports macOS notification authorization and offers **Enable** to request permission or open Notification settings. macOS Settings remains the sole on/off authority.
+- The app reconciles the earliest 60 active future reminder instants received from the trusted web bridge into local UserNotifications. Native reminders use the title `Reminder`, the task Summary as body, a banner and sound in the foreground, and the existing task route when activated. When authorization is not enabled, an open Tasks surface retains the in-app toast fallback.
 - The hosted Tasks web view accepts AppKit's first mouse event, so clicking or
   beginning a drag over a visible inactive Tasks window activates the window
   and delivers that same pointer sequence to the intended web interaction.
@@ -127,4 +129,6 @@ LaunchServices database or unregister unrelated applications.
 - `bathostasks://` deep links accept allowlisted list, task, and new-task routes.
 - The configurable macOS widget offers Today, Upcoming, Anytime, and Someday and
   reuses the bounded iOS large-widget snapshot, completion, Primary Link, cache,
-  and background-refresh behavior.
+  and background-refresh behavior. The containing app retains macOS 14 support,
+  while the widget extension requires macOS 26 so content-free WidgetKit pushes
+  can accelerate its existing 30-minute requested timeline and cache fallback.

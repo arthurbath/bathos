@@ -6,7 +6,7 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 
 1. Sign in to BathOS and open Tasks.
 2. Open `More > Config`, then check Synchronization. `Synced` means this installation has completed a full synchronization, local changes have uploaded, current server changes have downloaded, and no transfer is active or failing.
-3. In Browser Reminders under Config, choose `Enable` and allow notifications when Safari asks. Each browser or device must be enabled separately.
+3. In Notifications under Config, choose `Enable` and allow notifications when the browser or operating system asks. Each browser or device must be enabled separately.
 4. Optionally install Tasks from Safari. Use `File > Add to Dock` on macOS or `Share > Add to Home Screen` on iPhone and iPad.
 5. Capture a few disposable or low-risk tasks before relying on the module for important work.
 
@@ -112,7 +112,7 @@ An iPhone or iPad Home Screen web app has cookies and storage separate from Safa
 
 The native Tasks companion uses the same production web application for signing in, reading, and editing tasks. It adds native surfaces the installed web app cannot provide: configurable Home Screen and Lock Screen widgets for Today, Upcoming, Anytime, or Someday.
 
-During system-budgeted timeline generation, the widget requests the current bounded owner projection in the background, validates it, and atomically refreshes its shared cache. iOS determines when those refresh opportunities run and may defer them. If the device is offline or a refresh fails, the widget silently retains the last valid projection rather than asking the user to open Tasks to refresh it.
+During system-budgeted timeline generation, the widget requests the current bounded owner projection in the background, validates it, and atomically refreshes its shared cache. On Apple OS 26 or later, content-free WidgetKit notifications can prompt an earlier timeline after Tasks changes on another client. Apple determines when either refresh opportunity runs and may defer it. If the device is offline or a refresh fails, the widget silently retains the last valid projection rather than asking the user to open Tasks to refresh it.
 
 Widget rows expose only the information and actions needed for the selected list. Notes, checklist text, Mail provenance, credentials, reminder records, and synchronization errors are not copied into the widget cache. The separate expiring native credential can read only this bounded projection and complete an owned open task. Signing out of the companion clears its cached widget data and native credential.
 
@@ -140,9 +140,9 @@ Use this pass before relying on a new or refreshed iPhone installation offline:
 
 ## Reminders
 
-Browser reminders require connected storage, notification permission, and an active subscription for that browser. Notifications show task titles. Opening a notification returns to the relevant Tasks view and acknowledges the reminder separately from provider delivery.
+Browser reminders require connected storage, notification permission, and an active subscription for that browser. Native iOS and macOS reminders require notification authorization for the installed Tasks app and a successful synchronization of the reminder to that companion. Notifications show task titles, and activating one returns to the relevant task.
 
-In-app reminders remain available when browser notifications are unsupported, blocked, expired, or temporarily degraded. If a subscription expires, choose `Enable` again to register a new one.
+Notifications are enabled or disabled only in browser or operating-system settings; Tasks does not add a second application preference. Config reports the current surface's status and offers `Enable` when it can invoke the relevant permission or settings workflow. In-app reminders remain available when browser or native notifications are unsupported, blocked, expired, or temporarily degraded. If a browser subscription expires, choose `Enable` again to register a new one.
 
 ## Backup, Restore, and Recovery
 

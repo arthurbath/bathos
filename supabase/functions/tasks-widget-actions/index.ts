@@ -50,6 +50,17 @@ const handler = createTasksWidgetActionsHandler({
         'tasks_revoke_widget_completion_credential',
         { _raw_token: rawToken },
       ),
+      registerPushToken: async (input) => client.rpc(
+        'tasks_register_widget_push_token',
+        {
+          _raw_token: input.rawToken,
+          _platform: input.platform,
+          _apns_environment: input.environment,
+          _apns_topic: input.topic,
+          _device_token: input.deviceToken,
+          _enabled: input.enabled,
+        },
+      ),
       issueQuickEntry: async (input) => client.rpc(
         'tasks_issue_native_quick_entry_credential',
         {

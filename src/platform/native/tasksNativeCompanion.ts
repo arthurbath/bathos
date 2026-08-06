@@ -1,4 +1,18 @@
 export const TASKS_NATIVE_BRIDGE_HANDLER = 'bathosTasksWidget';
+export const TASKS_NATIVE_NOTIFICATION_STATUS_EVENT =
+  'bathos:tasks-native-notification-status';
+
+export const tasksNativeNotificationAuthorizationStatuses = [
+  'checking',
+  'not-determined',
+  'denied',
+  'enabled',
+  'unavailable',
+  'error',
+] as const;
+
+export type TasksNativeNotificationAuthorizationStatus =
+  (typeof tasksNativeNotificationAuthorizationStatuses)[number];
 
 export type TasksNativeMessageHandler = {
   postMessage: (message: unknown) => void;
@@ -9,6 +23,7 @@ type TasksNativeBridgeWindow = Window & {
     schemaVersion?: unknown;
     installationId?: unknown;
     notificationsEnabled?: unknown;
+    notificationAuthorizationStatus?: unknown;
   };
   webkit?: {
     messageHandlers?: Partial<Record<string, TasksNativeMessageHandler>>;
@@ -42,4 +57,50 @@ export function getTasksNativeInstallationId(target: Window = window): string | 
 export function getTasksNativeNotificationsEnabled(target: Window = window): boolean {
   if (!isTasksNativeCompanion(target)) return false;
   return (target as TasksNativeBridgeWindow).__bathosTasksNative?.notificationsEnabled === true;
+}
+
+export function getTasksNativeNotificationAuthorizationStatus(
+  target: Window = window,
+): TasksNativeNotificationAuthorizationStatus {
+  if (!isTasksNativeCompanion(target)) return 'unavailable';
+  const context = (target as TasksNativeBridgeWindow).__bathosTasksNative;
+  if (context?.notificationsEnabled === true) return 'enabled';
+  return isTasksNativeNotificationAuthorizationStatus(
+    context?.notificationAuthorizationStatus,
+  )
+    ? context.notificationAuthorizationStatus
+    : 'checking';
+}
+
+export function isTasksNativeNotificationAuthorizationStatus(
+  value: unknown,
+): value is TasksNativeNotificationAuthorizationStatus {
+  return typeof value === 'string'
+    && tasksNativeNotificationAuthorizationStatuses.includes(
+      value as TasksNativeNotificationAuthorizationStatus,
+    );
+}
+
+export function requestTasksNativeNotificationStatus(
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'request-notification-status',
+    schemaVersion: 2,
+  });
+  return true;
+}
+
+export function configureTasksNativeNotifications(
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'configure-notifications',
+    schemaVersion: 2,
+  });
+  return true;
 }

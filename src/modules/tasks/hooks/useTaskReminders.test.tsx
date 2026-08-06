@@ -268,4 +268,28 @@ describe('useTaskReminders', () => {
 
     expect(reminderService.claimDue).not.toHaveBeenCalled();
   });
+
+  it('waits for native authorization inspection before claiming fallback delivery', async () => {
+    const reminderService = {
+      claimDue: vi.fn(),
+      save: vi.fn(),
+      cancel: vi.fn(),
+      acknowledge: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      reminderService,
+    });
+
+    const { result } = renderHook(() => useTaskReminders('owner-a', {
+      nativeNotificationsChecking: true,
+    }));
+    await act(async () => {
+      await result.current.claimDue();
+      await Promise.resolve();
+    });
+
+    expect(reminderService.claimDue).not.toHaveBeenCalled();
+  });
 });

@@ -38,6 +38,7 @@ import {
 
 export const TASK_NATIVE_WIDGET_SCHEMA_VERSION = 2;
 export const TASK_NATIVE_WIDGET_LIST_LIMIT = 50;
+export const TASK_NATIVE_REMINDER_PROJECTION_LIMIT = 256;
 export const TASK_NATIVE_WIDGET_BRIDGE_HANDLER = TASKS_NATIVE_BRIDGE_HANDLER;
 export const TASK_NATIVE_TASK_QUERY_PARAMETER = 'native_task';
 export const TASK_NATIVE_NEW_TASK_QUERY_PARAMETER = 'native_new_task';
@@ -88,6 +89,28 @@ export type TaskNativeWidgetSnapshot = {
 export type TaskNativeWidgetClearMessage = {
   type: 'clear';
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+};
+
+export type TaskNativeReminderProjectionItem = {
+  id: string;
+  taskId: string;
+  summary: string;
+  resolvedAt: string;
+};
+
+export type TaskNativeReminderProjection = {
+  type: 'sync-reminders';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+  ownerId: string;
+  generatedAt: string;
+  reminders: TaskNativeReminderProjectionItem[];
+};
+
+export type TaskNativeReminderProjectionRow = {
+  id: string;
+  task_id: string | null;
+  resolved_at: string;
+  title: string;
 };
 
 export type TaskNativeWidgetCredentialMessage = {
@@ -167,6 +190,48 @@ const taskNativeWidgetListTitles: Record<TaskNativeWidgetListId, string> = {
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 let lastPublishedContent: string | null = null;
+let lastPublishedReminderContent: string | null = null;
+
+export function buildTaskNativeReminderProjection({
+  ownerId,
+  rows,
+  generatedAt = new Date().toISOString(),
+  now = new Date(),
+  limit = TASK_NATIVE_REMINDER_PROJECTION_LIMIT,
+}: {
+  ownerId: string;
+  rows: readonly TaskNativeReminderProjectionRow[];
+  generatedAt?: string;
+  now?: Date;
+  limit?: number;
+}): TaskNativeReminderProjection {
+  const safeLimit = Number.isSafeInteger(limit)
+    ? Math.max(1, Math.min(limit, TASK_NATIVE_REMINDER_PROJECTION_LIMIT))
+    : TASK_NATIVE_REMINDER_PROJECTION_LIMIT;
+  const nowTime = now.getTime();
+  const reminders = rows.flatMap((row) => {
+    const resolvedTime = Date.parse(row.resolved_at);
+    const summary = row.title.trim();
+    return row.task_id && summary && Number.isFinite(resolvedTime) && resolvedTime > nowTime
+      ? [{
+          id: row.id,
+          taskId: row.task_id,
+          summary: summary.slice(0, 500),
+          resolvedAt: new Date(resolvedTime).toISOString(),
+        }]
+      : [];
+  }).sort((left, right) => (
+    left.resolvedAt.localeCompare(right.resolvedAt) || left.id.localeCompare(right.id)
+  )).slice(0, safeLimit);
+
+  return {
+    type: 'sync-reminders',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+    ownerId,
+    generatedAt,
+    reminders,
+  };
+}
 
 export function buildTaskNativeWidgetSnapshot({
   ownerId,
@@ -288,6 +353,24 @@ export function clearTaskNativeWidgetCache(target: Window = window): boolean {
       : 1,
   });
   lastPublishedContent = null;
+  lastPublishedReminderContent = null;
+  return true;
+}
+
+export function publishTaskNativeReminderProjection(
+  projection: TaskNativeReminderProjection,
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  const content = JSON.stringify({
+    ...projection,
+    generatedAt: null,
+  });
+  if (content === lastPublishedReminderContent) return false;
+
+  handler.postMessage(projection);
+  lastPublishedReminderContent = content;
   return true;
 }
 
@@ -407,6 +490,7 @@ export function removeNativeNewTaskSignal(search: string): string {
 
 export function resetTaskNativeWidgetPublisherForTests(): void {
   lastPublishedContent = null;
+  lastPublishedReminderContent = null;
 }
 
 function toTaskNativeWidgetTask(

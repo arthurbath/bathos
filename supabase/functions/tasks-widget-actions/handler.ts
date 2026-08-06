@@ -28,6 +28,14 @@ export type WidgetActionRpcClient = {
   }) => Promise<{ data: unknown; error: unknown | null }>;
   todayProgress: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
   revoke: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
+  registerPushToken: (input: {
+    rawToken: string;
+    platform: string;
+    environment: string;
+    topic: string;
+    deviceToken: string;
+    enabled: boolean;
+  }) => Promise<{ data: unknown; error: unknown | null }>;
   issueQuickEntry: (input: {
     ownerId: string;
     installationId: string;
@@ -65,6 +73,12 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 const widgetTokenPattern = /^twc_[A-Za-z0-9_-]{43}$/;
 const quickEntryTokenPattern = /^tqe_[A-Za-z0-9_-]{43}$/;
 const planningDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+const widgetPushTokenPattern = /^[0-9a-f]{64,512}$/;
+const widgetPushTopics: Record<string, string> = {
+  ios: 'garden.bath.tasks.push-type.widgets',
+  macos: 'garden.bath.tasks.push-type.widgets',
+  watchos: 'garden.bath.tasks.watchkitapp.push-type.widgets',
+};
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Cache-Control': 'no-store',
@@ -176,6 +190,7 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
     const action = body?.action;
     if (!body || ![
       'issue', 'complete', 'snapshot', 'createInboxTask', 'todayProgress', 'revoke',
+      'registerPushToken',
       'issueQuickEntry', 'quickEntryBootstrap', 'createQuickEntry', 'revokeQuickEntry',
     ].includes(String(action))) {
       return response(400, { error: 'Invalid request' });
@@ -417,6 +432,52 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
     const rawToken = parseWidgetCredential(request.headers.get('authorization'));
     if (!rawToken) {
       return response(401, { error: 'Unauthorized' });
+    }
+
+    if (action === 'registerPushToken') {
+      const platform = body.platform;
+      const environment = body.environment;
+      const topic = body.topic;
+      const deviceToken = body.deviceToken;
+      const enabled = body.enabled;
+      if (
+        typeof platform !== 'string'
+        || typeof environment !== 'string'
+        || typeof topic !== 'string'
+        || typeof deviceToken !== 'string'
+        || typeof enabled !== 'boolean'
+        || !Object.hasOwn(widgetPushTopics, platform)
+        || widgetPushTopics[platform] !== topic
+        || !['development', 'production'].includes(environment)
+        || !widgetPushTokenPattern.test(deviceToken)
+        || deviceToken.length % 2 !== 0
+      ) {
+        return response(400, { error: 'Invalid request' });
+      }
+      const result = await rpc.registerPushToken({
+        rawToken,
+        platform,
+        environment,
+        topic,
+        deviceToken,
+        enabled,
+      });
+      if (result.error) {
+        logError('Widget push token registration failed');
+        return response(500, { error: 'Widget push registration failed' });
+      }
+      const outcome = parseRpcData(result.data);
+      if (!outcome) return response(500, { error: 'Widget push registration failed' });
+      if (outcome.outcome === 'rejected') {
+        return response(
+          outcome.code === 'invalid_credential' ? 401 : 400,
+          { error: 'Widget push registration failed', code: outcome.code },
+        );
+      }
+      if (!['registered', 'disabled'].includes(String(outcome.outcome))) {
+        return response(500, { error: 'Widget push registration failed' });
+      }
+      return response(200, outcome);
     }
 
     if (action === 'revoke') {

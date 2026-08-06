@@ -15,8 +15,9 @@ const CLAIM_INTERVAL_MS = 60_000;
 
 export function useTaskReminders(
   ownerId: string,
-  { nativeNotificationsEnabled = false }: {
+  { nativeNotificationsEnabled = false, nativeNotificationsChecking = false }: {
     nativeNotificationsEnabled?: boolean;
+    nativeNotificationsChecking?: boolean;
   } = {},
 ) {
   const { mode, planningTimeZone, reminderService } = useTasksRuntime();
@@ -33,6 +34,7 @@ export function useTaskReminders(
   const [inAppSurface] = useState(() => getTaskInAppReminderSurface());
   const claiming = useRef(false);
   const inAppFallbackEnabled = !nativeNotificationsEnabled
+    && !nativeNotificationsChecking
     && webPush.status !== 'checking'
     && webPush.status !== 'active';
 

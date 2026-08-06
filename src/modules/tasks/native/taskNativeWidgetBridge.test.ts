@@ -7,6 +7,7 @@ import {
 
 import {
   buildTaskNativeWidgetSnapshot,
+  buildTaskNativeReminderProjection,
   clearTaskNativeQuickEntryShortcut,
   clearTaskNativeWidgetCache,
   configureTaskNativeQuickEntryShortcut,
@@ -15,6 +16,7 @@ import {
   hasNativeNewTaskSignal,
   publishTaskNativeContentReady,
   publishTaskNativeQuickEntryCredential,
+  publishTaskNativeReminderProjection,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
   requestTaskNativeNewTaskSummaryFocus,
@@ -443,6 +445,65 @@ describe('taskNativeWidgetBridge', () => {
       generatedAt: '2026-07-27T12:01:00.000Z',
     }, bridgeWindow(messages))).toBe(false);
     expect(messages).toEqual([snapshot]);
+  });
+
+  it('builds and publishes only bounded future native reminders', () => {
+    const projection = buildTaskNativeReminderProjection({
+      ownerId,
+      generatedAt: '2026-08-06T16:00:00.000Z',
+      now: new Date('2026-08-06T16:00:00.000Z'),
+      limit: 2,
+      rows: [
+        {
+          id: '40000000-0000-4000-8000-000000000003',
+          task_id: taskC,
+          resolved_at: '2026-08-06T18:00:00Z',
+          title: '  Third  ',
+        },
+        {
+          id: '40000000-0000-4000-8000-000000000001',
+          task_id: taskA,
+          resolved_at: '2026-08-06T15:00:00Z',
+          title: 'Past',
+        },
+        {
+          id: '40000000-0000-4000-8000-000000000002',
+          task_id: taskB,
+          resolved_at: '2026-08-06T17:00:00Z',
+          title: 'Second',
+        },
+        {
+          id: '40000000-0000-4000-8000-000000000004',
+          task_id: null,
+          resolved_at: '2026-08-06T19:00:00Z',
+          title: 'No Task',
+        },
+      ],
+    });
+
+    expect(projection.reminders).toEqual([
+      {
+        id: '40000000-0000-4000-8000-000000000002',
+        taskId: taskB,
+        resolvedAt: '2026-08-06T17:00:00.000Z',
+        summary: 'Second',
+      },
+      {
+        id: '40000000-0000-4000-8000-000000000003',
+        taskId: taskC,
+        resolvedAt: '2026-08-06T18:00:00.000Z',
+        summary: 'Third',
+      },
+    ]);
+
+    const messages: unknown[] = [];
+    const target = bridgeWindow(messages);
+    expect(publishTaskNativeReminderProjection(projection, target)).toBe(true);
+    expect(publishTaskNativeReminderProjection({
+      ...projection,
+      generatedAt: '2026-08-06T16:01:00.000Z',
+    }, target)).toBe(false);
+    expect(messages).toEqual([projection]);
   });
 
   it('keeps the schema-one snapshot and clear contract during a native rollout', () => {

@@ -9,11 +9,14 @@ export type TaskReminderPresentationMode =
 export function getTaskReminderPresentationMode({
   webPushStatus,
   nativeNotificationsEnabled,
+  nativeNotificationsChecking = false,
 }: {
   webPushStatus: TaskWebPushStatus | undefined;
   nativeNotificationsEnabled: boolean;
+  nativeNotificationsChecking?: boolean;
 }): TaskReminderPresentationMode {
   if (nativeNotificationsEnabled) return 'native-notification';
+  if (nativeNotificationsChecking) return 'checking';
   if (webPushStatus === 'checking') return 'checking';
   if (webPushStatus === 'active') return 'browser-notification';
   return 'in-app-toast';

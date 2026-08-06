@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "roles": {
+    "task": { "concept": "Task", "lucide": "SquareCheckBig" },
+    "openTask": { "concept": "OpenTask", "lucide": "Square" },
+    "somedayTask": { "concept": "SomedayTask", "lucide": "SquareDashed" },
+    "completedTask": { "concept": "CompletedTask", "lucide": "SquareCheck" },
+    "deletedTask": { "concept": "DeletedTask", "lucide": "SquareX" },
+    "today": { "concept": "Today", "lucide": "Star" },
+    "upcoming": { "concept": "Upcoming", "lucide": "CalendarRange" },
+    "anytime": { "concept": "Anytime", "lucide": "ListTodo" },
+    "someday": { "concept": "Someday", "lucide": "SquareDashed" },
+    "done": { "concept": "Done", "lucide": "ListChecks" },
+    "inbox": { "concept": "Inbox", "lucide": "Inbox" },
+    "now": { "concept": "Now", "lucide": "Clock2" },
+    "next": { "concept": "Next", "lucide": "Clock5" },
+    "later": { "concept": "Later", "lucide": "Clock8" },
+    "recurrence": { "concept": "Recurrence", "lucide": "Repeat2" },
+    "primaryLink": { "concept": "PrimaryLink", "lucide": "Link2" },
+    "jiraLink": { "concept": "JiraLink", "lucide": "Zap" },
+    "obsidianLink": { "concept": "ObsidianLink", "lucide": "FileText" },
+    "mailLink": { "concept": "MailSource", "lucide": "Mail" },
+    "addTask": { "concept": "AddTask", "lucide": "Plus" },
+    "emptyState": { "concept": "EmptyState", "lucide": "Sparkles" },
+    "complicationCheck": { "concept": null, "lucide": "Check" }
+  }
+}

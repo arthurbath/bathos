@@ -157,6 +157,10 @@ import {
   type TaskChecklistForwardMutationDetail,
 } from '@/modules/tasks/hooks/taskChecklistForwardMutationEvents';
 import { useTaskReminders } from '@/modules/tasks/hooks/useTaskReminders';
+import {
+  useTaskNativeNotifications,
+  type TaskNativeNotificationsModel,
+} from '@/modules/tasks/hooks/useTaskNativeNotifications';
 import { useTaskRecurrences } from '@/modules/tasks/hooks/useTaskRecurrences';
 import type { TaskWebPushModel } from '@/modules/tasks/hooks/useTaskWebPush';
 import {
@@ -222,7 +226,6 @@ import {
   getDeclaredNativePlatform,
   getDeclaredNativeQuickEntryShortcut,
 } from '@/platform/installedApp';
-import { getTasksNativeNotificationsEnabled } from '@/platform/native/tasksNativeCompanion';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import {
   deriveTaskAreaSections,
@@ -944,11 +947,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     ));
   }, []);
   const taskSearch = useTaskSearch(userId, quickFindOpen || view === 'search');
-  const nativeNotificationsEnabled = getTasksNativeNotificationsEnabled();
-  const reminders = useTaskReminders(userId, { nativeNotificationsEnabled });
+  const nativeNotifications = useTaskNativeNotifications();
+  const reminders = useTaskReminders(userId, {
+    nativeNotificationsEnabled: nativeNotifications.enabled,
+    nativeNotificationsChecking: nativeNotifications.available
+      && nativeNotifications.status === 'checking',
+  });
   const reminderPresentationMode = getTaskReminderPresentationMode({
     webPushStatus: reminders.webPush?.status,
-    nativeNotificationsEnabled,
+    nativeNotificationsEnabled: nativeNotifications.enabled,
+    nativeNotificationsChecking: nativeNotifications.available
+      && nativeNotifications.status === 'checking',
   });
   const waitingRecurrences = useMemo(() => recurrences.definitions.filter(
     (definition) => {
@@ -4606,6 +4615,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   hierarchy={hierarchy}
                   automaticListSorting={automaticListSorting}
                   dragHandleVisibility={dragHandleVisibility}
+                  nativeNotifications={nativeNotifications}
                   webPush={reminders.webPush}
                   connected={reminders.mode === 'connected'}
                   inAppReminderStatus={reminders.claimError ? 'delayed' : 'available'}
@@ -4615,14 +4625,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       await reminders.webPush.enable();
                     } catch {
                       showBrowserReminderError('Browser Reminders Could Not Be Enabled');
-                    }
-                  }}
-                  onDisableBrowserReminders={async () => {
-                    if (!reminders.webPush) return;
-                    try {
-                      await reminders.webPush.disable();
-                    } catch {
-                      showBrowserReminderError('Browser Reminders Could Not Be Disabled');
                     }
                   }}
                 />
@@ -5441,11 +5443,11 @@ function TaskConfigView({
   hierarchy,
   automaticListSorting,
   dragHandleVisibility,
+  nativeNotifications,
   webPush,
   connected,
   inAppReminderStatus,
   onEnableBrowserReminders,
-  onDisableBrowserReminders,
 }: {
   keyboardHelpShortcut: string;
   showKeyboardShortcuts: boolean;
@@ -5456,11 +5458,11 @@ function TaskConfigView({
   hierarchy: TaskHierarchyModel;
   automaticListSorting: ReturnType<typeof useTaskAutomaticListSorting>;
   dragHandleVisibility: ReturnType<typeof useTaskDragHandleVisibility>;
+  nativeNotifications: TaskNativeNotificationsModel;
   webPush: TaskWebPushModel | null;
   connected: boolean;
   inAppReminderStatus: 'available' | 'delayed';
   onEnableBrowserReminders: () => Promise<void>;
-  onDisableBrowserReminders: () => Promise<void>;
 }) {
   const nativePlatform = getDeclaredNativePlatform();
   const macNative = nativePlatform === 'macos';
@@ -5474,22 +5476,19 @@ function TaskConfigView({
           <TaskFeatureRow
             title="Notifications"
             description={nativePlatform
-              ? 'Receive native task reminders on this device when support becomes available.'
+              ? 'Receive task reminders through this device when notifications are enabled in system settings.'
               : inAppReminderStatus === 'delayed'
                 ? 'Receive scheduled task reminders in this browser. Reminder delivery is delayed and will retry automatically.'
                 : 'Receive scheduled task reminders in this browser, including while Tasks is closed.'}
             dataStatus={inAppReminderStatus}
           >
             {nativePlatform ? (
-              <span className="max-w-32 text-right text-xs text-muted-foreground">
-                Native Notifications Coming Later
-              </span>
+              <TaskNativeNotificationCapability model={nativeNotifications} />
             ) : (
               <TaskWebPushCapability
                 model={webPush}
                 connected={connected}
                 onEnable={onEnableBrowserReminders}
-                onDisable={onDisableBrowserReminders}
               />
             )}
           </TaskFeatureRow>
@@ -5715,12 +5714,10 @@ function TaskWebPushCapability({
   model,
   connected,
   onEnable,
-  onDisable,
 }: {
   model: TaskWebPushModel | null;
   connected: boolean;
   onEnable: () => Promise<void>;
-  onDisable: () => Promise<void>;
 }) {
   if (!model) {
     return <span className="text-xs text-muted-foreground">Unavailable</span>;
@@ -5734,14 +5731,7 @@ function TaskWebPushCapability({
 
   if (active) {
     return (
-      <Switch
-        aria-label="Notifications"
-        checked
-        disabled={model.busy}
-        onCheckedChange={(enabled) => {
-          if (!enabled) void onDisable();
-        }}
-      />
+      <span className="text-xs text-muted-foreground">Enabled</span>
     );
   }
   if (canEnable) {
@@ -5759,6 +5749,40 @@ function TaskWebPushCapability({
       : model.status === 'unsupported'
         ? 'Unavailable'
         : 'Not Configured';
+  return (
+    <span aria-live="polite" className="max-w-32 text-right text-xs text-muted-foreground">
+      {status}
+    </span>
+  );
+}
+
+function TaskNativeNotificationCapability({
+  model,
+}: {
+  model: TaskNativeNotificationsModel;
+}) {
+  if (model.status === 'checking') {
+    return <span className="text-xs text-muted-foreground">Checking...</span>;
+  }
+  if (model.status === 'enabled') {
+    return <span className="text-xs text-muted-foreground">Enabled</span>;
+  }
+  if (model.status === 'not-determined' || model.status === 'denied') {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <span className="max-w-32 text-right text-xs text-muted-foreground">
+          {model.status === 'denied' ? 'Blocked in System Settings' : 'Not Enabled'}
+        </span>
+        <Button type="button" variant="outline" size="sm" onClick={() => model.enable()}>
+          Enable
+        </Button>
+      </div>
+    );
+  }
+
+  const status = model.status === 'unavailable'
+    ? 'Unavailable'
+    : 'Not Enabled';
   return (
     <span aria-live="polite" className="max-w-32 text-right text-xs text-muted-foreground">
       {status}

@@ -8,6 +8,11 @@ describe('getTaskReminderPresentationMode', () => {
       webPushStatus: 'checking',
       nativeNotificationsEnabled: false,
     })).toBe('checking');
+    expect(getTaskReminderPresentationMode({
+      webPushStatus: 'unsupported',
+      nativeNotificationsEnabled: false,
+      nativeNotificationsChecking: true,
+    })).toBe('checking');
   });
 
   it('prefers native and browser notifications over in-app fallback delivery', () => {

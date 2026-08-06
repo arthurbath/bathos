@@ -148,7 +148,8 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
         var nativeContextScript = """
         window.__bathosNativeApp = Object.freeze({
           schemaVersion: 1,
-          moduleId: "tasks"
+          moduleId: "tasks",
+          platform: "ios"
         });
         document.addEventListener("pointerdown", (event) => {
           const target = event.target instanceof Element
@@ -163,11 +164,12 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
         """
         if let installationID = try? TaskWidgetInstallationStore()?.identifier() {
             nativeContextScript += """
-            window.__bathosTasksNative = Object.freeze({
+            window.__bathosTasksNative = {
               schemaVersion: 2,
               installationId: "\(installationID.uuidString.lowercased())",
-              notificationsEnabled: false
-            });
+              notificationsEnabled: false,
+              notificationAuthorizationStatus: "checking"
+            };
             """
         }
         userContentController.addUserScript(WKUserScript(
