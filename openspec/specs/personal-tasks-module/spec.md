@@ -2463,7 +2463,7 @@ The Tasks module SHALL offer exactly four predefined actionability quick filters
 - **THEN** Tasks safely treats it as All Tasks
 
 ### Requirement: Global Task Quick Find
-The system SHALL provide typing-only Quick Find as the primary Tasks search entry point across to-dos, SHALL omit visible Quick Find trigger controls from Tasks routes, and SHALL retain a live full task-results route for exhaustive continuation.
+The system SHALL provide typing-only Quick Find as the primary Tasks search entry point across to-dos, SHALL omit visible Quick Find trigger controls from Tasks routes, SHALL retain a live full task-results route for exhaustive continuation, and SHALL clear the transient Quick Find query whenever the palette closes or activates a destination.
 
 #### Scenario: Omit visible Quick Find controls
 - **WHEN** a user visits a Tasks list, Config, or another Tasks route
@@ -2515,22 +2515,24 @@ The system SHALL provide typing-only Quick Find as the primary Tasks search entr
 #### Scenario: Close Quick Find with Escape
 - **WHEN** Quick Find is visible and the user presses Escape
 - **THEN** the surface closes without changing task data
+- **AND** the next Quick Find session begins with an empty query unless the opening gesture supplies new text
 
 #### Scenario: Consume an outside dismissal
 - **WHEN** the user presses outside the Quick Find palette
 - **THEN** Quick Find closes and the same pointer action does not activate the underlying Tasks interface
+- **AND** the next Quick Find session begins with an empty query unless the opening gesture supplies new text
 
 #### Scenario: Open a regular task result
 - **WHEN** the user activates a non-recurrence-definition task result
-- **THEN** Tasks navigates to the task's natural planning or history list, opens the task, and smoothly aligns its expanded summary row as close to the top of the visible content as available scroll depth permits
+- **THEN** Tasks clears the Quick Find query, navigates to the task's natural planning or history list, opens the task, and smoothly aligns its expanded summary row as close to the top of the visible content as available scroll depth permits
 
 #### Scenario: Focus a recurrence-definition result
 - **WHEN** the user activates an Upcoming recurrence-definition result
-- **THEN** Tasks navigates to Upcoming, keeps recurrence management closed, smoothly reveals the recurrence row, and applies whole-row keyboard focus
+- **THEN** Tasks clears the Quick Find query, navigates to Upcoming, keeps recurrence management closed, smoothly reveals the recurrence row, and applies whole-row keyboard focus
 
 #### Scenario: See all results
 - **WHEN** the user activates See All Results
-- **THEN** the module navigates through a real in-app link to `/tasks/search` with the current query and lists every matching task from every planning and lifecycle view
+- **THEN** the module clears the transient Quick Find query and navigates through a real in-app link to `/tasks/search` with the submitted query and lists every matching task from every planning and lifecycle view
 
 #### Scenario: Refine full results
 - **WHEN** the user edits the query on the search-results page

@@ -197,6 +197,7 @@ DataGrid text-entry cells intentionally use a spreadsheet interaction model:
 - Keyboard traversal focuses a text-entry cell without starting editing. Pointer activation starts editing at the chosen insertion point.
 - Return starts editing at the end of the current value. A second Return commits and returns to focused mode.
 - Printable input from focused mode replaces the complete value and starts editing.
+- Paste from focused mode replaces and immediately commits the complete value, retains keyboard focus, and does not enter editing. Paste while editing retains native insertion and text-selection behavior.
 - Escape while editing restores the value that existed when editing began.
 - Arrow keys move spatially only in focused mode. While editing, every arrow key retains native cursor and selection behavior, including at the beginning and end of the text.
 - Tab and Shift+Tab commit, move horizontally, wrap across rows, skip unavailable controls, and leave the grid through native browser traversal at the outer boundaries.

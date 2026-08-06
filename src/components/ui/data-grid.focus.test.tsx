@@ -105,11 +105,23 @@ type NullPlaceholderRowData = {
   owner: "X" | "Y" | null;
 };
 
+type PasteRowData = {
+  id: string;
+  text: string;
+  number: string;
+  url: string;
+  currency: string;
+  percent: string;
+  disabledText: string;
+  checked: boolean;
+};
+
 
 const columnHelper = createColumnHelper<RowData>();
 const urlColumnHelper = createColumnHelper<UrlRowData>();
 const asyncNoteColumnHelper = createColumnHelper<AsyncNoteRowData>();
 const asyncCheckboxColumnHelper = createColumnHelper<AsyncCheckboxRowData>();
+const pasteColumnHelper = createColumnHelper<PasteRowData>();
 
 function UrlGridHarness() {
   const [rows, setRows] = React.useState<UrlRowData[]>([
@@ -1092,6 +1104,137 @@ function NullPlaceholderHarness() {
   return <DataGrid table={table} />;
 }
 
+function FocusedPasteHarness() {
+  const [rows, setRows] = React.useState<PasteRowData[]>([
+    {
+      id: "row-a",
+      text: "Alpha",
+      number: "1200",
+      url: "https://example.com/original",
+      currency: "25.00",
+      percent: "40",
+      disabledText: "Protected",
+      checked: false,
+    },
+  ]);
+  const updateRow = React.useCallback((field: keyof Omit<PasteRowData, "id">, value: string) => {
+    setRows((previous) => previous.map((row) => ({ ...row, [field]: value })));
+  }, []);
+  const columns = React.useMemo(
+    () => [
+      pasteColumnHelper.accessor("text", {
+        id: "text",
+        header: "Text",
+        cell: ({ getValue }) => (
+          <GridEditableCell value={getValue()} navCol={0} onChange={(value) => updateRow("text", value)} />
+        ),
+      }),
+      pasteColumnHelper.accessor("number", {
+        id: "number",
+        header: "Number",
+        cell: ({ getValue }) => (
+          <GridEditableCell value={getValue()} navCol={1} type="number" onChange={(value) => updateRow("number", value)} />
+        ),
+      }),
+      pasteColumnHelper.accessor("url", {
+        id: "url",
+        header: "URL",
+        cell: ({ getValue }) => (
+          <GridUrlCell value={getValue()} navCol={2} onChange={(value) => updateRow("url", value)} />
+        ),
+      }),
+      pasteColumnHelper.accessor("currency", {
+        id: "currency",
+        header: "Currency",
+        cell: ({ getValue }) => (
+          <GridCurrencyCell value={getValue()} navCol={3} onChange={(value) => updateRow("currency", value)} />
+        ),
+      }),
+      pasteColumnHelper.accessor("percent", {
+        id: "percent",
+        header: "Percent",
+        cell: ({ getValue }) => (
+          <GridPercentCell value={getValue()} navCol={4} onChange={(value) => updateRow("percent", value)} />
+        ),
+      }),
+      pasteColumnHelper.accessor("disabledText", {
+        id: "disabledText",
+        header: "Disabled",
+        cell: ({ getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={5}
+            disabled
+            onChange={(value) => updateRow("disabledText", value)}
+          />
+        ),
+      }),
+      pasteColumnHelper.accessor("checked", {
+        id: "checked",
+        header: "Checked",
+        cell: ({ getValue }) => (
+          <GridCheckboxCell
+            checked={getValue()}
+            navCol={6}
+            onChange={(checked) => {
+              setRows((previous) => previous.map((row) => ({ ...row, checked })));
+            }}
+          />
+        ),
+      }),
+    ],
+    [updateRow],
+  );
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return (
+    <DataGridHistoryProvider>
+      <DataGrid table={table} />
+    </DataGridHistoryProvider>
+  );
+}
+
+function RejectingFocusedPasteHarness() {
+  const [rows] = React.useState<AsyncNoteRowData[]>([
+    { id: "row-a", note: "Original value" },
+  ]);
+  const columns = React.useMemo(
+    () => [
+      asyncNoteColumnHelper.accessor("note", {
+        id: "note",
+        header: "Note",
+        cell: ({ getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={0}
+            onChange={() => new Promise<void>((_resolve, reject) => {
+              window.setTimeout(() => reject(new Error("Save failed")), 40);
+            })}
+          />
+        ),
+      }),
+    ],
+    [],
+  );
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return (
+    <DataGridHistoryProvider>
+      <DataGrid table={table} />
+    </DataGridHistoryProvider>
+  );
+}
+
 function NumberFormattingHarness() {
   const [rows, setRows] = React.useState<NumberRowData[]>([
     { id: "row-a", amount: 1200 },
@@ -1661,6 +1804,20 @@ async function dispatchEscapeOnElement(element: HTMLElement) {
   });
 }
 
+async function dispatchPaste(element: HTMLElement, text: string) {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    configurable: true,
+    value: {
+      getData: (type: string) => (type === "text/plain" ? text : ""),
+    },
+  });
+  await act(async () => {
+    element.dispatchEvent(event);
+  });
+  return event;
+}
+
 async function dispatchHistoryShortcut({
   key,
   metaKey = false,
@@ -1756,6 +1913,134 @@ function unmount(root: Root, container: HTMLElement) {
   });
   container.remove();
 }
+
+describe("DataGrid focused cell paste", () => {
+  it("replaces and commits text-like cell values without entering editing", async () => {
+    const { container, root } = mount(<FocusedPasteHarness />);
+    try {
+      const replacements = [
+        { col: "0", pasted: "Replacement", displayed: "Replacement" },
+        { col: "1", pasted: "2500", displayed: "2,500" },
+        { col: "2", pasted: "  https://openai.com/new  ", displayed: "https://openai.com/new" },
+        { col: "3", pasted: "75.50", displayed: "75.50" },
+        { col: "4", pasted: "65", displayed: "65" },
+      ];
+
+      for (const replacement of replacements) {
+        const input = container.querySelector<HTMLInputElement>(`input[data-row-id="row-a"][data-col="${replacement.col}"]`);
+        expect(input).not.toBeNull();
+        await act(async () => input!.focus());
+        expect(input!.getAttribute("data-grid-editing")).toBe("false");
+
+        const pasteEvent = await dispatchPaste(input!, replacement.pasted);
+        expect(pasteEvent.defaultPrevented).toBe(true);
+
+        await waitForCondition(() => {
+          const liveInput = container.querySelector<HTMLInputElement>(`input[data-row-id="row-a"][data-col="${replacement.col}"]`);
+          expect(liveInput?.value).toBe(replacement.displayed);
+          expect(liveInput?.getAttribute("data-grid-editing")).toBe("false");
+          expect(document.activeElement).toBe(liveInput);
+        });
+      }
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("replaces a focused long-text cell with the complete multiline clipboard value", async () => {
+    const { container, root } = mount(<LongTextGridHarness />);
+    try {
+      const input = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      expect(input).not.toBeNull();
+      await act(async () => input!.focus());
+
+      const pasteEvent = await dispatchPaste(input!, "Replacement first line\nReplacement second line");
+      expect(pasteEvent.defaultPrevented).toBe(true);
+      await waitForCondition(() => {
+        const liveInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+        expect(liveInput?.value).toBe("Replacement first lineReplacement second line");
+        expect(liveInput?.getAttribute("data-grid-editing")).toBe("false");
+        expect(document.activeElement).toBe(liveInput);
+      });
+
+      const viewerButton = container.querySelector<HTMLButtonElement>('button[aria-label="View Notes"]');
+      expect(viewerButton).not.toBeNull();
+      await act(async () => viewerButton!.click());
+      await waitForCondition(() => {
+        const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+        expect(dialog?.textContent).toContain("Replacement first line\nReplacement second line");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("leaves paste native during editing and ignores disabled and non-text cells", async () => {
+    const { container, root } = mount(<FocusedPasteHarness />);
+    try {
+      const editable = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      const disabled = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="5"]');
+      const checkbox = container.querySelector<HTMLElement>('button[role="checkbox"][data-row-id="row-a"][data-col="6"]');
+      expect(editable).not.toBeNull();
+      expect(disabled).not.toBeNull();
+      expect(checkbox).not.toBeNull();
+
+      await startEditing(editable!);
+      const editingPaste = await dispatchPaste(editable!, "Native insertion");
+      expect(editingPaste.defaultPrevented).toBe(false);
+      expect(editable!.getAttribute("data-grid-editing")).toBe("true");
+      expect(editable!.value).toBe("Alpha");
+
+      const disabledPaste = await dispatchPaste(disabled!, "Not allowed");
+      expect(disabledPaste.defaultPrevented).toBe(false);
+      expect(disabled!.value).toBe("Protected");
+
+      const checkboxPaste = await dispatchPaste(checkbox!, "true");
+      expect(checkboxPaste.defaultPrevented).toBe(false);
+      expect(checkbox!.getAttribute("data-state")).toBe("unchecked");
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("registers replacement paste in undo and redo history", async () => {
+    const { container, root } = mount(<FocusedPasteHarness />);
+    try {
+      const input = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      expect(input).not.toBeNull();
+      await act(async () => input!.focus());
+      await dispatchPaste(input!, "Pasted value");
+      await waitForCondition(() => expect(container.querySelector<HTMLInputElement>('input[data-col="0"]')?.value).toBe("Pasted value"));
+
+      await dispatchHistoryShortcut({ key: "z", metaKey: true });
+      await waitForCondition(() => expect(container.querySelector<HTMLInputElement>('input[data-col="0"]')?.value).toBe("Alpha"));
+
+      await dispatchHistoryShortcut({ key: "z", metaKey: true, shiftKey: true });
+      await waitForCondition(() => expect(container.querySelector<HTMLInputElement>('input[data-col="0"]')?.value).toBe("Pasted value"));
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("shows pasted text optimistically and rolls it back when async persistence fails", async () => {
+    const { container, root } = mount(<RejectingFocusedPasteHarness />);
+    try {
+      const input = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      expect(input).not.toBeNull();
+      await act(async () => input!.focus());
+      await dispatchPaste(input!, "Optimistic value");
+
+      expect(container.querySelector<HTMLInputElement>('input[data-col="0"]')?.value).toBe("Optimistic value");
+      await waitForCondition(() => {
+        const liveInput = container.querySelector<HTMLInputElement>('input[data-col="0"]');
+        expect(liveInput?.value).toBe("Original value");
+        expect(liveInput?.getAttribute("data-grid-editing")).toBe("false");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+});
 
 describe("DataGrid focus after commit resort", () => {
   it("wraps Tab and Shift+Tab across rows", async () => {

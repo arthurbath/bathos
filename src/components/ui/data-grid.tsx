@@ -83,6 +83,21 @@ function scheduleInNextFrame(callback: () => void) {
   callback();
 }
 
+function handleFocusedGridCellPaste(
+  event: React.ClipboardEvent<HTMLInputElement>,
+  options: {
+    editing: boolean;
+    disabled: boolean;
+    commitValue: (value: string) => unknown;
+    inputRef: React.RefObject<HTMLInputElement | null>;
+  },
+) {
+  if (options.editing || options.disabled) return;
+  event.preventDefault();
+  options.commitValue(event.clipboardData.getData('text/plain'));
+  scheduleInNextFrame(() => focusInputAtStart(options.inputRef.current));
+}
+
 /** Spread onto any interactive element to wire it into grid keyboard navigation. */
 export function gridNavProps(ctx: DataGridContextValue | null, navCol: number): Record<string, unknown> {
   return {
@@ -1515,6 +1530,12 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
       data-grid-key={cellId}
       data-grid-editing={editing ? 'true' : 'false'}
       onChange={e => { if (editing) setLocal(e.target.value); }}
+      onPaste={(event) => handleFocusedGridCellPaste(event, {
+        editing,
+        disabled,
+        commitValue,
+        inputRef: ref,
+      })}
       onPointerDown={e => {
         if (disabled) return;
         if (e.pointerType === 'mouse') return;
@@ -1904,6 +1925,12 @@ export function GridUrlCell({
         data-col={navCol}
         data-grid-editing={editing ? 'true' : 'false'}
         onChange={(event) => { if (editing) setLocal(event.target.value); }}
+        onPaste={(event) => handleFocusedGridCellPaste(event, {
+          editing,
+          disabled,
+          commitValue,
+          inputRef: ref,
+        })}
         onMouseDown={() => {
           if (disabled) return;
           ctx?.onCellMouseDown(navCol, { preserveEditing: true });
@@ -2196,6 +2223,12 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
         data-col={navCol}
         data-grid-editing={editing ? 'true' : 'false'}
         onChange={e => { if (editing) setLocal(e.target.value); }}
+        onPaste={(event) => handleFocusedGridCellPaste(event, {
+          editing,
+          disabled,
+          commitValue,
+          inputRef: ref,
+        })}
         onPointerDown={e => {
           if (disabled) return;
           if (e.pointerType === 'mouse') return;
@@ -2489,6 +2522,12 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
         data-col={navCol}
         data-grid-editing={editing ? 'true' : 'false'}
         onChange={e => { if (editing) setLocal(e.target.value); }}
+        onPaste={(event) => handleFocusedGridCellPaste(event, {
+          editing,
+          disabled,
+          commitValue,
+          inputRef: ref,
+        })}
         onPointerDown={e => {
           if (disabled) return;
           if (e.pointerType === 'mouse') return;

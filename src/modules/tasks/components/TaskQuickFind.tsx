@@ -241,13 +241,15 @@ export function TaskQuickFindDialog({
       ? `${listboxId}-result-${activeIndex}`
       : `${listboxId}-all`;
   const close = () => {
-    onOpenChange(false);
     setQuery('');
+    setActiveIndex(0);
+    onOpenChange(false);
   };
 
   const activate = (event: MouseEvent<HTMLAnchorElement>, result: TaskSearchResult) => {
     if (shouldHandleWithBrowser(event)) return;
     event.preventDefault();
+    close();
     if (result.kind === 'todo') onSelectTask(result.task, result.href);
     else onSelectRecurrence(result.definition, result.href);
   };
@@ -255,11 +257,16 @@ export function TaskQuickFindDialog({
   const activateIndex = (index: number) => {
     const result = results[index];
     if (result) {
+      close();
       if (result.kind === 'todo') onSelectTask(result.task, result.href);
       else onSelectRecurrence(result.definition, result.href);
       return;
     }
-    if (showAllResults) onNavigate(continueHref);
+    if (showAllResults) {
+      const destination = continueHref;
+      close();
+      onNavigate(destination);
+    }
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -292,8 +299,8 @@ export function TaskQuickFindDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
-      onOpenChange(nextOpen);
-      if (!nextOpen) setQuery('');
+      if (nextOpen) onOpenChange(true);
+      else close();
     }}>
       <DialogPortal>
         <DialogOverlay
@@ -392,7 +399,9 @@ export function TaskQuickFindDialog({
                 onClick={(event) => {
                   if (shouldHandleWithBrowser(event)) return;
                   event.preventDefault();
-                  onNavigate(continueHref);
+                  const destination = continueHref;
+                  close();
+                  onNavigate(destination);
                 }}
                 className={cn(
                   'flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-foreground outline-none',
