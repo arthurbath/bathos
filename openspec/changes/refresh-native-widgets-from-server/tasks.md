@@ -12,6 +12,8 @@
 - [x] 2.2 Attach an availability-gated WidgetKit push handler to iOS and macOS list widgets
 - [x] 2.3 Attach an availability-gated WidgetKit push handler to the watch complication
 - [x] 2.4 Add push entitlements and environment/topic configuration to native widget targets
+- [x] 2.5 Use the platform-specific macOS APNs entitlement key and verify it survives signed provisioning
+- [x] 2.6 Reconcile persisted token registrations with the signed build's APNs environment after upgrades
 
 ## 3. Verification
 

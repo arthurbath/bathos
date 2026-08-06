@@ -179,6 +179,8 @@ struct TaskWatchPushRegistration: Codable, Equatable {
 private struct TaskWatchPushRegistrationAcceptance: Codable, Equatable {
     let registration: TaskWatchPushRegistration
     let ownerId: UUID
+    let environment: String
+    let topic: String
 }
 
 struct TaskWatchPushRegistrationStore {
@@ -212,7 +214,9 @@ struct TaskWatchPushRegistrationStore {
 
     func isAccepted(
         _ value: TaskWatchPushRegistration,
-        credential: TaskWatchCredential
+        credential: TaskWatchCredential,
+        environment: String,
+        topic: String
     ) -> Bool {
         guard let data = try? Data(contentsOf: acceptedURL),
               let accepted = try? JSONDecoder().decode(
@@ -221,17 +225,23 @@ struct TaskWatchPushRegistrationStore {
               ) else { return false }
         return accepted == TaskWatchPushRegistrationAcceptance(
             registration: value,
-            ownerId: credential.ownerId
+            ownerId: credential.ownerId,
+            environment: environment,
+            topic: topic
         )
     }
 
     func markAccepted(
         _ value: TaskWatchPushRegistration,
-        credential: TaskWatchCredential
+        credential: TaskWatchCredential,
+        environment: String,
+        topic: String
     ) throws {
         let acceptance = TaskWatchPushRegistrationAcceptance(
             registration: value,
-            ownerId: credential.ownerId
+            ownerId: credential.ownerId,
+            environment: environment,
+            topic: topic
         )
         try JSONEncoder().encode(acceptance).write(to: acceptedURL, options: .atomic)
     }
@@ -239,9 +249,19 @@ struct TaskWatchPushRegistrationStore {
 
 struct TaskWatchPushRegistrationSynchronizer {
     typealias Transport = (URLRequest) async throws -> (Data, URLResponse)
+    static let topic = "garden.bath.tasks.watchkitapp.push-type.widgets"
+
+    let environment: String
     let transport: Transport
 
-    init(transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
+    init(
+        environment: String? = nil,
+        transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }
+    ) {
+        let configuredEnvironment = environment ?? Bundle.main.object(
+            forInfoDictionaryKey: "TasksWidgetAPNSEnvironment"
+        ) as? String
+        self.environment = configuredEnvironment == "production" ? "production" : "development"
         self.transport = transport
     }
 
@@ -249,7 +269,12 @@ struct TaskWatchPushRegistrationSynchronizer {
         guard let store = TaskWatchPushRegistrationStore(),
               let value = try? store.loadPending(),
               let credential = try? TaskWatchCredentialStore()?.load(),
-              !store.isAccepted(value, credential: credential) else { return }
+              !store.isAccepted(
+                  value,
+                  credential: credential,
+                  environment: environment,
+                  topic: Self.topic
+              ) else { return }
         do {
             var request = URLRequest(url: TaskCompanionConstants.widgetActionsURL)
             request.httpMethod = "POST"
@@ -263,10 +288,8 @@ struct TaskWatchPushRegistrationSynchronizer {
                 "action": "registerPushToken",
                 "deviceToken": value.deviceToken,
                 "platform": "watchos",
-                "environment": Bundle.main.object(
-                    forInfoDictionaryKey: "TasksWidgetAPNSEnvironment"
-                ) as? String ?? "development",
-                "topic": "garden.bath.tasks.watchkitapp.push-type.widgets",
+                "environment": environment,
+                "topic": Self.topic,
                 "enabled": value.enabled,
             ])
             let (data, response) = try await transport(request)
@@ -276,7 +299,12 @@ struct TaskWatchPushRegistrationSynchronizer {
                   ["registered", "disabled"].contains(body["outcome"] as? String) else {
                 return
             }
-            try store.markAccepted(value, credential: credential)
+            try store.markAccepted(
+                value,
+                credential: credential,
+                environment: environment,
+                topic: Self.topic
+            )
         } catch { return }
     }
 }

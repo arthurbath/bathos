@@ -1489,6 +1489,58 @@ final class TasksCompanionTests: XCTestCase {
         )
     }
 
+    func testWidgetPushRegistrationReconcilesStoredEnvironmentWithSignedBuild() async throws {
+        let directory = temporaryDirectory()
+        let registrationStore = TaskWidgetPushRegistrationStore(directoryURL: directory)
+        let credentialStore = TaskWidgetCredentialStore(directoryURL: directory)
+        let productionRegistration = TaskWidgetPushRegistration(
+            schemaVersion: TaskWidgetPushRegistration.schemaVersion,
+            deviceToken: String(repeating: "e", count: 64),
+            platform: "ios",
+            environment: "production",
+            topic: "garden.bath.tasks.push-type.widgets",
+            enabled: true
+        )
+        try registrationStore.storePending(productionRegistration)
+        let credential = makeWidgetCredential()
+        try credentialStore.store(credential)
+        var capturedBody: [String: Any] = [:]
+        let client = TaskWidgetPushRegistrationClient(
+            endpoint: URL(string: "https://example.test/tasks-widget-actions")!,
+            transport: { request in
+                capturedBody = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any]
+                )
+                return (
+                    try JSONSerialization.data(withJSONObject: ["outcome": "registered"]),
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                )
+            }
+        )
+        let synchronizer = TaskWidgetPushRegistrationSynchronizer(
+            registrationStore: registrationStore,
+            credentialStore: credentialStore,
+            client: client,
+            environment: "development"
+        )
+
+        await synchronizer.synchronize()
+
+        let developmentRegistration = productionRegistration.usingEnvironment("development")
+        XCTAssertEqual(capturedBody["environment"] as? String, "development")
+        XCTAssertTrue(
+            registrationStore.isAccepted(developmentRegistration, credential: credential)
+        )
+        XCTAssertFalse(
+            registrationStore.isAccepted(productionRegistration, credential: credential)
+        )
+    }
+
     func testWidgetPushDisablementUsesTheRegistrationAction() async throws {
         let registration = TaskWidgetPushRegistration(
             schemaVersion: TaskWidgetPushRegistration.schemaVersion,

@@ -819,6 +819,17 @@ struct TaskWidgetPushRegistration: Codable, Equatable {
     let topic: String
     let enabled: Bool
 
+    func usingEnvironment(_ environment: String) -> Self {
+        Self(
+            schemaVersion: schemaVersion,
+            deviceToken: deviceToken,
+            platform: platform,
+            environment: environment,
+            topic: topic,
+            enabled: enabled
+        )
+    }
+
     func validate() throws {
         let allowedPlatforms = ["ios", "macos"]
         let expectedTopic = "garden.bath.tasks.push-type.widgets"
@@ -962,6 +973,7 @@ struct TaskWidgetPushRegistrationSynchronizer {
     let registrationStore: TaskWidgetPushRegistrationStore
     let credentialStore: TaskWidgetCredentialStore
     let client: TaskWidgetPushRegistrationClient
+    let environment: String
 
     init?() {
         guard let registrationStore = TaskWidgetPushRegistrationStore(),
@@ -969,24 +981,39 @@ struct TaskWidgetPushRegistrationSynchronizer {
         self.registrationStore = registrationStore
         self.credentialStore = credentialStore
         client = TaskWidgetPushRegistrationClient()
+        environment = Self.configuredEnvironment()
     }
 
     init(
         registrationStore: TaskWidgetPushRegistrationStore,
         credentialStore: TaskWidgetCredentialStore,
-        client: TaskWidgetPushRegistrationClient
+        client: TaskWidgetPushRegistrationClient,
+        environment: String = "development"
     ) {
         self.registrationStore = registrationStore
         self.credentialStore = credentialStore
         self.client = client
+        self.environment = Self.normalizedEnvironment(environment)
     }
 
     func synchronize(now: Date = Date()) async {
-        guard let value = try? registrationStore.loadPending(),
-              let credential = try? credentialStore.load(now: now),
+        guard let pendingValue = try? registrationStore.loadPending(),
+              let credential = try? credentialStore.load(now: now) else { return }
+        let value = pendingValue.usingEnvironment(environment)
+        guard
               !registrationStore.isAccepted(value, credential: credential),
               await client.register(value, credential: credential) else { return }
         try? registrationStore.markAccepted(value, credential: credential)
+    }
+
+    private static func configuredEnvironment() -> String {
+        normalizedEnvironment(
+            Bundle.main.object(forInfoDictionaryKey: "TasksWidgetAPNSEnvironment") as? String
+        )
+    }
+
+    private static func normalizedEnvironment(_ value: String?) -> String {
+        value == "production" ? "production" : "development"
     }
 }
 
