@@ -12,6 +12,7 @@ import AppKit
 @MainActor
 final class TasksBrowserModel: NSObject, ObservableObject {
     typealias InPageNavigator = @MainActor (WKWebView, URL) -> Void
+    typealias NativeWidgetSnapshotRefresh = @MainActor () -> Void
 
     static let newTaskSummaryFocusMessageType = "focus-new-task-summary"
     static let webTextInputEngagedMessageType = "web-text-input-engaged"
@@ -117,6 +118,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     private let coldStartRecoveryDelayNanoseconds: UInt64
     private let contentReadyFallbackDelayNanoseconds: UInt64
     private let inPageNavigator: InPageNavigator
+    private let refreshNativeWidgetSnapshot: NativeWidgetSnapshotRefresh
     private var coldStartRecoveryTask: Task<Void, Never>?
     private var contentReadyFallbackTask: Task<Void, Never>?
     private var isPerformingColdStartRecovery = false
@@ -126,12 +128,15 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     init(
         coldStartRecoveryDelayNanoseconds: UInt64 = 400_000_000,
         contentReadyFallbackDelayNanoseconds: UInt64 = 2_000_000_000,
-        inPageNavigator: @escaping InPageNavigator = TasksBrowserModel.navigateInPage
+        inPageNavigator: @escaping InPageNavigator = TasksBrowserModel.navigateInPage,
+        refreshNativeWidgetSnapshot: @escaping NativeWidgetSnapshotRefresh =
+            TasksBrowserModel.performNativeWidgetSnapshotRefresh
     ) {
         self.coldStartRecoveryDelayNanoseconds = coldStartRecoveryDelayNanoseconds
         self.contentReadyFallbackDelayNanoseconds =
             contentReadyFallbackDelayNanoseconds
         self.inPageNavigator = inPageNavigator
+        self.refreshNativeWidgetSnapshot = refreshNativeWidgetSnapshot
     }
 
     private static func recordBridgeDiagnostic(_ message: String) {
@@ -212,6 +217,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     func notifyNativeAppBecameActive() {
         webView?.evaluateJavaScript(Self.nativeAppActiveJavaScript)
         TaskNativeNotificationCoordinator.shared.refreshAuthorization()
+        refreshNativeWidgetSnapshot()
     }
 
     func didStartLoading() {
@@ -328,6 +334,26 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         isLoading = false
         hasLoadedContent = true
         loadError = nil
+        refreshNativeWidgetSnapshot()
+    }
+
+    private static func performNativeWidgetSnapshotRefresh() {
+        Task {
+            guard let credentialStore = TaskWidgetCredentialStore(),
+                  let snapshotStore = TaskWidgetStore() else {
+                return
+            }
+            let snapshot = await TaskWidgetBackgroundRefresher(
+                credentialStore: credentialStore,
+                snapshotStore: snapshotStore,
+                client: TaskWidgetSnapshotClient()
+            ).refresh()
+            guard let snapshot else { return }
+            TaskNativeNotificationCoordinator.shared.synchronizeBadge(snapshot)
+            WidgetCenter.shared.reloadTimelines(
+                ofKind: TaskCompanionConstants.widgetKind
+            )
+        }
     }
 
     private func resetContentReadiness() {
@@ -551,7 +577,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             let changed: Bool
             if envelope.type == "clear" {
                 changed = try store.clear()
-                TaskNativeNotificationCoordinator.shared.clearScheduledReminders()
+                TaskNativeNotificationCoordinator.shared.clearNativeNotifications()
 #if os(iOS)
                 TaskWatchConnectivityCoordinator.shared.publish(nil)
 #endif
@@ -578,7 +604,9 @@ final class TasksBrowserModel: NSObject, ObservableObject {
                 }
 #endif
             } else if envelope.type == "snapshot" {
+                let snapshot = try TaskWidgetSnapshot.decodeAndValidate(data)
                 changed = try store.accept(data)
+                TaskNativeNotificationCoordinator.shared.synchronizeBadge(snapshot)
             } else if envelope.type == "credential" {
                 let message = try JSONDecoder().decode(TaskCredentialBridgeMessage.self, from: data)
                 let credential = TaskWidgetCredential(
@@ -823,6 +851,7 @@ final class TaskNativeNotificationCoordinator: NSObject,
     private let center = UNUserNotificationCenter.current()
     private weak var browserModel: TasksBrowserModel?
     private var latestProjection: TaskNativeReminderProjection?
+    private var latestSnapshot: TaskWidgetSnapshot?
 
     private override init() {
         super.init()
@@ -832,6 +861,11 @@ final class TaskNativeNotificationCoordinator: NSObject,
     func bind(to browserModel: TasksBrowserModel) {
         self.browserModel = browserModel
         center.delegate = self
+        if latestSnapshot == nil,
+           let store = TaskWidgetStore(),
+           let snapshot = try? store.load() {
+            latestSnapshot = snapshot
+        }
     }
 
     func refreshAuthorization() {
@@ -845,6 +879,7 @@ final class TaskNativeNotificationCoordinator: NSObject,
                     settings.authorizationStatus
                 )
                 self.browserModel?.sendNativeNotificationStatus(status)
+                self.applyBadge(using: settings)
                 if status == .enabled, let projection = self.latestProjection {
                     self.reconcile(projection)
                 }
@@ -862,17 +897,21 @@ final class TaskNativeNotificationCoordinator: NSObject,
                     settings.authorizationStatus
                 ) {
                 case .notDetermined:
+                    self.clearBadge()
                     self.requestAuthorization()
                 case .denied:
+                    self.clearBadge()
                     self.openSystemNotificationSettings()
                     self.browserModel?.sendNativeNotificationStatus(.denied)
                 case .enabled:
                     self.browserModel?.sendNativeNotificationStatus(.enabled)
+                    self.applyBadge(using: settings)
                     if let projection = self.latestProjection {
                         self.reconcile(projection)
                     }
                 case .checking, .unavailable, .error:
                     self.browserModel?.sendNativeNotificationStatus(.unavailable)
+                    self.clearBadge()
                 }
             }
         }
@@ -889,6 +928,7 @@ final class TaskNativeNotificationCoordinator: NSObject,
                     settings.authorizationStatus
                 )
                 self.browserModel?.sendNativeNotificationStatus(status)
+                self.applyBadge(using: settings)
                 if status == .enabled {
                     self.reconcile(projection)
                 } else {
@@ -898,13 +938,24 @@ final class TaskNativeNotificationCoordinator: NSObject,
         }
     }
 
-    func clearScheduledReminders() {
+    func synchronizeBadge(_ snapshot: TaskWidgetSnapshot) {
+        latestSnapshot = snapshot
+        center.getNotificationSettings { [weak self] settings in
+            Task { @MainActor in
+                self?.applyBadge(using: settings)
+            }
+        }
+    }
+
+    func clearNativeNotifications() {
         latestProjection = nil
+        latestSnapshot = nil
         removeAppOwnedRequests()
+        clearBadge()
     }
 
     private func requestAuthorization() {
-        center.requestAuthorization(options: [.alert, .sound]) { [weak self] _, error in
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] _, error in
             Task { @MainActor in
                 guard let self else {
                     return
@@ -968,6 +1019,22 @@ final class TaskNativeNotificationCoordinator: NSObject,
             }
             notificationCenter.removeDeliveredNotifications(withIdentifiers: identifiers)
         }
+    }
+
+    private func applyBadge(using settings: UNNotificationSettings) {
+        let count = TaskNativeBadgePolicy.count(
+            from: latestSnapshot,
+            notificationsEnabled:
+                TaskNativeNotificationAuthorizationState.resolve(
+                    settings.authorizationStatus
+                ) == .enabled,
+            badgesEnabled: settings.badgeSetting == .enabled
+        )
+        center.setBadgeCount(count, withCompletionHandler: nil)
+    }
+
+    private func clearBadge() {
+        center.setBadgeCount(0, withCompletionHandler: nil)
     }
 
     private func openSystemNotificationSettings() {

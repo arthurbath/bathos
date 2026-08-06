@@ -126,6 +126,35 @@ describe('taskNativeWidgetBridge', () => {
     expect(JSON.stringify(snapshot)).not.toContain('Other Owner');
   });
 
+  it('omits titleless legacy tasks without invalidating other widget lists', () => {
+    const snapshot = buildTaskNativeWidgetSnapshot({
+      ownerId,
+      planningDate: '2026-07-27',
+      quickFilter: 'all',
+      automaticListSorting: false,
+      areas: [],
+      tasks: [
+        taskTodoFixture({ id: taskA, owner_id: ownerId, title: 'Visible Task' }),
+        taskTodoFixture({
+          id: taskB,
+          owner_id: ownerId,
+          title: '   ',
+          lifecycle: 'completed',
+          completed_at: '2026-07-27T12:00:00.000Z',
+        }),
+      ],
+    });
+
+    expect(snapshot.lists.find(({ id }) => id === 'anytime')).toMatchObject({
+      totalCount: 1,
+      tasks: [expect.objectContaining({ id: taskA, summary: 'Visible Task' })],
+    });
+    expect(snapshot.lists.find(({ id }) => id === 'done')).toMatchObject({
+      totalCount: 0,
+      tasks: [],
+    });
+  });
+
   it('shows first-class recurrence prototypes separately from ordinary Upcoming tasks', () => {
     const recurrenceId = '40000000-0000-4000-8000-000000000001';
     const snapshot = buildTaskNativeWidgetSnapshot({
@@ -211,7 +240,7 @@ describe('taskNativeWidgetBridge', () => {
     ]);
   });
 
-  it('uses the dedicated mixed Upcoming rank within a shared visible date bucket', () => {
+  it('orders a broad Upcoming month by controlling date before mixed rank', () => {
     const recurrenceId = '40000000-0000-4000-8000-000000000099';
     const snapshot = buildTaskNativeWidgetSnapshot({
       ownerId,
@@ -223,11 +252,11 @@ describe('taskNativeWidgetBridge', () => {
       tasks: [
         taskTodoFixture({
           id: taskA, owner_id: ownerId, title: 'Last',
-          start_date: '2026-08-31', upcoming_order_key: 'a2',
+          start_date: '2026-08-31', upcoming_order_key: 'a0',
         }),
         taskTodoFixture({
           id: taskB, owner_id: ownerId, title: 'First',
-          start_date: '2026-08-15', upcoming_order_key: 'a0',
+          start_date: '2026-08-15', upcoming_order_key: 'a2',
         }),
       ],
       recurrencePrototypes: [{
@@ -368,12 +397,14 @@ describe('taskNativeWidgetBridge', () => {
           owner_id: ownerId,
           title: 'Waiting One',
           actionability: 'waiting',
+          today_section: 'inbox',
         }),
         taskTodoFixture({
           id: taskB,
           owner_id: ownerId,
           title: 'Waiting Two',
           actionability: 'waiting',
+          today_section: 'now',
           order_key: 'b0',
         }),
         taskTodoFixture({
@@ -381,6 +412,7 @@ describe('taskNativeWidgetBridge', () => {
           owner_id: ownerId,
           title: 'Ready',
           actionability: 'actionable',
+          today_section: 'next',
         }),
       ],
     });
@@ -390,6 +422,7 @@ describe('taskNativeWidgetBridge', () => {
       totalCount: 2,
       truncated: true,
     });
+    expect(snapshot.todayTotalCount).toBe(3);
     expect(anytime?.tasks).toHaveLength(1);
   });
 

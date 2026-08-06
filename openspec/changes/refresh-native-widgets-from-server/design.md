@@ -24,7 +24,7 @@ The feature spans Swift widget extensions, the existing `tasks-widget-actions` a
 
 ### Use WidgetKit push notifications as an accelerator, not the source of truth
 
-OS 26+ widget extensions attach a `WidgetPushHandler`. Token callbacks persist pending registration in the shared App Group and submit it through `tasks-widget-actions` when the widget credential is available. A push causes WidgetKit to request the ordinary timeline, which then fetches the same bounded snapshot used today.
+OS 26+ widget extensions attach a `WidgetPushHandler`. Token callbacks persist pending registration in the shared App Group and submit it through `tasks-widget-actions` when the widget credential is available. Each list-widget timeline request also reconciles `WidgetCenter.currentPushInfo` with the currently configured widgets so a delayed or missed callback cannot leave a healthy extension silently unregistered. A push causes WidgetKit to request the ordinary timeline, which then fetches the same bounded snapshot used today.
 
 Alternative considered: send task data in the notification. Rejected because it duplicates projection logic, expands private payload exposure, and bypasses the existing validation and cache path.
 
@@ -47,6 +47,14 @@ Alternative considered: invoke APNs directly from every mutation path. Rejected 
 The current 30-minute requested timeline policy and cache fallback remain unchanged. Widget extensions require OS 26 so their configurations can attach `WidgetPushHandler` without conditionally changing an opaque `WidgetConfiguration` type. The iOS, macOS, and watchOS host apps keep their earlier deployment targets. Installed OS 26+ widgets still receive scheduled timeline requests because Apple documents widget pushes as opportunistic and budgeted.
 
 Alternative considered: preserve one pre-26 widget extension and conditionally attach the push handler. Rejected because `WidgetBundleBuilder` cannot express the required alternate widget configurations and `WidgetConfiguration` has no public type erasure. A second legacy extension would duplicate the same widget kind and configuration surface on OS 26.
+
+### Reconcile the authoritative snapshot when the host is available
+
+The native host also requests the ordinary credential-backed snapshot when authenticated Tasks content becomes ready and whenever the app becomes active. A successful response atomically replaces any older App Group projection and asks WidgetKit to reload. This closes the gap where a transient foreground PowerSync projection or a withheld WidgetKit timeline can otherwise leave a valid but incomplete cache visible for hours.
+
+Upcoming snapshot builders order mixed ordinary tasks and recurrence prototypes by their actual controlling date first, then their Upcoming rank and stable identity. This preserves deliberate ordering among tasks that share a date while ensuring the bounded leading rows are the genuinely next Upcoming tasks rather than arbitrary rows from a broad month bucket.
+
+Snapshot builders omit legacy or malformed task records whose trimmed Summary is empty. Native validation continues rejecting an invalid payload, but one titleless retired record can no longer poison every otherwise valid list in the shared snapshot or preserve an obsolete cache indefinitely.
 
 ## Risks / Trade-offs
 

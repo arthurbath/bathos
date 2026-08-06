@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: macOS Native Reminder Notifications
-The macOS companion SHALL use UserNotifications to report authorization, request permission only after explicit user action, reconcile a bounded owner-scoped set of future reminder requests, and present a native Reminder notification whose body is the task Summary.
+The macOS companion SHALL use UserNotifications to report authorization, request permission only after explicit user action, reconcile a bounded owner-scoped set of future reminder requests, present a native Reminder notification whose body is the task Summary, and display the full Today-list task count as the Dock badge while notification and badge authorization are enabled.
 
 #### Scenario: Inspect macOS notification authorization
 - **WHEN** the native bridge becomes available or the app returns to the foreground
@@ -9,7 +9,15 @@ The macOS companion SHALL use UserNotifications to report authorization, request
 
 #### Scenario: Enable macOS notifications
 - **WHEN** authorization is not determined and the user activates Enable
-- **THEN** macOS presents its notification permission workflow and Tasks refreshes the reported status after the workflow completes
+- **THEN** macOS presents its alert, sound, and badge permission workflow and Tasks refreshes the reported status after the workflow completes
+
+#### Scenario: Synchronize the macOS Dock badge
+- **WHEN** an accepted foreground or background snapshot reports a Today-list total while notification and badge authorization are enabled
+- **THEN** the companion sets the Dock badge to that complete unfiltered Today-list total regardless of horizon, active quick filter, or bounded visible widget rows
+
+#### Scenario: Clear the macOS Dock badge
+- **WHEN** notification authorization or badge presentation is not enabled, the owner signs out, or the Today-list total is zero
+- **THEN** the companion clears the Dock badge
 
 #### Scenario: Route denied authorization to Settings
 - **WHEN** macOS authorization is denied and the user activates Enable

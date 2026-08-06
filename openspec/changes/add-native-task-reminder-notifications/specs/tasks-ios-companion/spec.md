@@ -42,7 +42,7 @@ The iOS companion SHALL house the authoritative BathOS Tasks web application wit
 ## ADDED Requirements
 
 ### Requirement: iOS Native Reminder Notifications
-The iOS companion SHALL use UserNotifications to report authorization, request permission only after explicit user action, reconcile a bounded owner-scoped set of future reminder requests, and present a native Reminder notification whose body is the task Summary.
+The iOS companion SHALL use UserNotifications to report authorization, request permission only after explicit user action, reconcile a bounded owner-scoped set of future reminder requests, present a native Reminder notification whose body is the task Summary, and display the full Today-list task count as the application badge while notification and badge authorization are enabled.
 
 #### Scenario: Inspect iOS notification authorization
 - **WHEN** the native bridge becomes available or the app returns to the foreground
@@ -50,7 +50,15 @@ The iOS companion SHALL use UserNotifications to report authorization, request p
 
 #### Scenario: Enable iOS notifications
 - **WHEN** authorization is not determined and the user activates Enable
-- **THEN** iOS presents its notification permission workflow and Tasks refreshes the reported status after the workflow completes
+- **THEN** iOS presents its alert, sound, and badge permission workflow and Tasks refreshes the reported status after the workflow completes
+
+#### Scenario: Synchronize the iOS app badge
+- **WHEN** an accepted foreground or background snapshot reports a Today-list total while notification and badge authorization are enabled
+- **THEN** the companion sets the app-icon badge to that complete unfiltered Today-list total regardless of horizon, active quick filter, or bounded visible widget rows
+
+#### Scenario: Clear the iOS app badge
+- **WHEN** notification authorization or badge presentation is not enabled, the owner signs out, or the Today-list total is zero
+- **THEN** the companion clears the app-icon badge
 
 #### Scenario: Route denied authorization to Settings
 - **WHEN** iOS authorization is denied and the user activates Enable

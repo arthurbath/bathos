@@ -7464,7 +7464,7 @@ describe('TasksShell', () => {
       expect(featuresIndex).toBeGreaterThanOrEqual(0);
       expect(areasIndex).toBeGreaterThan(featuresIndex);
       expect(syncIndex).toBeGreaterThan(areasIndex);
-      expect(settingsText).toContain('Notifications');
+      expect(settingsText).toContain('Notifications & Badges');
       expect(settingsText).toContain('Automatically Sort Anytime and Someday');
       expect(settingsText).toContain('Drag Handles');
       expect(settingsText).toContain('Keyboard Shortcuts');
@@ -11617,7 +11617,7 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/config');
 
     try {
-      expect(container.textContent).toContain('Notifications');
+      expect(container.textContent).toContain('Notifications & Badges');
       const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
         .find(({ textContent }) => textContent === 'Enable');
       await act(async () => button?.click());
@@ -11643,7 +11643,7 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/config');
 
     try {
-      expect(container.textContent).toContain('Notifications');
+      expect(container.textContent).toContain('Notifications & Badges');
       expect(container.textContent).not.toContain('provider endpoint');
 
       const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))

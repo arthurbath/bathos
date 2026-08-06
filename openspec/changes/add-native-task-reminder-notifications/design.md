@@ -12,6 +12,7 @@ The native apps must deliver reminders while suspended without creating a second
 - Show the current surface's status in Tasks Settings without adding an application-level on/off preference.
 - Reconcile a bounded set of future local notification requests from authoritative synchronized reminder instants.
 - Present the native banner while the companion is foregrounded and open the relevant task when the user activates a notification.
+- Keep the iOS Home Screen and macOS Dock badges synchronized to the full Today-list count while notification and badge authorization are enabled.
 - Preserve the in-app toast fallback unless the current surface has enabled browser or native notifications.
 
 **Non-Goals:**
@@ -45,11 +46,18 @@ The native host sends an initial authorization event after the WebKit bridge bin
 
 The shared notification coordinator is the `UNUserNotificationCenterDelegate` and opts into banner and sound presentation while Tasks is foregrounded. Activating a notification routes the existing WebKit host to the referenced task through the established native task route.
 
+### Derive badges from the authoritative Today snapshot
+
+The native hosts will request badge authorization alongside alert and sound authorization. Whenever the foreground web bridge or the credential-backed background refresh accepts a widget snapshot, the shared notification coordinator will set the application badge to the snapshot's dedicated unfiltered Today count. The badge deliberately ignores Today horizon, active quick filters, and the snapshot's bounded visible task rows. Older cached schema-version-2 snapshots remain readable and temporarily fall back to the Today list's existing `totalCount` until the next refresh. If notification authorization or badge presentation is disabled, the owner signs out, or the Today count reaches zero, the coordinator clears the badge.
+
 ## Risks / Trade-offs
 
 - [A native app has not synchronized recently] -> The app schedules all bounded future authoritative reminders whenever synchronized data is available and refreshes on each foreground activation; documentation states that current data must have reached the app.
 - [More than 60 future reminders exist] -> Schedule the earliest 60 and republish on subsequent data changes or foreground refreshes.
 - [Authorization changes in system settings while Tasks is open] -> Refresh authorization on app activation and on every explicit status request.
+- [The operating system separately disables app-icon badges] -> Respect the operating-system badge setting and clear the application badge while it is disabled.
+- [The widget snapshot contains fewer rows than the Today list] -> Use `totalCount`, never `tasks.count`, so truncation does not undercount the badge.
+- [A quick filter hides Today tasks in widget presentation] -> Carry a separate unfiltered Today count so presentation filters do not reduce the badge.
 - [A removed task leaves a local notification] -> Reconciliation removes every app-owned pending identifier absent from the latest owner projection.
 - [Local delivery is not a server delivery receipt] -> Preserve server reminder identity and do not claim provider acknowledgement from local scheduling.
 - [Legacy native builds do not understand the message] -> The web bridge remains version 2 and unsupported message types are ignored by older native hosts; the web surface continues using in-app fallback because those hosts never report enabled authorization.
@@ -61,7 +69,7 @@ The shared notification coordinator is the `UNUserNotificationCenterDelegate` an
 3. Install the signed companions. On first Enable, each OS requests authorization and the next reminder projection schedules local requests.
 4. Rollback is code-only: older companions ignore the new message and the web app falls back to in-app toasts because native capability remains disabled.
 
-No database migration or production data rewrite is required.
+One additive database-function migration publishes the unfiltered Today count through the existing credential-backed snapshot RPC. It does not rewrite production data or change authorization.
 
 ## Open Questions
 

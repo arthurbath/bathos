@@ -1,6 +1,7 @@
 import AppIntents
 import OSLog
 import SwiftUI
+import UserNotifications
 import WidgetKit
 
 private let taskWidgetLogger = Logger(
@@ -71,6 +72,9 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
     private func refreshedEntry(
         for configuration: TaskListSelectionIntent
     ) async -> TaskListWidgetEntry {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            await TaskListWidgetPushRegistrationCoordinator.reconcileCurrentToken()
+        }
         guard let credentialStore = TaskWidgetCredentialStore(),
               let snapshotStore = TaskWidgetStore() else {
             return entry(for: configuration)
@@ -80,6 +84,9 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
             snapshotStore: snapshotStore,
             client: TaskWidgetSnapshotClient()
         ).refresh()
+        if let snapshot {
+            TaskWidgetBadgeSynchronizer.synchronize(snapshot)
+        }
         let configuredValue = configuration.list ?? TaskWidgetListID.today.title
         let listID = TaskWidgetListID.widgetConfigurationValue(configuration.list)
         taskWidgetLogger.notice(
@@ -103,6 +110,35 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
             terminalState: nil,
             primaryLink: nil
         )
+    }
+}
+
+private enum TaskWidgetBadgeSynchronizer {
+    static func synchronize(_ snapshot: TaskWidgetSnapshot) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            let count = TaskNativeBadgePolicy.count(
+                from: snapshot,
+                notificationsEnabled: notificationsEnabled(settings.authorizationStatus),
+                badgesEnabled: settings.badgeSetting == .enabled
+            )
+            center.setBadgeCount(count, withCompletionHandler: nil)
+        }
+    }
+
+    private static func notificationsEnabled(_ status: UNAuthorizationStatus) -> Bool {
+        switch status {
+        case .authorized, .provisional:
+            return true
+#if os(iOS)
+        case .ephemeral:
+            return true
+#endif
+        case .notDetermined, .denied:
+            return false
+        @unknown default:
+            return false
+        }
     }
 }
 
@@ -131,11 +167,38 @@ struct TaskListWidgetPushHandler: WidgetPushHandler {
     init() {}
 
     func pushTokenDidChange(_ pushInfo: WidgetPushInfo, widgets: [WidgetInfo]) {
+        TaskListWidgetPushRegistrationCoordinator.persist(
+            pushInfo,
+            widgets: widgets
+        )
+    }
+}
+
+@available(iOS 26.0, macOS 26.0, *)
+private enum TaskListWidgetPushRegistrationCoordinator {
+    static func reconcileCurrentToken() async {
+        guard let pushInfo = await WidgetCenter.shared.currentPushInfo else {
+            taskWidgetLogger.notice("WidgetKit has not supplied current push information")
+            return
+        }
+
+        do {
+            let widgets = try await WidgetCenter.shared.currentConfigurations()
+            persist(pushInfo, widgets: widgets)
+        } catch {
+            taskWidgetLogger.error(
+                "Could not read current widget configurations: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    static func persist(_ pushInfo: WidgetPushInfo, widgets: [WidgetInfo]) {
 #if os(macOS)
         let platform = "macos"
 #else
         let platform = "ios"
 #endif
+        let enabled = widgets.contains { $0.kind == TaskCompanionConstants.widgetKind }
         let registration = TaskWidgetPushRegistration(
             schemaVersion: TaskWidgetPushRegistration.schemaVersion,
             deviceToken: pushInfo.token.map { String(format: "%02x", $0) }.joined(),
@@ -144,10 +207,24 @@ struct TaskListWidgetPushHandler: WidgetPushHandler {
                 forInfoDictionaryKey: "TasksWidgetAPNSEnvironment"
             ) as? String ?? "development",
             topic: "garden.bath.tasks.push-type.widgets",
-            enabled: !widgets.isEmpty
+            enabled: enabled
         )
-        try? TaskWidgetPushRegistrationStore()?.storePending(registration)
-        Task { await TaskWidgetPushRegistrationSynchronizer()?.synchronize() }
+        guard let registrationStore = TaskWidgetPushRegistrationStore() else {
+            taskWidgetLogger.error("Could not open the widget push registration store")
+            return
+        }
+
+        do {
+            try registrationStore.storePending(registration)
+            taskWidgetLogger.notice(
+                "Stored a \(platform, privacy: .public) widget push registration; enabled=\(enabled, privacy: .public)"
+            )
+            Task { await TaskWidgetPushRegistrationSynchronizer()?.synchronize() }
+        } catch {
+            taskWidgetLogger.error(
+                "Could not persist widget push registration: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 }
 

@@ -7,10 +7,7 @@ import {
   deriveTaskViewTasks,
   type TaskListView,
 } from '@/modules/tasks/hooks/useTaskList';
-import {
-  getTaskUpcomingDate,
-  getTaskUpcomingGroup,
-} from '@/modules/tasks/domain/taskUpcoming';
+import { getTaskUpcomingDate } from '@/modules/tasks/domain/taskUpcoming';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import type {
   TaskActionability,
@@ -83,6 +80,7 @@ export type TaskNativeWidgetSnapshot = {
   ownerId: string;
   generatedAt: string;
   planningDate: string;
+  todayTotalCount: number;
   lists: TaskNativeWidgetList[];
 };
 
@@ -247,6 +245,13 @@ export function buildTaskNativeWidgetSnapshot({
   const safeLimit = Number.isSafeInteger(listLimit)
     ? Math.max(1, Math.min(listLimit, TASK_NATIVE_WIDGET_LIST_LIMIT))
     : TASK_NATIVE_WIDGET_LIST_LIMIT;
+  const eligibleTasks = tasks.filter((task) => task.title.trim().length > 0);
+  const todayTotalCount = deriveTaskViewTasks(
+    eligibleTasks,
+    ownerId,
+    'today',
+    planningDate,
+  ).length;
 
   return {
     type: 'snapshot',
@@ -254,9 +259,10 @@ export function buildTaskNativeWidgetSnapshot({
     ownerId,
     generatedAt,
     planningDate,
+    todayTotalCount,
     lists: taskNativeWidgetListIds.map((id) => {
       const projected = deriveTaskViewTasks(
-        tasks,
+        eligibleTasks,
         ownerId,
         id satisfies TaskListView,
         planningDate,
@@ -281,13 +287,14 @@ export function buildTaskNativeWidgetSnapshot({
           task.upcoming_order_key ?? task.order_key,
         ]));
         widgetTasks.push(...recurrencePrototypes
-          .filter(({ revision }) => (
-            quickFilter === 'all'
-            || taskMatchesQuickFilter(
-              revision.prototype_snapshot.root.actionability,
-              quickFilter,
-            )
-          ))
+          .filter(({ revision }) => {
+            const root = revision.prototype_snapshot.root;
+            return root.title.trim().length > 0
+              && (
+                quickFilter === 'all'
+                || taskMatchesQuickFilter(root.actionability, quickFilter)
+              );
+          })
           .map((prototype) => {
             upcomingOrderKeys.set(
               prototype.definition.id,
@@ -297,13 +304,9 @@ export function buildTaskNativeWidgetSnapshot({
             return toTaskNativeWidgetRecurrencePrototype(prototype);
           }));
         widgetTasks.sort((left, right) => (
-          getTaskUpcomingGroup(
-            left.upcomingDate ?? planningDate,
-            planningDate,
-          ).date.localeCompare(getTaskUpcomingGroup(
+          (left.upcomingDate ?? planningDate).localeCompare(
             right.upcomingDate ?? planningDate,
-            planningDate,
-          ).date)
+          )
           || (upcomingOrderKeys.get(left.id) ?? '').localeCompare(
             upcomingOrderKeys.get(right.id) ?? '',
           )

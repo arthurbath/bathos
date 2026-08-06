@@ -23,6 +23,46 @@ final class TasksMacTests: XCTestCase {
         )
     }
 
+    func testNativeBadgeUsesTheFullTodayTotalOnlyWhenAuthorized() {
+        var snapshot = makeSnapshot(taskID: UUID())
+        snapshot.todayTotalCount = 42
+        snapshot.lists = snapshot.lists.map { list in
+            guard list.id == .today else { return list }
+            return TaskWidgetList(
+                id: list.id,
+                title: list.title,
+                totalCount: 27,
+                truncated: true,
+                tasks: list.tasks
+            )
+        }
+
+        XCTAssertEqual(
+            TaskNativeBadgePolicy.count(
+                from: snapshot,
+                notificationsEnabled: true,
+                badgesEnabled: true
+            ),
+            42
+        )
+        XCTAssertEqual(
+            TaskNativeBadgePolicy.count(
+                from: snapshot,
+                notificationsEnabled: false,
+                badgesEnabled: true
+            ),
+            0
+        )
+        XCTAssertEqual(
+            TaskNativeBadgePolicy.count(
+                from: snapshot,
+                notificationsEnabled: true,
+                badgesEnabled: false
+            ),
+            0
+        )
+    }
+
     func testNativeReminderProjectionKeepsTheEarliestFutureItems() throws {
         let now = try XCTUnwrap(
             ISO8601DateFormatter().date(from: "2026-08-06T16:00:00Z")

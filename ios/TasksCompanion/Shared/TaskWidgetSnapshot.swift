@@ -254,6 +254,7 @@ struct TaskWidgetSnapshot: Codable, Equatable {
     let ownerId: UUID
     var generatedAt: String
     let planningDate: String
+    var todayTotalCount: Int?
     var lists: [TaskWidgetList]
 
     static func decodeAndValidate(_ data: Data) throws -> TaskWidgetSnapshot {
@@ -274,6 +275,9 @@ struct TaskWidgetSnapshot: Codable, Equatable {
         }
         guard Self.isCalendarDate(planningDate) else {
             throw TaskWidgetSnapshotError.invalidPlanningDate
+        }
+        guard todayTotalCount.map({ $0 >= 0 }) ?? true else {
+            throw TaskWidgetSnapshotError.invalidLists
         }
         guard lists.count == TaskWidgetListID.allCases.count,
               Set(lists.map(\.id)) == Set(TaskWidgetListID.allCases) else {
@@ -417,6 +421,24 @@ struct TaskWidgetSnapshot: Codable, Equatable {
         "canceled",
         "deleted",
     ]
+}
+
+enum TaskNativeBadgePolicy {
+    static func count(
+        from snapshot: TaskWidgetSnapshot?,
+        notificationsEnabled: Bool,
+        badgesEnabled: Bool
+    ) -> Int {
+        guard notificationsEnabled, badgesEnabled else {
+            return 0
+        }
+        return max(
+            0,
+            snapshot?.todayTotalCount
+                ?? snapshot?.list(.today)?.totalCount
+                ?? 0
+        )
+    }
 }
 
 struct TaskWidgetStore {

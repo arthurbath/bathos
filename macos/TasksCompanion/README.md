@@ -61,6 +61,7 @@ xcodebuild \
   -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath /tmp/BathOSTasksMacSignedDerivedData \
   -allowProvisioningUpdates \
+  TASKS_WIDGET_APNS_ENVIRONMENT=development \
   build
 
 APP='/tmp/BathOSTasksMacSignedDerivedData/Build/Products/Release/Tasks.app'
@@ -73,6 +74,12 @@ codesign -dvvv -r- "$WIDGET"
 codesign -d --entitlements :- "$APP"
 codesign -d --entitlements :- "$WIDGET"
 ```
+
+Direct personal installations use an Apple Development provisioning profile,
+so their widget registration must target the APNs sandbox. Keep the explicit
+`TASKS_WIDGET_APNS_ENVIRONMENT=development` override above even though this is
+an optimized Release build. A distribution/archive build must instead use the
+production environment and a matching distribution profile.
 
 Only after all checks pass, stage and verify the app at the system application
 location before replacing the current installation:
@@ -106,8 +113,9 @@ LaunchServices database or unregister unrelated applications.
 
 ## Native Behavior
 
-- Tasks Settings reports macOS notification authorization and offers **Enable** to request permission or open Notification settings. macOS Settings remains the sole on/off authority.
+- Tasks Settings reports macOS notification authorization under **Notifications & Badges** and offers **Enable** to request alert, sound, and badge permission or open Notification settings. macOS Settings remains the sole on/off authority.
 - The app reconciles the earliest 60 active future reminder instants received from the trusted web bridge into local UserNotifications. Native reminders use the title `Reminder`, the task Summary as body, a banner and sound in the foreground, and the existing task route when activated. When authorization is not enabled, an open Tasks surface retains the in-app toast fallback.
+- While notification and badge authorization are enabled, the Dock badge uses the Today list's aggregate unfiltered task count across all horizons. Foreground and credential-backed background snapshots both refresh it, quick filters and bounded widget rows do not constrain it, and sign-out, zero tasks, or disabled authorization clears it.
 - The hosted Tasks web view accepts AppKit's first mouse event, so clicking or
   beginning a drag over a visible inactive Tasks window activates the window
   and delivers that same pointer sequence to the intended web interaction.

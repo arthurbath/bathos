@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(26);
+SELECT plan(30);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -141,6 +141,14 @@ INSERT INTO public.tasks_todos (
     '9c000000-0000-4000-8000-000000000010', 'a9',
     'open', 'present', NULL, NULL, NULL,
     '9c000000-0000-4000-8000-000000000037'
+  ),
+  (
+    '9c000000-0000-4000-8000-000000000038',
+    '9c000000-0000-4000-8000-000000000001',
+    '   ', '', 'anytime', NULL,
+    NULL, NULL, NULL, 'actionable', NULL, 'a7',
+    'completed', 'present', clock_timestamp(), NULL, NULL,
+    '9c000000-0000-4000-8000-000000000039'
   );
 
 SELECT is(
@@ -232,6 +240,52 @@ SELECT is(
   'uses future start before deadline and orders Upcoming by date buckets'
 );
 
+INSERT INTO public.tasks_todos (
+  id, owner_id, title, destination, start_date, primary_link, actionability,
+  order_key, upcoming_order_key, client_mutation_id
+) VALUES
+  (
+    '9c000000-0000-4000-8000-000000000042',
+    '9c000000-0000-4000-8000-000000000001',
+    'Earlier monthly task', 'anytime', CURRENT_DATE + 10,
+    'https://usgbc.atlassian.net/browse/PF-613', 'actionable',
+    'z9', 'z9', '9c000000-0000-4000-8000-000000000043'
+  ),
+  (
+    '9c000000-0000-4000-8000-000000000044',
+    '9c000000-0000-4000-8000-000000000001',
+    'Later monthly task', 'anytime', CURRENT_DATE + 20, NULL, 'actionable',
+    'a0', 'a0', '9c000000-0000-4000-8000-000000000045'
+  );
+
+SELECT is(
+  (
+    SELECT string_agg(task ->> 'summary', ',' ORDER BY ordinal)
+    FROM jsonb_array_elements(
+      public.tasks_read_widget_snapshot(
+        'twc_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC'
+      ) #> '{lists,1,tasks}'
+    ) WITH ORDINALITY AS item(task, ordinal)
+    WHERE task ->> 'summary' IN ('Earlier monthly task', 'Later monthly task')
+  ),
+  'Earlier monthly task,Later monthly task',
+  'orders broad-month Upcoming rows by controlling date before rank'
+);
+
+SELECT is(
+  (
+    SELECT task #>> '{primaryLink,kind}'
+    FROM jsonb_array_elements(
+      public.tasks_read_widget_snapshot(
+        'twc_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC'
+      ) #> '{lists,1,tasks}'
+    ) AS task
+    WHERE task ->> 'summary' = 'Earlier monthly task'
+  ),
+  'link',
+  'keeps Jira presentation semantics out of the native link-kind wire contract'
+);
+
 SELECT is(
   (SELECT value #>> '{lists,1,tasks,0,upcomingDate}' FROM widget_snapshot),
   (CURRENT_DATE + 2)::text,
@@ -242,6 +296,18 @@ SELECT is(
   (SELECT value #>> '{lists,1,tasks,0,isRecurrenceProjection}' FROM widget_snapshot),
   'false',
   'identifies an ordinary Upcoming task as completable'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::text
+    FROM widget_snapshot,
+    jsonb_array_elements(value -> 'lists') AS list,
+    jsonb_array_elements(list -> 'tasks') AS task
+    WHERE btrim(task ->> 'summary') = ''
+  ),
+  '0',
+  'omits a titleless legacy task without invalidating the shared snapshot'
 );
 
 SELECT is(
@@ -321,6 +387,16 @@ SELECT is(
   ),
   '1',
   'honors the durable quick filter during background reads'
+);
+
+SELECT is(
+  (
+    public.tasks_read_widget_snapshot(
+      'twc_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC'
+    ) #>> '{todayTotalCount}'
+  ),
+  '2',
+  'keeps the native badge Today count independent of the widget quick filter'
 );
 
 UPDATE public.tasks_user_settings

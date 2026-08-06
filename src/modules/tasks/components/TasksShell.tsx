@@ -5474,7 +5474,7 @@ function TaskConfigView({
         </CardHeader>
         <CardContent className="divide-y divide-border p-0">
           <TaskFeatureRow
-            title="Notifications"
+            title="Notifications & Badges"
             description={nativePlatform
               ? 'Receive task reminders through this device when notifications are enabled in system settings.'
               : inAppReminderStatus === 'delayed'

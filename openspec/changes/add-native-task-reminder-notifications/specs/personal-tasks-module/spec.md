@@ -49,7 +49,7 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 
 #### Scenario: Inspect notification capability without an application toggle
 - **WHEN** the user opens Tasks Settings on a browser or native companion
-- **THEN** Notifications reports whether that surface has notifications enabled and does not present an application-owned off switch
+- **THEN** Notifications & Badges reports whether that surface has notifications enabled and does not present an application-owned off switch
 
 #### Scenario: Offer a browser permission workflow
 - **WHEN** browser notifications are supported but not yet enabled

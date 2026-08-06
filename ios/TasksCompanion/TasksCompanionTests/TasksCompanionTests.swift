@@ -20,6 +20,46 @@ final class TasksCompanionTests: XCTestCase {
         )
     }
 
+    func testNativeBadgeUsesTheFullTodayTotalOnlyWhenAuthorized() {
+        var snapshot = makeSnapshot(ownerID: UUID())
+        snapshot.todayTotalCount = 42
+        snapshot.lists = snapshot.lists.map { list in
+            guard list.id == .today else { return list }
+            return TaskWidgetList(
+                id: list.id,
+                title: list.title,
+                totalCount: 27,
+                truncated: true,
+                tasks: list.tasks
+            )
+        }
+
+        XCTAssertEqual(
+            TaskNativeBadgePolicy.count(
+                from: snapshot,
+                notificationsEnabled: true,
+                badgesEnabled: true
+            ),
+            42
+        )
+        XCTAssertEqual(
+            TaskNativeBadgePolicy.count(
+                from: snapshot,
+                notificationsEnabled: false,
+                badgesEnabled: true
+            ),
+            0
+        )
+        XCTAssertEqual(
+            TaskNativeBadgePolicy.count(
+                from: snapshot,
+                notificationsEnabled: true,
+                badgesEnabled: false
+            ),
+            0
+        )
+    }
+
     func testNativeReminderProjectionKeepsTheEarliestFutureItems() throws {
         let now = try XCTUnwrap(
             ISO8601DateFormatter().date(from: "2026-08-06T16:00:00Z")
@@ -1206,7 +1246,7 @@ final class TasksCompanionTests: XCTestCase {
 
     @MainActor
     func testFinishedContentIgnoresAStaleFailureAndRecoversAfterTermination() {
-        let model = TasksBrowserModel()
+        let model = TasksBrowserModel(refreshNativeWidgetSnapshot: {})
         model.didFinishLoading()
         XCTAssertFalse(model.hasLoadedContent)
         model.didBecomeContentReady()
@@ -1227,7 +1267,8 @@ final class TasksCompanionTests: XCTestCase {
         let model = TasksBrowserModel(
             inPageNavigator: { _, url in
                 navigatedURL = url
-            }
+            },
+            refreshNativeWidgetSnapshot: {}
         )
         let webView = WKWebView()
         model.webView = webView
@@ -1241,6 +1282,21 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertEqual(model.requestedURL, route.webURL)
         XCTAssertTrue(model.hasLoadedContent)
         XCTAssertFalse(model.isLoading)
+    }
+
+    @MainActor
+    func testReadyAndActiveNativeHostReconcileTheAuthoritativeWidgetSnapshot() {
+        var refreshCount = 0
+        let model = TasksBrowserModel(
+            refreshNativeWidgetSnapshot: { refreshCount += 1 }
+        )
+
+        model.didFinishLoading()
+        model.didBecomeContentReady()
+        XCTAssertEqual(refreshCount, 1)
+
+        model.notifyNativeAppBecameActive()
+        XCTAssertEqual(refreshCount, 2)
     }
 
     @MainActor

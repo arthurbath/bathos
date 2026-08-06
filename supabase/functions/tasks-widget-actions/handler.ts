@@ -510,6 +510,9 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
         || snapshot.schemaVersion !== 2
         || typeof snapshot.ownerId !== 'string'
         || !uuidPattern.test(snapshot.ownerId)
+        || typeof snapshot.todayTotalCount !== 'number'
+        || !Number.isInteger(snapshot.todayTotalCount)
+        || snapshot.todayTotalCount < 0
         || !Array.isArray(snapshot.lists)
         || snapshot.lists.length !== 5
       ) {

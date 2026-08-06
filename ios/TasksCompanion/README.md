@@ -33,9 +33,11 @@ Do not replace the checked-in App Group identifier or create a second shared con
 
 ## Native Reminders
 
-Tasks Settings reports the iPhone's current notification authorization. **Enable** invokes the iOS permission workflow when authorization has not yet been decided and opens the app's notification settings after authorization has been denied. There is no second Tasks-owned on/off preference; iOS Settings is authoritative.
+Tasks Settings reports the iPhone's current notification authorization under **Notifications & Badges**. **Enable** invokes the iOS alert, sound, and badge permission workflow when authorization has not yet been decided and opens the app's notification settings after authorization has been denied. There is no second Tasks-owned on/off preference; iOS Settings is authoritative.
 
 The trusted Tasks web surface publishes a bounded projection of active reminder IDs, task IDs, Summaries, and already-resolved reminder instants. The companion schedules the earliest 60 future values as local UserNotifications, removes obsolete app-owned requests after task changes, shows the native banner and sound even while Tasks is foregrounded, and opens the referenced task when the notification is activated. Swift does not calculate recurrence, Start, or reminder dates. If iOS authorization is not enabled, an open Tasks surface continues using the persistent in-app reminder toast.
+
+While notification and badge authorization are enabled, the app icon badge uses the Today list's aggregate unfiltered task count across all horizons. It is refreshed from both foreground bridge snapshots and credential-backed native background refreshes, ignores active quick filters and bounded visible rows, and clears on sign-out, zero tasks, or loss of operating-system authorization.
 
 ## Apple Watch
 

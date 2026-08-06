@@ -51,3 +51,21 @@ The system SHALL treat server-triggered WidgetKit updates as opportunistic accel
 #### Scenario: Push is unavailable or suppressed
 - **WHEN** the widget has no push registration, is offline, or WidgetKit suppresses a notification
 - **THEN** later system-budgeted timelines continue refreshing the widget through the existing snapshot path
+
+#### Scenario: Reconcile while the native host is available
+- **WHEN** authenticated Tasks content becomes ready or a native Tasks app becomes active with valid widget authority
+- **THEN** the host requests the ordinary credential-backed snapshot, atomically replaces an older valid cache after a successful response, and asks WidgetKit to reload
+
+#### Scenario: Bound Upcoming to the next tasks
+- **WHEN** the owner has more Upcoming tasks than the widget can display across one or more broad month or year buckets
+- **THEN** the projection orders mixed ordinary tasks and recurrence prototypes by controlling date, Upcoming rank, and stable identity before selecting the bounded leading rows
+
+#### Scenario: Ignore a titleless legacy task
+- **WHEN** an owner's task data contains a legacy or malformed record whose trimmed Summary is empty
+- **THEN** server and foreground snapshot builders omit that record and preserve all otherwise valid list projections without weakening native payload validation
+
+#### Scenario: Preserve the bounded Primary Link wire vocabulary
+- **WHEN** a projected task has an approved Jira or Obsidian Primary Link
+- **THEN** the server serializes its Primary Link `kind` as `link`
+- **AND** the approved destination href remains available for native protocol-specific icon selection
+- **AND** the server never emits presentation-only `jira` or `obsidian` values in the native wire `kind`

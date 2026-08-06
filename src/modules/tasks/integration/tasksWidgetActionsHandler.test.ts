@@ -38,6 +38,7 @@ function setup(overrides?: {
         ownerId: '9b000000-0000-4000-8000-000000000001',
         generatedAt: '2026-07-28T20:00:00.000Z',
         planningDate: '2026-07-28',
+        todayTotalCount: 4,
         lists: [
           { id: 'today', title: 'Today', totalCount: 1, truncated: false, tasks: [] },
           { id: 'upcoming', title: 'Upcoming', totalCount: 0, truncated: false, tasks: [] },
@@ -237,6 +238,7 @@ describe('tasks widget action handler', () => {
       type: 'snapshot',
       schemaVersion: 2,
       ownerId: '9b000000-0000-4000-8000-000000000001',
+      todayTotalCount: 4,
     });
     expect(rpc.snapshot).toHaveBeenCalledWith(`twc_${'A'.repeat(43)}`);
     expect(rpc.complete).not.toHaveBeenCalled();
