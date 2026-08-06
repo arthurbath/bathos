@@ -92,6 +92,23 @@ describe('task history', () => {
     expect(createTaskUndoPatch(waiting, event)).toMatchObject({ actionability: 'actionable' });
   });
 
+  it('preserves blank summaries in authoritative history snapshots', () => {
+    const blankSummaryTask = { ...currentTask, title: '' };
+    const before = {
+      ...snapshotTask(blankSummaryTask),
+      lifecycle: 'open' as const,
+      completed_at: null,
+    };
+    const event = parseTaskHistoryEvent(historyRow({
+      before_state: JSON.stringify(before),
+      after_state: JSON.stringify(snapshotTask(blankSummaryTask)),
+    }));
+
+    expect(event.before_state?.title).toBe('');
+    expect(event.after_state.title).toBe('');
+    expect(createTaskUndoPatch(blankSummaryTask, event)).toMatchObject({ title: '' });
+  });
+
   it('accepts widget history and normalizes retained template-era provenance', () => {
     const templateSnapshot = {
       ...snapshotTask(currentTask),

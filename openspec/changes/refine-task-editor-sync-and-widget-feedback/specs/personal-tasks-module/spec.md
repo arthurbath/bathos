@@ -52,6 +52,10 @@ Tasks SHALL allow a blank Summary when other meaningful task content exists and 
 - **WHEN** a user clears Summary while at least one checklist item contains non-whitespace text and closes the editor
 - **THEN** Tasks persists the blank Summary and retains the task without restoring the former Summary
 
+#### Scenario: Traverse history containing a blank Summary
+- **WHEN** the synchronized history contains an authoritative before-state or after-state whose Summary is an empty string
+- **THEN** Tasks reconstructs the history event, preserves the blank Summary exactly, and keeps undo and redo available without reporting a malformed-history error
+
 #### Scenario: Trash a task with no meaningful content
 - **WHEN** an existing task closes with blank Summary, blank Notes, no Primary Link, and no nonblank checklist items
 - **THEN** Tasks moves the task to Done with the deleted disposition through the ordinary recoverable-delete lifecycle

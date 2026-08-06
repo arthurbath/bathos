@@ -283,7 +283,7 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     : requireEnum(legacySourceKind, taskSourceKinds, 'source kind') as TaskSourceKind;
 
   return {
-    title: requireText(parsed.title, 'title'),
+    title: requireText(parsed.title, 'title', true),
     actionability: parsed.actionability === undefined
       ? 'actionable'
       : requireEnum(

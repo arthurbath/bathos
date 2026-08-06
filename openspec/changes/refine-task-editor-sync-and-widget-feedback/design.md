@@ -34,6 +34,8 @@ Alternative considered: CSS-only reordering. Rejected because it would leave DOM
 
 Summary will no longer be the sole persistence gate. A task is meaningful when trimmed Summary, Notes, Primary Link, or any nonblank checklist item exists. An existing task may persist a blank Summary when another meaningful field exists. Closing an existing task with no meaningful content will use the ordinary recoverable-delete lifecycle so undo, Done history, and synchronization remain coherent.
 
+The synchronized undo-history decoder will apply the same rule to authoritative before/after snapshots. A blank Summary is a valid string state, so history traversal must preserve it instead of rejecting the complete local history projection. Other required snapshot fields remain strictly validated.
+
 Alternative considered: retain the old Summary on blank input. Rejected because it contradicts the user's visible edit and creates stale-data restoration.
 
 ### Anchor open rows by identity until close
@@ -56,7 +58,7 @@ Alternative considered: separate iOS and macOS empty-state implementations. Reje
 
 ## Risks / Trade-offs
 
-- [Blank Summary tasks expose assumptions that Summary is always nonempty] -> Centralize the meaningful-content predicate and add repository/editor tests for each qualifying field and empty-close deletion.
+- [Blank Summary tasks expose assumptions that Summary is always nonempty] -> Centralize the meaningful-content predicate, accept blank Summary strings in authoritative history snapshots, and add repository/editor/history tests for each qualifying field and empty-close deletion.
 - [Open-row anchoring can hide accepted membership changes too long] -> Release the anchor only through the ordinary close path after pending autosave is flushed, then test Today-to-Anytime reconciliation.
 - [Native lifecycle recovery can duplicate subscriptions] -> Make subscription ownership explicit, tear it down on owner/session replacement, and assert one effective listener across foreground transitions.
 - [Widget symbol availability varies by OS] -> Use availability-safe native symbol lookup with a conservative system-symbol fallback.

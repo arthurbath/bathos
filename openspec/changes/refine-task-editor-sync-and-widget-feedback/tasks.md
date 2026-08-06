@@ -10,6 +10,7 @@
 - [x] 2.2 Persist blank Summary values when other meaningful content exists and recoverably delete fully empty existing tasks on close
 - [x] 2.3 Keep an open Today task anchored after clearing Start and reconcile it to Anytime only after close
 - [x] 2.4 Add focused tests for blank-summary persistence, empty-close deletion, and Today-to-Anytime close reconciliation
+- [x] 2.5 Preserve valid blank Summary strings while decoding authoritative task-history snapshots and add a regression test
 
 ## 3. Synchronization and List Metadata
 
