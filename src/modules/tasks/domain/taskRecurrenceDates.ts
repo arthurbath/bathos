@@ -257,7 +257,7 @@ function monthlyDateForMonth(
     return ordinalDayTypeInMonth(
       month,
       config.ordinal ?? 1,
-      config.day_type ?? 'weekday',
+      config.day_type === 'weekend_day' ? 'weekend_day' : 'weekday',
     );
   }
   return setClampedMonthDay(

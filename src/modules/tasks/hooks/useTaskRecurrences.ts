@@ -261,7 +261,7 @@ export function useTaskRecurrences(ownerId: string) {
       }));
     }
     clearEvaluationFailure(result.definition.id);
-    if (input.ruleMode === 'calendar' && input.scheduleDate <= planningDate) {
+    if (input.ruleMode === 'calendar' && input.nextStartDate <= planningDate) {
       await runEvaluation(result.definition.id).catch(() => undefined);
     }
     return result;
