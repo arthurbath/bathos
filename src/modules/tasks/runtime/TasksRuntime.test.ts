@@ -2,15 +2,33 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PowerSyncDatabase } from '@powersync/web';
 
 import {
+  createAutomaticCorruptTasksCacheReplacement,
   createAutomaticTasksRuntimeReplacement,
+  createTasksCorruptCacheRecoveryController,
   createTasksRuntimeRecoveryController,
   isClosedTasksRuntimeClientError,
   isCurrentTasksRuntimeGeneration,
+  isTasksDatabaseCorruptionError,
   shouldAutomaticallyRecoverTasksRuntime,
   TASKS_CLOSED_CLIENT_ERROR_MESSAGE,
   TASKS_RUNTIME_ERROR_MESSAGE,
   waitForTasksRuntimeInitialization,
 } from './taskRuntimeRecovery';
+
+function createCorruptCacheDatabase({
+  queueCount = 0,
+  queueError,
+}: {
+  queueCount?: number;
+  queueError?: Error;
+} = {}) {
+  return {
+    close: vi.fn().mockResolvedValue(undefined),
+    getUploadQueueStats: queueError
+      ? vi.fn().mockRejectedValue(queueError)
+      : vi.fn().mockResolvedValue({ count: queueCount }),
+  } as unknown as PowerSyncDatabase;
+}
 
 describe('Tasks runtime initialization watchdog', () => {
   afterEach(() => {
@@ -133,5 +151,108 @@ describe('Tasks runtime closed-client recovery', () => {
     expect(TASKS_RUNTIME_ERROR_MESSAGE).not.toContain(
       TASKS_CLOSED_CLIENT_ERROR_MESSAGE,
     );
+  });
+});
+
+describe('Tasks corrupt synchronized-cache recovery', () => {
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('classifies only established SQLite corruption signatures and causal chains', () => {
+    expect(isTasksDatabaseCorruptionError(
+      new Error('database disk image is malformed'),
+    )).toBe(true);
+    expect(isTasksDatabaseCorruptionError({ code: 'SQLITE_CORRUPT' })).toBe(true);
+    expect(isTasksDatabaseCorruptionError({ code: 11 })).toBe(true);
+    expect(isTasksDatabaseCorruptionError(
+      new Error('PowerSync download failed', {
+        cause: { message: 'SQLITE_CORRUPT: malformed page graph' },
+      }),
+    )).toBe(true);
+    expect(isTasksDatabaseCorruptionError(new Error('Network unavailable'))).toBe(false);
+  });
+
+  it('rotates to one fresh generation only after proving the upload queue is empty', async () => {
+    const controller = createTasksCorruptCacheRecoveryController();
+    const database = createCorruptCacheDatabase();
+    const replacement = { replacement: true } as unknown as PowerSyncDatabase;
+    const factory = vi.fn().mockReturnValue(replacement);
+
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      new Error('database disk image is malformed'),
+      controller,
+      database,
+      factory,
+    )).resolves.toEqual({
+      outcome: 'replacement-created',
+      queueCount: 0,
+      previousGeneration: 1,
+      nextGeneration: 2,
+      replacement,
+    });
+    expect(factory).toHaveBeenCalledWith(2);
+    expect(database.close).toHaveBeenCalledOnce();
+    expect(window.localStorage.getItem('bathos.tasks.database-generation')).toBe('2');
+  });
+
+  it('preserves the current namespace when local mutations remain queued', async () => {
+    const controller = createTasksCorruptCacheRecoveryController();
+    const database = createCorruptCacheDatabase({ queueCount: 2 });
+    const factory = vi.fn();
+
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      { code: 'SQLITE_CORRUPT' },
+      controller,
+      database,
+      factory,
+    )).resolves.toEqual({
+      outcome: 'queue-not-empty',
+      queueCount: 2,
+      previousGeneration: 1,
+    });
+    expect(factory).not.toHaveBeenCalled();
+    expect(database.close).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('bathos.tasks.database-generation')).toBeNull();
+  });
+
+  it('fails closed when queue safety cannot be read', async () => {
+    const controller = createTasksCorruptCacheRecoveryController();
+    const database = createCorruptCacheDatabase({
+      queueError: new Error('queue unavailable'),
+    });
+
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      { code: 11 },
+      controller,
+      database,
+      vi.fn(),
+    )).resolves.toEqual({
+      outcome: 'queue-unreadable',
+      queueCount: null,
+      previousGeneration: 1,
+    });
+    expect(database.close).not.toHaveBeenCalled();
+  });
+
+  it('allows only one automatic corrupt-cache recovery per runtime cycle', async () => {
+    const controller = createTasksCorruptCacheRecoveryController();
+    const database = createCorruptCacheDatabase({ queueCount: 0 });
+    const factory = vi.fn().mockReturnValue({} as PowerSyncDatabase);
+    const error = new Error('database disk image is malformed');
+
+    expect((await createAutomaticCorruptTasksCacheReplacement(
+      error,
+      controller,
+      database,
+      factory,
+    )).outcome).toBe('replacement-created');
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      error,
+      controller,
+      database,
+      factory,
+    )).resolves.toMatchObject({ outcome: 'not-eligible' });
+    expect(factory).toHaveBeenCalledOnce();
   });
 });

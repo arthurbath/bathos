@@ -27,6 +27,7 @@ import type { TasksSyncState } from '@/modules/tasks/domain/taskSyncReliability'
 import {
   bindTasksDatabaseOwner,
   createTasksPowerSyncDatabase,
+  getTasksPowerSyncDatabaseGeneration,
 } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
 import {
@@ -51,10 +52,16 @@ import {
   type TasksRuntimeStartupPhase,
 } from '@/modules/tasks/runtime/taskRuntimeStartupReporting';
 import {
+  reportTasksRuntimeCacheRecovery,
+} from '@/modules/tasks/runtime/taskRuntimeCacheRecoveryReporting';
+import {
+  createAutomaticCorruptTasksCacheReplacement,
   createAutomaticTasksRuntimeReplacement,
+  createTasksCorruptCacheRecoveryController,
   createTasksRuntimeRecoveryController,
   isClosedTasksRuntimeClientError,
   isCurrentTasksRuntimeGeneration,
+  isTasksDatabaseCorruptionError,
   normalizeTasksRuntimeError,
   TASKS_RUNTIME_ERROR_MESSAGE,
   TASKS_RUNTIME_ERROR_TITLE,
@@ -88,6 +95,9 @@ export function TasksRuntimeProvider({
   const [pendingUploadCount, setPendingUploadCount] = useState(0);
   const [database, setDatabase] = useState<PowerSyncDatabase>(createTasksPowerSyncDatabase);
   const [recoveryController] = useState(createTasksRuntimeRecoveryController);
+  const [corruptCacheRecoveryController] = useState(
+    createTasksCorruptCacheRecoveryController,
+  );
   const runtimeGenerationRef = useRef(0);
   const reportedGenerationRef = useRef<number | null>(null);
   const repository = useMemo(() => new TaskRepository(database), [database]);
@@ -141,6 +151,8 @@ export function TasksRuntimeProvider({
     let startupSyncBaseline: number | null = null;
     let startupSyncBaselineCaptured = false;
     let nativeReconnectInFlight: Promise<void> | null = null;
+    let corruptCacheRecoveryInFlight: Promise<void> | null = null;
+    let corruptCacheRecoveryStarted = false;
     const endpoint = configuredEndpoint;
     const connector = endpoint
       ? createTasksSupabaseConnector({ endpoint, supabase })
@@ -200,7 +212,7 @@ export function TasksRuntimeProvider({
       }
       nativeReconnectInFlight = database.connect(connector)
         .catch(() => {
-          if (isCurrentGeneration()) {
+          if (isCurrentGeneration() && !corruptCacheRecoveryStarted) {
             releaseStartupRefresh();
             setSyncState('offline');
           }
@@ -240,12 +252,87 @@ export function TasksRuntimeProvider({
       setState({ status: 'error' });
     };
 
+    const recoverCorruptCache = (error: unknown) => {
+      if (
+        !isCurrentGeneration()
+        || corruptCacheRecoveryInFlight
+        || corruptCacheRecoveryStarted
+        || !isTasksDatabaseCorruptionError(error)
+      ) {
+        return;
+      }
+      corruptCacheRecoveryStarted = true;
+
+      if (startupRefreshTimeout !== undefined) {
+        clearTimeout(startupRefreshTimeout);
+        startupRefreshTimeout = undefined;
+      }
+      setStartupRefreshPending(true);
+      setSyncState('connecting');
+      setState({ status: 'loading' });
+
+      corruptCacheRecoveryInFlight = createAutomaticCorruptTasksCacheReplacement(
+        error,
+        corruptCacheRecoveryController,
+        database,
+      ).then((result) => {
+        if (!isCurrentGeneration()) return;
+        if (result.outcome === 'replacement-created') {
+          reportTasksRuntimeCacheRecovery({
+            failureClass: 'sqlite-corruption',
+            queueSafety: 'empty',
+            previousGeneration: result.previousGeneration,
+            nextGeneration: result.nextGeneration,
+            outcome: 'replacement-created',
+          });
+          setDatabase(result.replacement);
+          return;
+        }
+
+        const queueSafety = result.outcome === 'queue-not-empty'
+          ? 'nonempty'
+          : 'unreadable';
+        reportTasksRuntimeCacheRecovery({
+          failureClass: 'sqlite-corruption',
+          queueSafety,
+          previousGeneration: result.previousGeneration,
+          nextGeneration: null,
+          outcome: result.outcome === 'queue-not-empty'
+            ? 'queue-not-empty'
+            : 'queue-unreadable',
+        });
+        failTerminally(
+          new Error('Local synchronized task cache could not be recovered safely'),
+          'watchdog',
+        );
+      }).catch(() => {
+        if (!isCurrentGeneration()) return;
+        reportTasksRuntimeCacheRecovery({
+          failureClass: 'sqlite-corruption',
+          queueSafety: 'empty',
+          previousGeneration: getTasksPowerSyncDatabaseGeneration(database),
+          nextGeneration: null,
+          outcome: 'replacement-failed',
+        });
+        failTerminally(
+          new Error('Local synchronized task cache replacement failed'),
+          'watchdog',
+        );
+      }).finally(() => {
+        corruptCacheRecoveryInFlight = null;
+      });
+    };
+
     const handleInitializationFailure = (
       caught: unknown,
       phase: TasksRuntimeStartupPhase,
     ) => {
       if (!isCurrentGeneration()) return;
       const error = normalizeTasksRuntimeError(caught);
+      if (isTasksDatabaseCorruptionError(error)) {
+        recoverCorruptCache(error);
+        return;
+      }
       const nextDatabase = createAutomaticTasksRuntimeReplacement(
         error,
         recoveryController,
@@ -331,7 +418,14 @@ export function TasksRuntimeProvider({
               void refreshQueueDepth().catch(() => undefined);
             },
             isBrowserOnline,
-            observeStartupFreshness,
+            (status) => {
+              const downloadError = status.dataFlowStatus?.downloadError;
+              if (downloadError !== undefined && isTasksDatabaseCorruptionError(downloadError)) {
+                recoverCorruptCache(downloadError);
+                return;
+              }
+              observeStartupFreshness(status);
+            },
           );
           await refreshQueueDepth();
           queuePoll = setInterval(() => {
@@ -342,7 +436,7 @@ export function TasksRuntimeProvider({
           try {
             await database.connect(connector);
           } catch {
-            if (isCurrentGeneration()) {
+            if (isCurrentGeneration() && !corruptCacheRecoveryStarted) {
               releaseStartupRefresh();
               setSyncState('offline');
               setState({
@@ -393,7 +487,15 @@ export function TasksRuntimeProvider({
       }
       void database.close().catch(() => undefined);
     };
-  }, [configuredEndpoint, database, hierarchyRepository, ownerId, recoveryController, repository]);
+  }, [
+    configuredEndpoint,
+    corruptCacheRecoveryController,
+    database,
+    hierarchyRepository,
+    ownerId,
+    recoveryController,
+    repository,
+  ]);
 
   const prepareForSignOut = useCallback(async () => {
     await prepareTasksForSignOut({
@@ -459,6 +561,7 @@ export function TasksRuntimeProvider({
           </p>
           <Button type="button" variant="outline" onClick={() => {
             recoveryController.reset();
+            corruptCacheRecoveryController.reset();
             setState({ status: 'loading' });
             const nextDatabase = createTasksPowerSyncDatabase();
             void database.close()

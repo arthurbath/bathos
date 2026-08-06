@@ -1,4 +1,5 @@
 import type { TasksSyncState } from '@/modules/tasks/domain/taskSyncReliability';
+import { isTasksDatabaseCorruptionError } from '@/modules/tasks/runtime/taskRuntimeRecovery';
 
 export type TasksPowerSyncStatus = {
   connected: boolean;
@@ -38,8 +39,12 @@ export function shouldReleaseTasksStartupRefresh({
   baselineLastSyncedAt: number | null;
   status: TasksPowerSyncStatus;
 }): boolean {
-  if (!browserOnline || status.dataFlowStatus?.downloadError !== undefined) {
+  if (!browserOnline) {
     return true;
+  }
+  const downloadError = status.dataFlowStatus?.downloadError;
+  if (downloadError !== undefined) {
+    return !isTasksDatabaseCorruptionError(downloadError);
   }
   if (!baselineCaptured) return false;
   const lastSyncedAt = status.lastSyncedAt instanceof Date

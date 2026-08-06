@@ -9,6 +9,9 @@ import {
 } from '@/modules/tasks/data/taskSyncHealthEventStore';
 import { deriveTaskSyncHealthState } from '@/modules/tasks/domain/taskSyncReliability';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
+import {
+  readTasksRuntimeCacheRecoveryReports,
+} from '@/modules/tasks/runtime/taskRuntimeCacheRecoveryReporting';
 
 type TaskConflictReceiptStorageRow = {
   id: string;
@@ -59,6 +62,10 @@ export function useTaskSyncDiagnostics() {
     () => parseTaskSyncHealthEvents(healthEventsQuery.data),
     [healthEventsQuery.data],
   );
+  const cacheRecoveryReports = useMemo(
+    () => readTasksRuntimeCacheRecoveryReports(),
+    [],
+  );
   const connected = mode === 'connected';
   const dataFlow = status.dataFlowStatus;
   const hasCompletedSync = connected && status.hasSynced === true;
@@ -92,6 +99,7 @@ export function useTaskSyncDiagnostics() {
     healthEvents: parsedHealthEvents.events,
     healthEventsLoading: healthEventsQuery.isLoading,
     healthEventsError: healthEventsQuery.error ?? parsedHealthEvents.error,
+    cacheRecoveryReports,
     conflictReceipts: parsedConflicts.receipts,
     conflictReceiptsLoading: conflictsQuery.isLoading,
     conflictReceiptsError: conflictsQuery.error ?? parsedConflicts.error,

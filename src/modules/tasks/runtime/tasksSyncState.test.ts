@@ -126,4 +126,22 @@ describe('tasksSyncState', () => {
       },
     })).toBe(true);
   });
+
+  it('keeps corrupt cached rows concealed while replacement begins', () => {
+    const baseline = Date.parse('2026-08-06T07:42:35.000Z');
+    expect(shouldReleaseTasksStartupRefresh({
+      browserOnline: true,
+      baselineCaptured: true,
+      baselineLastSyncedAt: baseline,
+      status: {
+        connected: false,
+        connecting: false,
+        hasSynced: true,
+        lastSyncedAt: new Date(baseline),
+        dataFlowStatus: {
+          downloadError: new Error('database disk image is malformed'),
+        },
+      },
+    })).toBe(false);
+  });
 });

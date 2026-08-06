@@ -27,6 +27,7 @@ describe('TaskSyncDiagnosticsDialog', () => {
       healthEvents: [],
       healthEventsLoading: false,
       healthEventsError: null,
+      cacheRecoveryReports: [],
       conflictReceipts: [],
       conflictReceiptsLoading: false,
       conflictReceiptsError: null,
@@ -101,6 +102,16 @@ describe('TaskSyncDiagnosticsDialog', () => {
       }],
       healthEventsLoading: false,
       healthEventsError: null,
+      cacheRecoveryReports: [{
+        event: 'tasks-runtime-cache-recovery',
+        timestamp: '2026-07-20T16:25:00.000Z',
+        failureClass: 'sqlite-corruption',
+        queueSafety: 'empty',
+        previousGeneration: 1,
+        nextGeneration: 2,
+        outcome: 'replacement-created',
+        sentryEventId: null,
+      }],
       conflictReceipts: [{
         id: 'crud-2',
         taskId: 'task-a',
@@ -130,5 +141,7 @@ describe('TaskSyncDiagnosticsDialog', () => {
     expect(screen.getByText('revision_conflict')).toBeVisible();
     expect(screen.getByText('PATCH - Revision 2 to 3')).toBeVisible();
     expect(screen.getByText('task-a')).toBeVisible();
+    expect(screen.getByText('Cache Rebuilt')).toBeVisible();
+    expect(screen.getByText('Queue Empty - Cache 1 to 2')).toBeVisible();
   });
 });

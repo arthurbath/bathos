@@ -1,10 +1,63 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  advanceTasksDatabaseGeneration,
   bindTasksDatabaseOwner,
   clearTasksDatabaseForSignOut,
+  normalizeTasksDatabaseGeneration,
+  readTasksDatabaseGeneration,
+  TASKS_DATABASE_GENERATION_STORAGE_KEY,
+  tasksDatabaseFilenameForGeneration,
+  type TasksDatabaseGenerationStorage,
   type TasksOwnerBindingDatabase,
 } from './database';
+
+function createGenerationStorage(
+  initialValue: string | null = null,
+): TasksDatabaseGenerationStorage {
+  let value = initialValue;
+  return {
+    getItem: vi.fn(() => value),
+    setItem: vi.fn((_key, nextValue) => {
+      value = nextValue;
+    }),
+  };
+}
+
+describe('tasks local database generation', () => {
+  it('preserves generation 1 for missing or invalid installation state', () => {
+    expect(normalizeTasksDatabaseGeneration(null)).toBe(1);
+    expect(normalizeTasksDatabaseGeneration('not-a-number')).toBe(1);
+    expect(normalizeTasksDatabaseGeneration(0)).toBe(1);
+    expect(readTasksDatabaseGeneration(createGenerationStorage())).toBe(1);
+    expect(tasksDatabaseFilenameForGeneration(1)).toBe('bathos-tasks-v1.db');
+  });
+
+  it('advances the persisted generation monotonically', () => {
+    const storage = createGenerationStorage('4');
+
+    expect(advanceTasksDatabaseGeneration(4, storage)).toEqual({
+      advanced: true,
+      generation: 5,
+    });
+    expect(storage.setItem).toHaveBeenCalledWith(
+      TASKS_DATABASE_GENERATION_STORAGE_KEY,
+      '5',
+    );
+    expect(readTasksDatabaseGeneration(storage)).toBe(5);
+    expect(tasksDatabaseFilenameForGeneration(5)).toBe('bathos-tasks-v5.db');
+  });
+
+  it('does not let a stale client overwrite a newer generation', () => {
+    const storage = createGenerationStorage('3');
+
+    expect(advanceTasksDatabaseGeneration(2, storage)).toEqual({
+      advanced: false,
+      generation: 3,
+    });
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+});
 
 function createDatabase(ownerId: string | null): TasksOwnerBindingDatabase {
   return {

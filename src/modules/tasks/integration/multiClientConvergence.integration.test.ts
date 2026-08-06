@@ -210,6 +210,35 @@ describe.skipIf(!integrationEnabled)('Tasks multi-client convergence integration
       .eq('id', taskId);
     expect(countError).toBeNull();
     expect(count).toBe(1);
+
+    const horizonUpdate = await updateTaskData({
+      task_id: taskId,
+      expected_revision: 4,
+      client_mutation_id: crypto.randomUUID(),
+      today_section: 'now',
+    }, auth);
+    expect(horizonUpdate).toMatchObject({
+      mutation_outcome: 'applied',
+      task: { today_section: 'now', revision: 5 },
+    });
+    await waitForLocalTask(
+      activeDatabase,
+      taskId,
+      (task) => task.revision === 5 && task.today_section === 'now',
+    );
+
+    const externalInsert = await createTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Inserted While Native Client Remains Open',
+      destination: 'anytime',
+      today_section: 'inbox',
+      entry_channel: 'mcp',
+    }, auth);
+    await waitForLocalTask(
+      activeDatabase,
+      externalInsert.task.id,
+      (task) => task.revision === 1 && task.title === externalInsert.task.title,
+    );
   }, 120_000);
 });
 

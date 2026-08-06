@@ -23,6 +23,9 @@ import {
   useTaskSyncDiagnostics,
   type TaskConflictReceipt,
 } from '@/modules/tasks/hooks/useTaskSyncDiagnostics';
+import type {
+  TasksRuntimeCacheRecoveryReport,
+} from '@/modules/tasks/runtime/taskRuntimeCacheRecoveryReporting';
 
 export function TaskSyncDiagnosticsDialog({
   triggerVariant = 'status',
@@ -134,9 +137,50 @@ export function TaskSyncDiagnosticsDialog({
               error={diagnostics.conflictReceiptsError}
             />
           </section>
+
+          <section className="space-y-2" aria-labelledby="task-sync-cache-recovery-heading">
+            <h3 id="task-sync-cache-recovery-heading" className="text-sm font-medium">
+              Recent Cache Recoveries
+            </h3>
+            <CacheRecoveryReports reports={diagnostics.cacheRecoveryReports} />
+          </section>
         </DialogBody>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CacheRecoveryReports({
+  reports,
+}: {
+  reports: readonly TasksRuntimeCacheRecoveryReport[];
+}) {
+  if (reports.length === 0) {
+    return <p className="text-sm text-muted-foreground">No cache recovery recorded.</p>;
+  }
+  return (
+    <ol className="divide-y divide-border rounded-md border border-border">
+      {reports.map((report) => (
+        <li
+          key={`${report.timestamp}-${report.previousGeneration}-${report.outcome}`}
+          className="space-y-1 px-3 py-2 text-xs"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium text-foreground">
+              {formatCacheRecoveryOutcome(report.outcome)}
+            </span>
+            <time className="text-muted-foreground" dateTime={report.timestamp}>
+              {formatTaskSyncTimestamp(report.timestamp)}
+            </time>
+          </div>
+          <p className="text-muted-foreground">
+            Queue {formatCacheRecoveryQueueSafety(report.queueSafety)}
+            {' - '}Cache {report.previousGeneration}
+            {report.nextGeneration === null ? '' : ` to ${report.nextGeneration}`}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -287,4 +331,21 @@ function formatTaskSyncTimestamp(value: string): string {
 
 function formatRevision(value: number | null): string {
   return value === null ? 'unknown' : String(value);
+}
+
+function formatCacheRecoveryOutcome(
+  outcome: TasksRuntimeCacheRecoveryReport['outcome'],
+): string {
+  if (outcome === 'replacement-created') return 'Cache Rebuilt';
+  if (outcome === 'queue-not-empty') return 'Recovery Held for Pending Changes';
+  if (outcome === 'queue-unreadable') return 'Recovery Safety Unknown';
+  return 'Cache Recovery Failed';
+}
+
+function formatCacheRecoveryQueueSafety(
+  queueSafety: TasksRuntimeCacheRecoveryReport['queueSafety'],
+): string {
+  if (queueSafety === 'empty') return 'Empty';
+  if (queueSafety === 'nonempty') return 'Has Pending Changes';
+  return 'Unreadable';
 }
