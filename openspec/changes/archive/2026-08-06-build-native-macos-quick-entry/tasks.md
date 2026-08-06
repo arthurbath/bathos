@@ -40,4 +40,4 @@
 - [x] 5.2 Apply and independently read back the approved migration and deploy/read back the matching native-action Edge Function before enabling the client.
 - [x] 5.3 Publish the matching web credential bridge, rebuild/sign/install the macOS companion, and run and clean up an owner-scoped complete-capture acceptance fixture.
 - [x] 5.4 Make native Quick Entry the shipping default after parity acceptance and remove the hosted Quick Entry WebKit, readiness, JavaScript forwarding, and compatibility-timeout path.
-- [ ] 5.5 Synchronize durable specs, archive the OpenSpec change, and verify the repository and deployed artifacts are aligned.
+- [x] 5.5 Synchronize durable specs, archive the OpenSpec change, and verify the repository and deployed artifacts are aligned.
