@@ -394,6 +394,39 @@ describe('taskNativeWidgetBridge', () => {
     expect(anytime?.tasks).toHaveLength(1);
   });
 
+  it('applies a two-state actionability filter to native widget projections', () => {
+    const snapshot = buildTaskNativeWidgetSnapshot({
+      ownerId,
+      planningDate: '2026-07-27',
+      quickFilter: 'actionable_rechecking',
+      automaticListSorting: false,
+      areas: [],
+      tasks: [
+        taskTodoFixture({
+          id: taskA,
+          owner_id: ownerId,
+          title: 'Ready',
+          actionability: 'actionable',
+        }),
+        taskTodoFixture({
+          id: taskB,
+          owner_id: ownerId,
+          title: 'Waiting',
+          actionability: 'waiting',
+        }),
+        taskTodoFixture({
+          id: taskC,
+          owner_id: ownerId,
+          title: 'Rechecking',
+          actionability: 'rechecking',
+        }),
+      ],
+    });
+
+    expect(snapshot.lists.find(({ id }) => id === 'anytime')?.tasks.map(({ id }) => id))
+      .toEqual([taskA, taskC]);
+  });
+
   it('publishes only through a detected bridge and suppresses unchanged content', () => {
     const messages: unknown[] = [];
     const snapshot = buildTaskNativeWidgetSnapshot({

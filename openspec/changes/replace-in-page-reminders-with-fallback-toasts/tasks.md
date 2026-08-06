@@ -21,3 +21,10 @@
 - [x] 4.1 Add shared toast reducer, renderer, and semantic variant tests.
 - [x] 4.2 Add Tasks integration tests for presentation, stacking, persistence, dismissal, browser suppression, native suppression, and failure retry.
 - [x] 4.3 Run focused tests, lint, build, and strict OpenSpec validation.
+
+## 5. Blocked-surface Fallback Regression
+
+- [x] 5.1 Preserve in-app claim eligibility after another Web Push target reports provider acceptance.
+- [x] 5.2 Acknowledge persistent fallback toasts only after manual dismissal.
+- [x] 5.3 Add frontend and database regression coverage for denied surfaces and cross-target provider acceptance.
+- [x] 5.4 Verify the blocked settings state in the running app and the fallback presentation behavior in the rendered integration test.

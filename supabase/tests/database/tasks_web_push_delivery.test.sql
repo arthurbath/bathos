@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(40);
+SELECT plan(43);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -244,6 +244,20 @@ SELECT is(
   'already_applied',
   'makes provider result retries idempotent'
 );
+SELECT is(
+  (
+    SELECT occurrence.status
+    FROM public.tasks_reminder_occurrences AS occurrence
+    JOIN public.tasks_reminder_deliveries AS delivery
+      ON delivery.occurrence_id = occurrence.id
+     AND delivery.owner_id = occurrence.owner_id
+    WHERE delivery.id = (
+      current_setting('test.push_claim_a')::jsonb #>> '{items,0,delivery_id}'
+    )::uuid
+  ),
+  'scheduled',
+  'preserves the occurrence for an unconfigured surface after provider acceptance'
+);
 
 RESET ROLE;
 SET LOCAL ROLE authenticated;
@@ -251,6 +265,32 @@ SELECT set_config(
   'request.jwt.claim.sub', '98000000-0000-4000-8000-000000000001', true
 );
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT set_config(
+  'test.in_app_fallback_claim',
+  public.tasks_claim_due_reminders(
+    '2099-01-01 08:30:00+00', '98000000-0000-4000-8000-000000000041'
+  )::text,
+  false
+);
+SELECT is(
+  jsonb_array_length(
+    current_setting('test.in_app_fallback_claim')::jsonb -> 'items'
+  ),
+  1,
+  'claims an in-app fallback after another browser accepts Web Push'
+);
+SELECT is(
+  (
+    SELECT status
+    FROM public.tasks_reminder_deliveries
+    WHERE id = (
+      current_setting('test.in_app_fallback_claim')::jsonb
+      #>> '{items,0,delivery_id}'
+    )::uuid
+  ),
+  'attempted',
+  'keeps the in-app fallback pending until the user dismisses it'
+);
 SELECT is(
   public.tasks_acknowledge_reminder_delivery(
     (current_setting('test.push_claim_a')::jsonb #>> '{items,0,delivery_id}')::uuid

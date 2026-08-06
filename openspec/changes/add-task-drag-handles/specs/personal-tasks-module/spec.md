@@ -51,6 +51,18 @@ The Tasks module SHALL persist an account-level Drag Handles preference with Hid
 - **WHEN** a handle drag ends over or after crossing a valid insertion position
 - **THEN** Tasks applies the same eligibility, grouped ordering, autosave boundary, persistence, undo history, and rollback rules as the corresponding existing row drag
 
+#### Scenario: Resolve blank list space to the nearest legal insertion
+- **WHEN** a dragged task pointer or touch moves within the task-list surface but outside every task row
+- **THEN** Tasks continuously resolves the insertion indicator to the nearest legal position in that list or bucket, including before the first row and after the final row
+
+#### Scenario: Keep high-velocity drag targeting current
+- **WHEN** a dragged task moves quickly enough to cross one or more rows between browser movement samples
+- **THEN** Tasks derives the current nearest legal insertion from the pointer coordinates rather than retaining a stale row-level drag-over result
+
+#### Scenario: Dim the complete dragged summary row
+- **WHEN** a task is actively being dragged from its row or dedicated handle
+- **THEN** the entire source summary row, including checkbox, text, metadata, Primary Link action, ellipsis, and handle, uses one consistent reduced-opacity treatment while insertion indicators remain fully visible
+
 #### Scenario: Reject an unsupported handle
 - **WHEN** a task or checklist item cannot legally be reordered in its current surface or state
 - **THEN** Tasks does not expose an operative drag handle for that item

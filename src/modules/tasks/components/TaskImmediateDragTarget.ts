@@ -36,7 +36,10 @@ export function dispatchToTaskImmediateDragTarget(
 ): void {
   const registry = targetRegistries.get(scope);
   if (!registry) return;
-  for (const hit of document.elementsFromPoint(point.clientX, point.clientY)) {
+  const paintedElements = typeof document.elementsFromPoint === 'function'
+    ? document.elementsFromPoint(point.clientX, point.clientY)
+    : [];
+  for (const hit of paintedElements) {
     let current: Element | null = hit;
     while (current) {
       if (current instanceof HTMLElement) {
@@ -49,4 +52,43 @@ export function dispatchToTaskImmediateDragTarget(
       current = current.parentElement;
     }
   }
+
+  if (scope !== 'tasks') return;
+  const candidates = Array.from(registry, ([element, callback]) => ({
+    element,
+    callback,
+    bounds: element.getBoundingClientRect(),
+  })).filter(({ element, bounds }) => (
+    element.isConnected && (bounds.width > 0 || bounds.height > 0)
+  ));
+  if (candidates.length === 0) return;
+
+  const surface = candidates[0].element.closest<HTMLElement>(
+    '[data-task-space-entry-surface]',
+  );
+  const surfaceBounds = surface?.getBoundingClientRect();
+  if (
+    surfaceBounds
+    && (surfaceBounds.width > 0 || surfaceBounds.height > 0)
+    && (
+      point.clientX < surfaceBounds.left
+      || point.clientX > surfaceBounds.right
+      || point.clientY < surfaceBounds.top
+      || point.clientY > surfaceBounds.bottom
+    )
+  ) return;
+
+  const axisDistance = (value: number, start: number, end: number) => (
+    value < start ? start - value : value > end ? value - end : 0
+  );
+  candidates.sort((left, right) => {
+    const leftVertical = axisDistance(point.clientY, left.bounds.top, left.bounds.bottom);
+    const rightVertical = axisDistance(point.clientY, right.bounds.top, right.bounds.bottom);
+    if (leftVertical !== rightVertical) return leftVertical - rightVertical;
+    const leftHorizontal = axisDistance(point.clientX, left.bounds.left, left.bounds.right);
+    const rightHorizontal = axisDistance(point.clientX, right.bounds.left, right.bounds.right);
+    if (leftHorizontal !== rightHorizontal) return leftHorizontal - rightHorizontal;
+    return left.bounds.height - right.bounds.height;
+  });
+  candidates[0].callback(point);
 }

@@ -45,7 +45,7 @@ describe('useTaskReminders', () => {
       isLoading: false,
       error: null,
     });
-    mocks.useTaskWebPush.mockReset().mockReturnValue({ state: 'unsupported' });
+    mocks.useTaskWebPush.mockReset().mockReturnValue({ status: 'unsupported' });
   });
 
   it('claims due reminders in a visible connected client and acknowledges them', async () => {
@@ -179,5 +179,52 @@ describe('useTaskReminders', () => {
     })).rejects.toThrow('Reminder changes require connected task storage');
     expect(reminderService.claimDue).not.toHaveBeenCalled();
     expect(reminderService.save).not.toHaveBeenCalled();
+  });
+
+  it('does not claim the in-app delivery channel while Web Push is active', async () => {
+    const reminderService = {
+      claimDue: vi.fn(),
+      save: vi.fn(),
+      cancel: vi.fn(),
+      acknowledge: vi.fn(),
+    };
+    mocks.useTaskWebPush.mockReturnValue({ status: 'active' });
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      reminderService,
+    });
+
+    const { result } = renderHook(() => useTaskReminders('owner-a'));
+    await act(async () => {
+      await result.current.claimDue();
+      await Promise.resolve();
+    });
+
+    expect(reminderService.claimDue).not.toHaveBeenCalled();
+  });
+
+  it('does not claim the in-app delivery channel when native notifications are enabled', async () => {
+    const reminderService = {
+      claimDue: vi.fn(),
+      save: vi.fn(),
+      cancel: vi.fn(),
+      acknowledge: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      reminderService,
+    });
+
+    const { result } = renderHook(() => useTaskReminders('owner-a', {
+      nativeNotificationsEnabled: true,
+    }));
+    await act(async () => {
+      await result.current.claimDue();
+      await Promise.resolve();
+    });
+
+    expect(reminderService.claimDue).not.toHaveBeenCalled();
   });
 });

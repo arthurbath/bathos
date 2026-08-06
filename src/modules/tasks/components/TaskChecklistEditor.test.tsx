@@ -224,6 +224,56 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
+  it('bounces an empty shortcut draft between the ordinary insertion slot and the top', async () => {
+    const completed = taskChecklistItemFixture({
+      id: 'item-completed',
+      title: 'Completed step',
+      completed: true,
+      order_key: 'a2',
+    });
+    const unchecked = taskChecklistItemFixture({
+      id: 'item-first',
+      title: 'Unchecked step',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([unchecked, completed]));
+    const { container, root } = renderEditor('task-draft');
+    const focusChecklist = async () => {
+      await act(async () => {
+        document.dispatchEvent(new CustomEvent('bathos:task-checklist-focus', {
+          detail: { taskId: 'task-draft' },
+        }));
+        await waitForAnimationFrames();
+      });
+    };
+    const rowIds = () => Array.from(
+      container.querySelectorAll<HTMLElement>('[data-checklist-item-id]'),
+      (row) => row.dataset.checklistItemId,
+    );
+
+    try {
+      await focusChecklist();
+      expect(rowIds()).toEqual(['item-first', 'draft', 'item-completed']);
+      expect(document.activeElement).toBe(container.querySelector(
+        'input[aria-label="New Checklist Item"]',
+      ));
+
+      await focusChecklist();
+      expect(rowIds()).toEqual(['draft', 'item-first', 'item-completed']);
+      expect(document.activeElement).toBe(container.querySelector(
+        'input[aria-label="New Checklist Item"]',
+      ));
+
+      await focusChecklist();
+      expect(rowIds()).toEqual(['item-first', 'draft', 'item-completed']);
+      expect(document.activeElement).toBe(container.querySelector(
+        'input[aria-label="New Checklist Item"]',
+      ));
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('appends and focuses a shortcut draft when no items are completed', async () => {
     const first = taskChecklistItemFixture({
       id: 'item-first',

@@ -1202,7 +1202,7 @@ function normalizeEditablePatch(patch: EditableTaskPatch): EditableTaskPatch {
   if (patch.primary_link !== undefined) {
     normalized.primary_link = normalizeTaskPrimaryLink(patch.primary_link);
     if ((normalized.primary_link?.length ?? 0) > 8000) {
-      throw new InvalidTaskMutationError('A Primary Link cannot exceed 8,000 characters');
+      throw new InvalidTaskMutationError('A Link cannot exceed 8,000 characters');
     }
   }
   if (

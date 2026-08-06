@@ -1,6 +1,8 @@
 import {
   lazy,
   Suspense,
+  useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -46,6 +48,8 @@ export function TaskMetadataDrawerFields({
   primaryLink,
   checklistContentPresent,
   renderChecklist,
+  onChecklistDisclosure,
+  focusRequestId = editorId,
   temporalFields,
   areas,
   areasLoading = false,
@@ -73,6 +77,8 @@ export function TaskMetadataDrawerFields({
   primaryLink: string;
   checklistContentPresent: boolean;
   renderChecklist: (layout: TaskMetadataDrawerChecklistLayout) => ReactNode;
+  onChecklistDisclosure?: () => Promise<void> | void;
+  focusRequestId?: string;
   temporalFields: ReactNode;
   areas: ReadonlyArray<{ id: string; title: string }>;
   areasLoading?: boolean;
@@ -94,18 +100,71 @@ export function TaskMetadataDrawerFields({
   quickEntry?: boolean;
   className?: string;
 }) {
+  const [notesDisclosed, setNotesDisclosed] = useState(notes.length > 0);
   const [primaryLinkDisclosed, setPrimaryLinkDisclosed] = useState(primaryLink.length > 0);
-  const [focusPrimaryLink, setFocusPrimaryLink] = useState(false);
+  const [checklistDisclosed, setChecklistDisclosed] = useState(checklistContentPresent);
+  const [notesFocusRevision, setNotesFocusRevision] = useState(0);
+  const [primaryLinkFocusRevision, setPrimaryLinkFocusRevision] = useState(0);
   const primaryLinkInputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
-    if (!focusPrimaryLink) return;
+    if (primaryLinkFocusRevision === 0) return;
     const input = primaryLinkInputRef.current;
     if (input === null) return;
+    const atEnd = document.activeElement === input
+      && input.selectionStart === input.value.length
+      && input.selectionEnd === input.value.length;
+    const position = atEnd ? 0 : input.value.length;
     input.focus({ preventScroll: true });
-    input.setSelectionRange(input.value.length, input.value.length);
-    setFocusPrimaryLink(false);
-  }, [focusPrimaryLink, primaryLinkDisclosed]);
+    input.setSelectionRange(position, position);
+  }, [primaryLinkDisclosed, primaryLinkFocusRevision]);
+
+  useEffect(() => {
+    if (notes.length > 0) setNotesDisclosed(true);
+  }, [notes.length]);
+
+  useEffect(() => {
+    if (primaryLink.length > 0) setPrimaryLinkDisclosed(true);
+  }, [primaryLink.length]);
+
+  useEffect(() => {
+    if (checklistContentPresent) setChecklistDisclosed(true);
+  }, [checklistContentPresent]);
+
+  const focusChecklist = useCallback(async () => {
+    setChecklistDisclosed(true);
+    try {
+      await onChecklistDisclosure?.();
+    } catch {
+      setChecklistDisclosed(false);
+      return;
+    }
+    window.setTimeout(() => {
+      document.dispatchEvent(new CustomEvent('bathos:task-checklist-focus', {
+        detail: { taskId: focusRequestId },
+      }));
+    }, 0);
+  }, [focusRequestId, onChecklistDisclosure]);
+
+  useEffect(() => {
+    const handleFieldFocusRequest = (event: Event) => {
+      if (!(event instanceof CustomEvent) || event.detail?.taskId !== focusRequestId) return;
+      if (event.detail?.field === 'notes') {
+        setNotesDisclosed(true);
+        setNotesFocusRevision((current) => current + 1);
+      } else if (event.detail?.field === 'link') {
+        setPrimaryLinkDisclosed(true);
+        setPrimaryLinkFocusRevision((current) => current + 1);
+      } else if (event.detail?.field === 'checklist') {
+        void focusChecklist();
+      }
+    };
+    document.addEventListener('bathos:task-editor-focus-field', handleFieldFocusRequest);
+    return () => document.removeEventListener(
+      'bathos:task-editor-focus-field',
+      handleFieldFocusRequest,
+    );
+  }, [focusChecklist, focusRequestId]);
 
   const primaryLinkHref = getTaskPrimaryLinkHref(primaryLink);
   const primaryLinkIconKind = getTaskPrimaryLinkIconKind(primaryLink);
@@ -113,11 +172,17 @@ export function TaskMetadataDrawerFields({
     ? TASK_ICONS.PrimaryLink
     : TASK_PRIMARY_LINK_ICONS[primaryLinkIconKind];
   const primaryLinkLabel = primaryLinkIconKind === null
-    ? 'Primary Link'
+    ? 'Link'
     : TASK_PRIMARY_LINK_LABELS[primaryLinkIconKind];
   const primaryLinkOpensBrowserTab = taskPrimaryLinkOpensBrowserTab(primaryLink);
-  const pairedMetadataDisclosures = !primaryLinkDisclosed && !checklistContentPresent;
-  const checklistLayout = pairedMetadataDisclosures ? 'paired' : 'standalone';
+  const missingOptionalContent = [
+    !notesDisclosed ? 'notes' as const : null,
+    !primaryLinkDisclosed ? 'link' as const : null,
+    !checklistDisclosed ? 'checklist' as const : null,
+  ].filter((value): value is 'notes' | 'link' | 'checklist' => value !== null);
+  const checklistEndsDrawer = missingOptionalContent.length === 0
+    && checklistDisclosed
+    && checklistContentPresent;
   const ActionabilityIcon = actionability === 'waiting'
     ? TASK_ICONS.Waiting
     : actionability === 'rechecking'
@@ -129,7 +194,10 @@ export function TaskMetadataDrawerFields({
       className={cn(
         quickEntry
           ? 'flex flex-col gap-2 p-1'
-          : 'flex flex-col gap-3 px-2 pb-3 sm:px-3.5',
+          : cn(
+              'flex flex-col gap-3 px-2 sm:px-3.5',
+              checklistEndsDrawer ? 'pb-2' : 'pb-3',
+            ),
         className,
       )}
       data-task-editor-form
@@ -206,30 +274,26 @@ export function TaskMetadataDrawerFields({
           </Select>
         </div>
       </div>
-      <Suspense fallback={<div className="min-h-16" aria-label="Loading Task Notes" />}>
-        <TaskMarkdownNotes
-          id={`task-notes-${editorId}`}
-          notes={notes}
-          onChange={onNotesChange}
-          disabled={false}
-        />
-      </Suspense>
-      <div
-        data-task-editor-disclosures
-        data-layout={pairedMetadataDisclosures ? 'paired' : 'stacked'}
-        className={pairedMetadataDisclosures
-          ? 'relative grid grid-cols-2 gap-0'
-          : 'flex flex-col gap-3'}
-      >
-        {primaryLinkDisclosed ? (
+      {notesDisclosed ? (
+        <Suspense fallback={<div className="min-h-16" aria-label="Loading Task Notes" />}>
+          <TaskMarkdownNotes
+            id={`task-notes-${editorId}`}
+            notes={notes}
+            onChange={onNotesChange}
+            disabled={false}
+            focusRequestRevision={notesFocusRevision}
+          />
+        </Suspense>
+      ) : null}
+      {primaryLinkDisclosed ? (
           <div className="flex gap-2">
             <Input
               ref={primaryLinkInputRef}
               id={`task-primary-link-${editorId}`}
               type="url"
               value={primaryLink}
-              aria-label="Primary Link"
-              placeholder="Primary Link"
+              aria-label="Link"
+              placeholder="Link"
               decoration={<PrimaryLinkIcon />}
               inputMode="url"
               onChange={(event) => onPrimaryLinkChange(event.target.value)}
@@ -263,33 +327,47 @@ export function TaskMetadataDrawerFields({
               </Button>
             ) : null}
           </div>
-        ) : (
-          <button
-            type="button"
-            aria-label="Add Primary Link"
-            data-task-primary-link-disclosure
-            className={cn(
-              'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              pairedMetadataDisclosures ? 'w-full justify-center' : 'w-fit justify-start',
-            )}
-            onClick={() => {
-              setPrimaryLinkDisclosed(true);
-              setFocusPrimaryLink(true);
-            }}
-          >
-            <TASK_ICONS.PrimaryLink className="h-4 w-4" aria-hidden="true" />
-            Add Primary Link
-          </button>
-        )}
-        {renderChecklist(checklistLayout)}
-        {pairedMetadataDisclosures ? (
-          <span
-            aria-hidden="true"
-            data-task-editor-disclosure-divider
-            className="pointer-events-none absolute inset-y-2 left-1/2 w-px bg-[hsl(var(--grid-sticky-line)/0.35)]"
-          />
-        ) : null}
-      </div>
+      ) : null}
+      {checklistDisclosed ? renderChecklist('standalone') : null}
+      {missingOptionalContent.length > 0 ? (
+        <div
+          data-task-editor-disclosures
+          data-layout="optional-content"
+          className={cn(
+            'grid min-h-9 w-full gap-2',
+            missingOptionalContent.length === 1 && 'grid-cols-1',
+            missingOptionalContent.length === 2 && 'grid-cols-2',
+            missingOptionalContent.length === 3 && 'grid-cols-3',
+          )}
+        >
+          {missingOptionalContent.map((content) => (
+            <Button
+              key={content}
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label={`Add ${content === 'link' ? 'Link' : content === 'notes' ? 'Notes' : 'Checklist'}`}
+              data-task-primary-link-disclosure={content === 'link' ? 'true' : undefined}
+              data-task-checklist-disclosure={content === 'checklist' ? 'true' : undefined}
+              data-task-notes-disclosure={content === 'notes' ? 'true' : undefined}
+              className="min-w-0 w-full px-2 text-center"
+              onClick={() => {
+                if (content === 'notes') {
+                  setNotesDisclosed(true);
+                  setNotesFocusRevision((current) => current + 1);
+                } else if (content === 'link') {
+                  setPrimaryLinkDisclosed(true);
+                  setPrimaryLinkFocusRevision((current) => current + 1);
+                } else {
+                  void focusChecklist();
+                }
+              }}
+            >
+              + {content === 'link' ? 'Link' : content === 'notes' ? 'Notes' : 'Checklist'}
+            </Button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

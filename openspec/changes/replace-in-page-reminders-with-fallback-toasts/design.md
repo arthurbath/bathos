@@ -33,9 +33,11 @@ The presentation policy has three outcomes:
 
 Browser notification enablement is the existing active Web Push state. Native companions expose a boolean notification-enabled flag in their injected Tasks context. The flag remains false until native notification delivery is implemented, preventing the bridge contract from falsely advertising unavailable capability. Suppression does not acknowledge the reminder occurrence because provider enablement is not evidence that the user saw the notification, and server acknowledgement intentionally retires every target for that occurrence.
 
+Web Push provider acceptance retires the one-shot reminder intent but preserves the occurrence long enough for the account-scoped in-app target to claim it. Only surfaces that currently require the in-app fallback poll that delivery channel, so a browser or native companion with enabled notifications cannot lease the account-scoped fallback before a blocked surface. The in-app claimant remains eligible only when the occurrence has a provider-accepted Web Push delivery and no delivery for the occurrence has been acknowledged. This prevents another browser's successful provider handoff from suppressing fallback presentation on a currently open surface whose notifications are denied, unsupported, or unconfigured, while still preventing repeated Web Push delivery or an active reminder from lingering in task metadata.
+
 ### Acknowledge on manual dismissal
 
-Closing or swiping a reminder toast acknowledges only that delivery. A failed acknowledgement uses fixed content-free destructive feedback and re-presents the persistent reminder so the user can retry without losing it.
+Closing or swiping a reminder toast acknowledges only that delivery. Merely creating the toast does not acknowledge it. A failed acknowledgement uses fixed content-free destructive feedback and re-presents the persistent reminder so the user can retry without losing it.
 
 ### Make persistence and stacking shared toast capabilities
 

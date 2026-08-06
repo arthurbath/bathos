@@ -47,6 +47,8 @@ Alternative considered: dispatch a synthetic HTML drag event. Browser security a
 
 A Tasks-local drop-target registry maps row and section elements to their existing drag-over callbacks. Pointer hit testing selects the nearest registered target in the appropriate scope. Checklist scopes are isolated per parent task so nested drags never activate task-list targets.
 
+The task-list scope also owns coordinate-based fallback resolution. Each movement sample compares the pointer's vertical coordinate with the live geometry of every legal target in the active list or Upcoming bucket. When no row is directly hit, the nearest insertion boundary wins, so whitespace above or below a short list resolves to the first or final legal position rather than leaving a stale indicator behind. The same resolver runs from handle pointer movement and list-level native drag movement so high-velocity drags do not depend on receiving every intermediate row event.
+
 ### Reuse existing reorder transactions
 
 The immediate handle path initializes the same active drag subjects and finishes through the same task or checklist commit code used by native drag. This preserves grouped order, legal section rules, optimistic presentation, history, and rollback.
@@ -55,11 +57,16 @@ The immediate handle path initializes the same active drag subjects and finishes
 
 The ellipsis action remains mounted when a task drawer opens. When a drag handle is visible, the ellipsis and handle share one compact trailing-control group so opening the task does not remove an established action or create an exaggerated gap between adjacent controls. Recurrence prototypes use the same control-group rhythm.
 
+### Style the source task as one dragged unit
+
+The active drag state is applied to the complete summary-row container rather than only its textual content. This gives the checkbox, metadata, Primary Link action, ellipsis, and handle the same reduced opacity while keeping the drawer, surrounding list, drag preview, and insertion indicator outside that treatment.
+
 ## Risks / Trade-offs
 
 - [Pointer capture makes `event.target` remain the handle] -> Resolve drop location with `document.elementsFromPoint` and a scoped target registry.
 - [Suppressing touch action can block scrolling] -> Apply `touch-action: none` only to the small handle, never to the row or list.
 - [A finger can outrun a static viewport] -> Auto-scroll near the viewport edges while continuously re-evaluating the drop target.
+- [Sparse lists and fast movement can miss row drag-over events] -> Resolve every movement sample against live target geometry and fall back to the nearest legal insertion boundary across the list surface.
 - [Two drag paths can diverge] -> Share active-drag setup and final commit functions and cover both paths with regression tests.
 - [Older synchronized clients do not know the new column] -> Use a defaulted additive column and keep all existing settings columns compatible.
 

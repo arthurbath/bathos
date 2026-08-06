@@ -32,10 +32,9 @@ import {
 } from '@/components/ui/date-picker-field';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -76,7 +75,10 @@ import { TaskEmptyState } from '@/modules/tasks/components/TaskEmptyState';
 import {
   TaskImmediateDragHandle,
 } from '@/modules/tasks/components/TaskImmediateDragHandle';
-import { useTaskImmediateDragTarget } from '@/modules/tasks/components/TaskImmediateDragTarget';
+import {
+  dispatchToTaskImmediateDragTarget,
+  useTaskImmediateDragTarget,
+} from '@/modules/tasks/components/TaskImmediateDragTarget';
 import {
   addTaskCalendarDays,
   formatTaskCompactCalendarDayOffset,
@@ -280,10 +282,11 @@ import { getNextTaskAreaId } from '@/modules/tasks/domain/taskAreaCycle';
 import { formatTaskReminderTimeDisplay } from '@/modules/tasks/domain/taskReminderTimeInput';
 import { getTaskReminderPresentationMode } from '@/modules/tasks/domain/taskReminderPresentation';
 import {
-  sanitizeTaskQuickFilter,
+  getTaskQuickFilterActionabilities,
+  getTaskQuickFilterForActionabilities,
   taskMatchesQuickFilter,
+  taskQuickFilterActionabilityOptions,
   taskQuickFilterLabels,
-  taskQuickFilters,
   type TaskQuickFilter,
 } from '@/modules/tasks/domain/taskQuickFilters';
 import {
@@ -443,18 +446,15 @@ function alignOpenedTaskToVisibleContent(
   });
 }
 
-function focusTaskNotesAtEnd(taskId: string): boolean {
-  const notes = document.getElementById(`task-notes-${taskId}`);
-  if (!(notes instanceof HTMLElement)) return false;
-  notes.focus({ preventScroll: true });
-  const selection = window.getSelection();
-  if (selection === null) return true;
-  const range = document.createRange();
-  range.selectNodeContents(notes);
-  range.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(range);
-  return true;
+type TaskEditorFocusField = 'notes' | 'link' | 'checklist';
+
+function requestTaskEditorFieldFocus(
+  taskId: string,
+  field: TaskEditorFocusField,
+): void {
+  document.dispatchEvent(new CustomEvent('bathos:task-editor-focus-field', {
+    detail: { taskId, field },
+  }));
 }
 
 function taskPlacementChanged(
@@ -954,10 +954,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     ));
   }, []);
   const taskSearch = useTaskSearch(userId, quickFindOpen || view === 'search');
-  const reminders = useTaskReminders(userId);
+  const nativeNotificationsEnabled = getTasksNativeNotificationsEnabled();
+  const reminders = useTaskReminders(userId, { nativeNotificationsEnabled });
   const reminderPresentationMode = getTaskReminderPresentationMode({
     webPushStatus: reminders.webPush?.status,
-    nativeNotificationsEnabled: getTasksNativeNotificationsEnabled(),
+    nativeNotificationsEnabled,
   });
   const waitingRecurrences = useMemo(() => recurrences.definitions.filter(
     (definition) => {
@@ -1084,7 +1085,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     input?.setSelectionRange(input.value.length, input.value.length);
   }, [resetTouchQuickFindPull]);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
-  const acknowledgedReminderDeliveriesRef = useRef(new Set<string>());
   const activeReminderToastsRef = useRef(new Map<string, ReturnType<typeof toast>>());
   const reminderAcknowledgementsInFlightRef = useRef(new Set<string>());
   const suppressingReminderDeliveriesRef = useRef(new Set<string>());
@@ -1094,6 +1094,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const openTaskSequenceRef = useRef(0);
   const focusedTaskIdRef = useRef<string | null>(null);
   const forcedTaskDomFocusIdRef = useRef<string | null>(null);
+  const filteredDepartureFocusAbandonmentRef = useRef<string | null>(null);
   const visibleTaskIdsRef = useRef<string[]>([]);
   const nativeQuickEntryCommitRequestedRef = useRef(false);
   const deferredCompletionTaskIdsRef = useRef<Set<string>>(new Set());
@@ -1618,6 +1619,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     selectedTaskIdRef.current = taskId;
     setSelectedTaskId(taskId);
     if (taskId !== null) latestTaskMetadataRef.current.delete(taskId);
+    filteredDepartureFocusAbandonmentRef.current = taskId === null
+      && closingDeparture?.kind === 'filtered'
+      ? currentTaskId
+      : null;
     return true;
   }, [
     finalizeDeferredCompletion,
@@ -1829,6 +1834,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const currentTaskId = selectedTaskIdRef.current;
     const closed = await setOpenTask(null);
     if (!closed) return false;
+    const abandonFocus = currentTaskId !== null
+      && filteredDepartureFocusAbandonmentRef.current === currentTaskId;
+    filteredDepartureFocusAbandonmentRef.current = null;
+    if (abandonFocus) {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      forcedTaskDomFocusIdRef.current = null;
+      focusedTaskIdRef.current = null;
+      setFocusedTaskId(null);
+      setBulkSelectionAnchorId(null);
+      return true;
+    }
     if (currentTaskId !== null && currentTaskId !== NEW_TASK_DRAFT_ID) {
       focusTaskRow(currentTaskId);
     }
@@ -2132,20 +2150,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   useEffect(() => {
     if (nativeQuickEntry || reminderPresentationMode === 'checking') return;
 
-    const acknowledge = (
-      deliveryId: string,
-      retryToastOnFailure: boolean,
-    ) => {
+    const acknowledge = (deliveryId: string) => {
       if (reminderAcknowledgementsInFlightRef.current.has(deliveryId)) return;
       reminderAcknowledgementsInFlightRef.current.add(deliveryId);
       let shouldRetryToast = false;
-      void Promise.resolve(acknowledgeReminderDelivery(deliveryId)).then(() => {
-        if (activeReminderToastsRef.current.has(deliveryId)) {
-          acknowledgedReminderDeliveriesRef.current.add(deliveryId);
-        }
-      }).catch(() => {
+      void Promise.resolve(acknowledgeReminderDelivery(deliveryId)).catch(() => {
         showReminderDeliveryError('Reminder Could Not Be Acknowledged');
-        shouldRetryToast = retryToastOnFailure && !reminderToastCleanupRef.current;
+        shouldRetryToast = !reminderToastCleanupRef.current;
       }).finally(() => {
         reminderAcknowledgementsInFlightRef.current.delete(deliveryId);
         suppressingReminderDeliveriesRef.current.delete(deliveryId);
@@ -2195,12 +2206,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           if (open || reminderToastCleanupRef.current) return;
           activeReminderToastsRef.current.delete(item.delivery_id);
           if (suppressingReminderDeliveriesRef.current.has(item.delivery_id)) return;
-          if (acknowledgedReminderDeliveriesRef.current.delete(item.delivery_id)) return;
-          acknowledge(item.delivery_id, true);
+          acknowledge(item.delivery_id);
         },
       });
       activeReminderToastsRef.current.set(item.delivery_id, controller);
-      acknowledge(item.delivery_id, false);
     }
   }, [
     acknowledgeReminderDelivery,
@@ -2682,6 +2691,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       }
     }, 0);
   }, [bulkMode, bulkSelection.size, getTaskCommandTargets, nativeQuickEntry, setOpenTask]);
+
+  const focusTaskCommandContent = useCallback(async (
+    field: Extract<TaskEditorFocusField, 'notes' | 'link'>,
+  ) => {
+    const targets = getTaskCommandTargets();
+    if (targets.length !== 1) return;
+    const target = targets[0];
+    if (selectedTaskIdRef.current !== target.id) {
+      const opened = await setOpenTask(target.id);
+      if (!opened) return;
+    }
+    window.setTimeout(() => requestTaskEditorFieldFocus(target.id, field), 0);
+  }, [getTaskCommandTargets, setOpenTask]);
 
   const runToggleCompletionShortcut = useCallback(async () => {
     if (bulkMode && bulkSelection.size >= 1) {
@@ -3202,8 +3224,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'focus-notes') {
-        const target = getTaskCommandTargets()[0];
-        if (target) focusTaskNotesAtEnd(target.id);
+        void focusTaskCommandContent('notes');
+        return;
+      }
+      if (command === 'focus-link') {
+        void focusTaskCommandContent('link');
         return;
       }
       if (command === 'start-selection') {
@@ -3236,11 +3261,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             await taskEditorAutosaveRef.current.flush();
             if (creationDraftRef.current?.persistedTaskId === null) return;
           }
-          window.setTimeout(() => {
-            document.dispatchEvent(new CustomEvent('bathos:task-checklist-focus', {
-              detail: { taskId: target.id },
-            }));
-          }, 0);
+          window.setTimeout(() => requestTaskEditorFieldFocus(target.id, 'checklist'), 0);
         })();
         return;
       }
@@ -3265,6 +3286,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     clearTaskSelection,
     enterTaskSelectionWithTask,
     focusTaskRow,
+    focusTaskCommandContent,
     closeOpenTaskToFocus,
     getTaskCommandTargets,
     keyboardHelpOpen,
@@ -3784,13 +3806,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             }
           } catch (checklistError) {
             showTaskError('Checklist Could Not Be Added', checklistError);
-            return;
+            throw checklistError;
           }
-          window.setTimeout(() => {
-            document.dispatchEvent(new CustomEvent('bathos:task-checklist-focus', {
-              detail: { taskId: NEW_TASK_DRAFT_ID },
-            }));
-          }, 0);
         } : undefined}
         hierarchy={hierarchy}
         showAreaMetadata={searchRow ? searchRow.route !== 'anytime' : view !== 'anytime'}
@@ -4458,10 +4475,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       onTouchEnd={handleTouchQuickFindEnd}
       onTouchCancel={resetTouchQuickFindPull}
       onDragOver={(event) => {
-        if (
-          activeDraggedTaskIdRef.current === null
-          || taskDropIndicatorRef.current === null
-        ) return;
+        if (activeDraggedTaskIdRef.current === null) return;
+        const eventTarget = event.target instanceof Element ? event.target : null;
+        const handledByRegisteredDropRegion = eventTarget?.closest(
+          '[data-task-row-id], [data-task-recurrence-prototype], '
+          + '[data-task-upcoming-section-drop-region]',
+        ) !== null;
+        if (!handledByRegisteredDropRegion) {
+          dispatchToTaskImmediateDragTarget('tasks', {
+            clientX: event.clientX,
+            clientY: event.clientY,
+          });
+        }
+        if (taskDropIndicatorRef.current === null) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
       }}
@@ -5208,6 +5234,17 @@ function TaskQuickFilterControl({
 }) {
   const active = value !== 'all';
   const activeLabel = taskQuickFilterLabels[value];
+  const selectedActionabilities = new Set(getTaskQuickFilterActionabilities(value));
+
+  const setActionabilityChecked = (
+    actionability: (typeof taskQuickFilterActionabilityOptions)[number]['value'],
+    checked: boolean,
+  ) => {
+    const nextActionabilities = checked
+      ? [...selectedActionabilities, actionability]
+      : [...selectedActionabilities].filter((value) => value !== actionability);
+    onChange(getTaskQuickFilterForActionabilities(nextActionabilities));
+  };
 
   return (
     <DropdownMenu>
@@ -5232,20 +5269,16 @@ function TaskQuickFilterControl({
         aria-label="Quick Filters"
         data-task-quick-filter-menu
       >
-        <DropdownMenuRadioGroup
-          value={value}
-          onValueChange={(nextValue) => onChange(sanitizeTaskQuickFilter(nextValue))}
-        >
-          <DropdownMenuRadioItem value="all">
-            {taskQuickFilterLabels.all}
-          </DropdownMenuRadioItem>
-          <DropdownMenuSeparator />
-          {taskQuickFilters.slice(1).map((filter) => (
-            <DropdownMenuRadioItem key={filter} value={filter}>
-              {taskQuickFilterLabels[filter]}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+        {taskQuickFilterActionabilityOptions.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option.value}
+            checked={selectedActionabilities.has(option.value)}
+            onCheckedChange={(checked) => setActionabilityChecked(option.value, checked)}
+            onSelect={(event) => event.preventDefault()}
+          >
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -6558,7 +6591,7 @@ function UpcomingTaskSections({
           <UpcomingTaskSectionDropRegion
             key={section.key}
             sectionKey={section.key}
-            showImmediateTarget={showDragHandles}
+            showImmediateTarget
             aria-labelledby={`tasks-${section.key.replace(':', '-')}-heading`}
             dropPlacement={sectionDropPlacement}
             onTarget={(clientY, bounds) => {
@@ -6848,6 +6881,7 @@ function TaskRow({
   const [completionGraceActive, setCompletionGraceActive] = useState(false);
   const [touchSwipeOffset, setTouchSwipeOffset] = useState(0);
   const [touchSwipeActive, setTouchSwipeActive] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [editorMounted, setEditorMounted] = useState(selected);
   const [editorExpanded, setEditorExpanded] = useState(selected);
   const [visibleTitle, setVisibleTitle] = useState(task.title);
@@ -6899,9 +6933,9 @@ function TaskRow({
     onTaskDragOver(clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
   }, [draggableTask, onTaskDragOver]);
   useTaskImmediateDragTarget(
-    draggableTask && showDragHandle ? 'tasks' : null,
+    draggableTask ? 'tasks' : null,
     articleRef,
-    draggableTask && showDragHandle ? handleImmediateTaskTarget : null,
+    draggableTask ? handleImmediateTaskTarget : null,
   );
 
   useEffect(() => {
@@ -7271,6 +7305,7 @@ function TaskRow({
     }
   };
   const beginTaskDrag = () => {
+    setDragActive(true);
     suppressClickUntilRef.current = Date.now() + 1_000;
     if (selected) {
       setEditorExpanded(false);
@@ -7281,6 +7316,14 @@ function TaskRow({
       });
     }
     onTaskDragStart();
+  };
+  const finishTaskDrag = () => {
+    setDragActive(false);
+    onTaskDragEnd();
+  };
+  const finishTaskImmediateDrop = () => {
+    setDragActive(false);
+    onTaskImmediateDrop();
   };
   const handleSummaryDragStart = (event: DragEvent<HTMLElement>) => {
     if (!draggableTask || pending) {
@@ -7542,9 +7585,10 @@ function TaskRow({
       <div
         ref={summaryRowRef}
         className={`relative z-[1] flex h-11 touch-pan-y items-center gap-2 overflow-hidden pl-1 pr-1.5 ${
-          touchSwipeActive ? '' : 'transition-transform duration-200 ease-out'
-        }`}
+          touchSwipeActive ? '' : 'transition-[transform,opacity] duration-200 ease-out'
+        } ${dragActive ? 'opacity-45' : 'opacity-100'}`}
         data-task-row-header
+        data-task-dragging={dragActive ? 'true' : undefined}
         data-task-swipe-direction={touchSwipeOffset < 0
           ? 'left'
           : touchSwipeOffset > 0
@@ -7655,7 +7699,7 @@ function TaskRow({
           data-task-id={task.id}
           onDragStart={handleSummaryDragStart}
           onDragEnd={() => {
-            onTaskDragEnd();
+            finishTaskDrag();
             suppressClickUntilRef.current = Date.now() + 250;
           }}
           className={`flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden text-left text-[15px] font-normal leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask && !pending ? 'cursor-grab active:cursor-grabbing' : ''}`}
@@ -7935,8 +7979,8 @@ function TaskRow({
                 scope="tasks"
                 previewRef={summaryRowRef}
                 onStart={beginTaskDrag}
-                onDrop={onTaskImmediateDrop}
-                onCancel={onTaskDragEnd}
+                onDrop={finishTaskImmediateDrop}
+                onCancel={finishTaskDrag}
               />
             ) : null}
           </div>
@@ -8373,31 +8417,19 @@ function TaskEditor({
       notes={notes}
       primaryLink={primaryLink}
       checklistContentPresent={checklistContentPresent}
-      renderChecklist={(layout) => checklistTaskId !== null ? (
+      renderChecklist={() => checklistTaskId !== null ? (
         <TaskChecklistEditor
           ownerId={task.owner_id}
           taskId={checklistTaskId}
           focusRequestTaskId={task.id}
-          emptyActionLayout={layout}
+          emptyActionLayout="standalone"
           onContentPresenceChange={setChecklistContentPresent}
           onRegisterFlush={registerChecklistFlush}
           showDragHandles={showDragHandles}
         />
-      ) : onRequestChecklist ? (
-        <button
-          type="button"
-          aria-label="Add Checklist"
-          data-task-checklist-disclosure
-          className={cn(
-            'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            layout === 'paired' ? 'w-full justify-center' : 'w-fit justify-start',
-          )}
-          onClick={() => void onRequestChecklist()}
-        >
-          <TASK_ICONS.TaskChecklist className="h-4 w-4" aria-hidden="true" />
-          Add Checklist
-        </button>
       ) : null}
+      onChecklistDisclosure={onRequestChecklist}
+      focusRequestId={task.id}
       temporalFields={showTemporalFields ? (
         <div data-task-editor-temporal-grid className="grid grid-cols-2 gap-3">
         <div className="min-w-0">

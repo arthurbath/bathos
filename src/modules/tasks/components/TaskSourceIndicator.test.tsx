@@ -35,7 +35,7 @@ describe('TaskSourceIndicator', () => {
       expect(link?.href).toBe('https://example.test/brief');
       expect(link?.target).toBe('_blank');
       expect(link?.rel).toBe('noopener noreferrer');
-      expect(link?.getAttribute('aria-label')).toBe('Open Primary Link for Read the brief');
+      expect(link?.getAttribute('aria-label')).toBe('Open Link for Read the brief');
       expect(link?.title).toBe('https://example.test/brief');
       expect(link).toHaveClass('text-info');
       expect(link).not.toHaveClass('text-muted-foreground');

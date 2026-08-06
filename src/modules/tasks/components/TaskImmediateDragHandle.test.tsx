@@ -37,6 +37,37 @@ function Harness({
   );
 }
 
+function NearestTargetHarness({
+  onFirstTarget,
+  onLastTarget,
+  onDrop,
+}: {
+  onFirstTarget: () => void;
+  onLastTarget: () => void;
+  onDrop: () => void;
+}) {
+  const sourceRef = useRef<HTMLDivElement>(null);
+  const firstTargetRef = useRef<HTMLDivElement>(null);
+  const lastTargetRef = useRef<HTMLDivElement>(null);
+  useTaskImmediateDragTarget('tasks', firstTargetRef, onFirstTarget);
+  useTaskImmediateDragTarget('tasks', lastTargetRef, onLastTarget);
+  return (
+    <main data-task-space-entry-surface data-testid="surface">
+      <div ref={sourceRef}>Task</div>
+      <div ref={firstTargetRef} data-testid="first-target">First</div>
+      <div ref={lastTargetRef} data-testid="last-target">Last</div>
+      <TaskImmediateDragHandle
+        label="Reorder Task"
+        scope="tasks"
+        previewRef={sourceRef}
+        onStart={vi.fn()}
+        onDrop={onDrop}
+        onCancel={vi.fn()}
+      />
+    </main>
+  );
+}
+
 function dispatchPointer(
   target: Element,
   type: 'pointerdown' | 'pointermove' | 'pointerup',
@@ -104,6 +135,45 @@ describe('TaskImmediateDragHandle', () => {
     dispatchPointer(handle, 'pointermove', { pointerId: 2, clientX: 10, clientY: 20 });
     dispatchPointer(handle, 'pointerup', { pointerId: 2, clientX: 10, clientY: 20 });
     expect(onTarget).toHaveBeenCalled();
+    expect(onDrop).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves blank space after a short list to its final legal target', () => {
+    const onFirstTarget = vi.fn();
+    const onLastTarget = vi.fn();
+    const onDrop = vi.fn();
+    const result = render(
+      <NearestTargetHarness
+        onFirstTarget={onFirstTarget}
+        onLastTarget={onLastTarget}
+        onDrop={onDrop}
+      />,
+    );
+    const rectangle = (top: number, bottom: number): DOMRect => ({
+      top,
+      bottom,
+      height: bottom - top,
+      left: 0,
+      right: 300,
+      width: 300,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(result.getByTestId('surface'), 'getBoundingClientRect')
+      .mockReturnValue(rectangle(0, 400));
+    vi.spyOn(result.getByTestId('first-target'), 'getBoundingClientRect')
+      .mockReturnValue(rectangle(20, 64));
+    vi.spyOn(result.getByTestId('last-target'), 'getBoundingClientRect')
+      .mockReturnValue(rectangle(80, 124));
+
+    const handle = result.getByRole('button', { name: 'Reorder Task' });
+    dispatchPointer(handle, 'pointerdown', { pointerId: 3, clientX: 20, clientY: 30 });
+    dispatchPointer(handle, 'pointermove', { pointerId: 3, clientX: 20, clientY: 260 });
+    dispatchPointer(handle, 'pointerup', { pointerId: 3, clientX: 20, clientY: 260 });
+
+    expect(onFirstTarget).not.toHaveBeenCalled();
+    expect(onLastTarget).toHaveBeenCalledTimes(1);
     expect(onDrop).toHaveBeenCalledTimes(1);
   });
 });

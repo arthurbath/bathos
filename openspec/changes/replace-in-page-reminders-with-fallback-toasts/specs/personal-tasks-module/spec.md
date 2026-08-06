@@ -25,6 +25,13 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **THEN** Tasks does not show an in-app reminder toast for that delivery
 - **AND** notification enablement alone does not acknowledge the reminder occurrence
 
+#### Scenario: Fall back on a blocked surface after another browser accepts Web Push
+- **GIVEN** a registered Web Push target has accepted a due reminder
+- **AND** the currently open Tasks surface has notifications denied, unsupported, unconfigured, revoked, or unavailable
+- **WHEN** that open surface claims the due reminder for in-app presentation
+- **THEN** Tasks shows the persistent in-app reminder toast on that surface
+- **AND** the earlier provider acceptance does not count as manual acknowledgement
+
 #### Scenario: Defer to native notifications
 - **WHEN** the current native Tasks surface reports that operating-system notification delivery is enabled
 - **THEN** Tasks does not show an in-app reminder toast for that delivery

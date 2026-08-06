@@ -210,10 +210,12 @@ export function TaskKeyboardHelpDialog({
         ['Choose Deadline', '⌃D', '⌥⇧D'],
         ['Cycle Actionability', '⌃F', '⌥⇧F'],
         ['Set Start to Someday', '⌃G', '⌥⇧G'],
+        ['Add or Focus Link', '⌃H', '⌥⇧H'],
         ['Toggle Done', '⌃X', '⌥⇧X'],
-        ['Edit Checklist', '⌃C', '⌥⇧C'],
+        ['Add or Focus Checklist', '⌃C', '⌥⇧C'],
         ['Cycle Area', '⌃V', '⌥⇧V'],
         ['Start Bulk Selection With Task', '⌃B', '⌥⇧B'],
+        ['Add or Focus Notes', '⌃N', '⌥⇧N'],
       ],
     },
     {

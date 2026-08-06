@@ -279,9 +279,18 @@ export function TaskChecklistEditorSurface({
 
   const beginChecklist = useCallback(() => {
     const firstCompletedIndex = checklist.items.findIndex(({ completed }) => completed);
-    updateDraftIndex(
-      firstCompletedIndex === -1 ? checklist.items.length : firstCompletedIndex,
-    );
+    const ordinaryInsertionIndex = firstCompletedIndex === -1
+      ? checklist.items.length
+      : firstCompletedIndex;
+    const focusedEmptyDraft = focusedItemIdRef.current === DRAFT_ID
+      && draftTitleRef.current.length === 0
+      && draftIndexRef.current !== null;
+    const nextDraftIndex = focusedEmptyDraft
+      && draftIndexRef.current === ordinaryInsertionIndex
+      && ordinaryInsertionIndex !== 0
+      ? 0
+      : ordinaryInsertionIndex;
+    updateDraftIndex(nextDraftIndex);
     updateDraftTitle('');
     requestInputFocus(DRAFT_ID, 'start');
   }, [checklist.items, requestInputFocus, updateDraftIndex, updateDraftTitle]);

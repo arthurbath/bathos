@@ -22,13 +22,19 @@ describe('getTaskReminderPresentationMode', () => {
   });
 
   it('uses an in-app toast when no notification surface is enabled', () => {
-    expect(getTaskReminderPresentationMode({
-      webPushStatus: 'denied',
-      nativeNotificationsEnabled: false,
-    })).toBe('in-app-toast');
-    expect(getTaskReminderPresentationMode({
-      webPushStatus: undefined,
-      nativeNotificationsEnabled: false,
-    })).toBe('in-app-toast');
+    for (const webPushStatus of [
+      'available',
+      'denied',
+      'unsupported',
+      'unconfigured',
+      'revoked',
+      'error',
+      undefined,
+    ] as const) {
+      expect(getTaskReminderPresentationMode({
+        webPushStatus,
+        nativeNotificationsEnabled: false,
+      })).toBe('in-app-toast');
+    }
   });
 });

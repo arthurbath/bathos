@@ -214,5 +214,5 @@ export const TASK_PRIMARY_LINK_LABELS = {
   mail: 'Mail Link',
   jira: 'Jira Link',
   obsidian: 'Obsidian Link',
-  link: 'Primary Link',
+  link: 'Link',
 } as const satisfies Record<TaskPrimaryLinkIconKind, string>;

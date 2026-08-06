@@ -186,6 +186,7 @@ function RecurrencePrototypeRow({
 }) {
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [visibleTitle, setVisibleTitle] = useState(definition.name);
+  const [dragActive, setDragActive] = useState(false);
   const rowRef = useRef<HTMLElement>(null);
   const summaryRowRef = useRef<HTMLDivElement>(null);
   const actionMenuTriggerRef = useRef<HTMLButtonElement>(null);
@@ -267,19 +268,29 @@ function RecurrencePrototypeRow({
 
   const draggable = !waiting && onDragStart && onDragOver && onDragEnd;
   const beginDrag = useCallback(() => {
+    setDragActive(true);
     suppressClickUntilRef.current = Date.now() + 1_000;
     if (editorOpen) void closeEditor();
     onDragStart?.();
   }, [closeEditor, editorOpen, onDragStart]);
+  const finishDrag = useCallback(() => {
+    setDragActive(false);
+    onDragEnd?.();
+  }, [onDragEnd]);
+  const finishImmediateDrop = useCallback(() => {
+    setDragActive(false);
+    if (onImmediateDrop) onImmediateDrop();
+    else onDragEnd?.();
+  }, [onDragEnd, onImmediateDrop]);
   const handleImmediateTarget = useCallback((point: { clientY: number }) => {
     const bounds = summaryRowRef.current?.getBoundingClientRect();
     if (!bounds || !onDragOver) return;
     onDragOver(point.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
   }, [onDragOver]);
   useTaskImmediateDragTarget(
-    draggable && showDragHandles ? 'tasks' : null,
+    draggable ? 'tasks' : null,
     rowRef,
-    draggable && showDragHandles ? handleImmediateTarget : null,
+    draggable ? handleImmediateTarget : null,
   );
   const handleMacControlSelectionMouseDown = (event: MouseEvent<HTMLElement>) => {
     if (
@@ -360,7 +371,14 @@ function RecurrencePrototypeRow({
           className={TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS}
           data-task-open-highlight-surface
         >
-        <div ref={summaryRowRef} className="flex h-11 items-center gap-2 px-1 pr-1.5">
+        <div
+          ref={summaryRowRef}
+          className={cn(
+            'flex h-11 items-center gap-2 px-1 pr-1.5 transition-opacity duration-200',
+            dragActive ? 'opacity-45' : 'opacity-100',
+          )}
+          data-task-dragging={dragActive ? 'true' : undefined}
+        >
           {bulkSelection ? (
             <button
               type="button"
@@ -423,7 +441,7 @@ function RecurrencePrototypeRow({
             } : undefined}
             onDragEnd={draggable ? () => {
               suppressClickUntilRef.current = Date.now() + 250;
-              onDragEnd();
+              finishDrag();
             } : undefined}
             className={cn(
               'flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none',
@@ -504,11 +522,8 @@ function RecurrencePrototypeRow({
                   scope="tasks"
                   previewRef={summaryRowRef}
                   onStart={beginDrag}
-                  onDrop={() => {
-                    if (onImmediateDrop) onImmediateDrop();
-                    else onDragEnd?.();
-                  }}
-                  onCancel={onDragEnd}
+                  onDrop={finishImmediateDrop}
+                  onCancel={finishDrag}
                 />
               ) : null}
             </div>
@@ -858,11 +873,11 @@ function SharedRecurrencePrototypeEditor({
         notes={notes}
         primaryLink={primaryLink}
         checklistContentPresent={checklistContentPresent}
-        renderChecklist={(layout) => (
+        renderChecklist={() => (
           <TaskChecklistEditorSurface
             controller={checklistController}
             focusRequestTaskId={`recurrence:${definition.id}`}
-            emptyActionLayout={layout}
+            emptyActionLayout="standalone"
             onContentPresenceChange={setChecklistContentPresent}
             onRegisterFlush={(nextFlush) => {
               checklistFlushRef.current = nextFlush;
@@ -870,6 +885,7 @@ function SharedRecurrencePrototypeEditor({
             showDragHandles={showDragHandles}
           />
         )}
+        focusRequestId={`recurrence:${definition.id}`}
         temporalFields={(
           <Button type="button" variant="outline" className="w-full" onClick={onEditRepeat}>
             Edit Repeat...

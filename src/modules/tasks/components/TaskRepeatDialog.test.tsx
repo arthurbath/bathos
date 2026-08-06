@@ -519,7 +519,7 @@ describe('TaskRepeatDialog', () => {
       expect(document.body).not.toHaveTextContent('Ends');
       expect(document.querySelector('input[aria-label="Summary"]')).toBeNull();
       expect(document.querySelector('[aria-label="Prototype Content"]')).toBeNull();
-      expect(document.querySelector('input[aria-label="Primary Link"]')).toBeNull();
+      expect(document.querySelector('input[aria-label="Link"]')).toBeNull();
       expect(document.querySelector('[aria-label="Checklist"]')).toBeNull();
 
       await act(async () => {

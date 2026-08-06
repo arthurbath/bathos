@@ -12,7 +12,12 @@ import { useTaskWebPush } from '@/modules/tasks/hooks/useTaskWebPush';
 
 const CLAIM_INTERVAL_MS = 60_000;
 
-export function useTaskReminders(ownerId: string) {
+export function useTaskReminders(
+  ownerId: string,
+  { nativeNotificationsEnabled = false }: {
+    nativeNotificationsEnabled?: boolean;
+  } = {},
+) {
   const { mode, planningTimeZone, reminderService } = useTasksRuntime();
   const webPush = useTaskWebPush(mode, reminderService);
   const remindersQuery = useQuery<TaskReminder>(
@@ -25,6 +30,9 @@ export function useTaskReminders(ownerId: string) {
   const [dueItems, setDueItems] = useState<TaskDueReminder[]>([]);
   const [claimError, setClaimError] = useState<Error | null>(null);
   const claiming = useRef(false);
+  const inAppFallbackEnabled = !nativeNotificationsEnabled
+    && webPush.status !== 'checking'
+    && webPush.status !== 'active';
 
   const queried = useMemo(
     () => remindersQuery.data.map(parseTaskReminder),
@@ -64,7 +72,12 @@ export function useTaskReminders(ownerId: string) {
   );
 
   const claimDue = useCallback(async () => {
-    if (mode !== 'connected' || claiming.current || document.visibilityState === 'hidden') return;
+    if (
+      mode !== 'connected'
+      || !inAppFallbackEnabled
+      || claiming.current
+      || document.visibilityState === 'hidden'
+    ) return;
     claiming.current = true;
     try {
       const result = await reminderService.claimDue();
@@ -83,10 +96,10 @@ export function useTaskReminders(ownerId: string) {
     } finally {
       claiming.current = false;
     }
-  }, [mode, reminderService]);
+  }, [inAppFallbackEnabled, mode, reminderService]);
 
   useEffect(() => {
-    if (mode !== 'connected') return;
+    if (mode !== 'connected' || !inAppFallbackEnabled) return;
     void claimDue();
     const interval = window.setInterval(() => void claimDue(), CLAIM_INTERVAL_MS);
     const handleVisibility = () => {
@@ -97,7 +110,7 @@ export function useTaskReminders(ownerId: string) {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [claimDue, mode]);
+  }, [claimDue, inAppFallbackEnabled, mode]);
 
   const save = useCallback(async (
     input: Omit<TaskReminderSaveInput, 'timeZone'> & { timeZone?: string },

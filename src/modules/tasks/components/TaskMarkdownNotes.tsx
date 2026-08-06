@@ -15,6 +15,7 @@ type TaskMarkdownNotesProps = {
   notes: string;
   disabled: boolean;
   onChange: (notes: string) => void;
+  focusRequestRevision?: number;
 };
 
 type TaskNoteSourceToken = {
@@ -61,11 +62,13 @@ export function TaskMarkdownNotes({
   notes,
   disabled,
   onChange,
+  focusRequestRevision = 0,
 }: TaskMarkdownNotesProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const renderedValueRef = useRef<string | null>(null);
   const composingRef = useRef(false);
   const pointerSelectingRef = useRef(false);
+  const handledFocusRequestRevisionRef = useRef(0);
   const historyRef = useRef<EditorHistory>({ undo: [], redo: [] });
   const sourceLineIndexesRef = useRef<Set<number>>(new Set());
 
@@ -92,6 +95,25 @@ export function TaskMarkdownNotes({
     renderedValueRef.current = notes;
     restoreSelectionOffsets(editor, selection);
   }, [notes]);
+
+  useLayoutEffect(() => {
+    if (
+      focusRequestRevision === 0
+      || handledFocusRequestRevisionRef.current === focusRequestRevision
+    ) return;
+    const editor = editorRef.current;
+    if (editor === null) return;
+    handledFocusRequestRevisionRef.current = focusRequestRevision;
+    const currentSelection = document.activeElement === editor
+      ? captureSelectionOffsets(editor)
+      : null;
+    const atEnd = currentSelection !== null
+      && currentSelection.start === notes.length
+      && currentSelection.end === notes.length;
+    const position = atEnd ? 0 : notes.length;
+    editor.focus({ preventScroll: true });
+    restoreSelectionOffsets(editor, { start: position, end: position });
+  }, [focusRequestRevision, notes.length]);
 
   useEffect(() => {
     const synchronizeSelectionPresentation = () => {

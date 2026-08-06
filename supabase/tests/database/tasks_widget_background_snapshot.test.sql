@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(25);
+SELECT plan(26);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -288,6 +288,24 @@ SELECT ok(
     FROM widget_snapshot
   ),
   'withholds detailed and foreign task content'
+);
+
+UPDATE public.bathos_user_settings
+SET tasks_quick_filter = 'actionable_waiting',
+    tasks_quick_filter_updated_at = clock_timestamp()
+WHERE user_id = '9c000000-0000-4000-8000-000000000001';
+
+SELECT is(
+  (
+    SELECT string_agg(task ->> 'summary', ',' ORDER BY ordinal)
+    FROM jsonb_array_elements(
+      public.tasks_read_widget_snapshot(
+        'twc_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC'
+      ) #> '{lists,2,tasks}'
+    ) WITH ORDINALITY AS item(task, ordinal)
+  ),
+  'Inbox task,Next area task,First area overdue task',
+  'honors a two-state actionability quick filter during background reads'
 );
 
 UPDATE public.bathos_user_settings

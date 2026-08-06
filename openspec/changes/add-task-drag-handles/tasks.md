@@ -40,3 +40,11 @@
 
 - [x] 7.1 Exclude task and checklist handle-origin touch sequences from the pull-to-find gesture.
 - [x] 7.2 Add regression coverage proving a handle pull cannot reveal or open Quick Find while ordinary list pulls still can.
+
+## 8. Robust Drag Targeting And Feedback
+
+- [x] 8.1 Add list-level coordinate fallback that resolves whitespace above or below rendered task rows to the nearest legal insertion position for ordinary tasks and recurrence prototypes.
+- [x] 8.2 Re-evaluate native and handle drag insertion from current pointer coordinates so high-velocity movement cannot leave a stale row-level indicator.
+- [x] 8.3 Apply dragged-state opacity to the complete task summary row, including its checkbox, metadata, links, ellipsis, and handle.
+- [x] 8.4 Add targeted task-list regressions and run focused tests, lint, build, and OpenSpec validation.
+  - Focused and full Vitest suites pass. ESLint completes with one pre-existing Fast Refresh warning in `TaskQuickFind.tsx`; the production build and strict OpenSpec validation pass. The local browser renders cleanly with no relevant console output. Its synthetic drag primitive cannot complete the app's pointer-capture gesture, so a final physical touch-device drag pass remains required.

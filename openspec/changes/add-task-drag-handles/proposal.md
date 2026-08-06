@@ -10,6 +10,9 @@ Touch users must currently hold a task or checklist row long enough for the brow
 - Restrict scroll suppression to the handle gesture so touches elsewhere retain native vertical scrolling, momentum, and native-app WebView behavior.
 - Preserve the existing task and checklist drop rules, grouped selection behavior, autosave boundary, persistence, undo history, and unsupported-surface restrictions.
 - Preserve the existing row-based/native drag path independently of handle visibility.
+- Resolve handle and native drag movement against the nearest legal insertion position across the whole list surface, including blank space before the first row, after the final row, and between sparse groups.
+- Dim the complete summary row of the actively dragged task, including its checkbox, metadata, Primary Link action, ellipsis, and handle, without dimming unrelated rows or the insertion indicator.
+- Keep insertion targeting responsive when a pointer or touch moves quickly enough to skip directly over individual row event boundaries.
 
 ## Capabilities
 

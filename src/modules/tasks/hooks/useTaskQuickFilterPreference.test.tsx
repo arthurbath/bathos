@@ -42,6 +42,9 @@ function HookHarness({ userId = 'user-1' }: { userId?: string }) {
     <div>
       <output data-testid="filter">{filter}</output>
       <button type="button" onClick={() => setFilter('waiting')}>Waiting</button>
+      <button type="button" onClick={() => setFilter('actionable_waiting')}>
+        Ready and Waiting
+      </button>
     </div>
   );
 }
@@ -179,6 +182,32 @@ describe('useTaskQuickFilterPreference', () => {
         [expect.objectContaining({
           user_id: 'user-1',
           tasks_quick_filter: 'waiting',
+        })],
+        { onConflict: 'user_id' },
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('persists a two-state actionability selection', async () => {
+    const { container, root } = mount(<HookHarness />);
+    try {
+      await flushUi();
+      await act(async () => {
+        Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+          .find((button) => button.textContent?.includes('Ready and Waiting'))
+          ?.click();
+        await Promise.resolve();
+      });
+
+      expect(readFilter(container)).toBe('actionable_waiting');
+      expect(window.localStorage.getItem('bathos_tasks_quick_filter:user-1'))
+        .toContain('"value":"actionable_waiting"');
+      expect(upsertMock).toHaveBeenCalledWith(
+        [expect.objectContaining({
+          user_id: 'user-1',
+          tasks_quick_filter: 'actionable_waiting',
         })],
         { onConflict: 'user_id' },
       );
