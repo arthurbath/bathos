@@ -30,13 +30,14 @@
 - [x] 4.2 Add Edge Function tests for authentication, payload bounds, compatibility, retry receipts, and rejection mapping.
 - [x] 4.3 Add native unit tests for every draft field, validation rule, focus transition, shortcut, picker, checklist operation, save error, retry, and cancel path.
 - [x] 4.4 Build the macOS scheme unsigned for deterministic CI verification and signed with the configured Apple Development identity for local-device validation.
-- [ ] 4.5 Validate cold and warm invocation, first responder, rendering, scrolling, pickers, complete keyboard workflow, atomic save, cancellation, error recovery, and main-window/widget refresh by hand.
+- [x] 4.5 Validate cold and warm invocation, first responder, rendering, scrolling, pickers, complete keyboard workflow, atomic save, cancellation, error recovery, and main-window/widget refresh by hand.
 - [x] 4.6 Run targeted Vitest and native suites, then `npm run test`, `npm run lint`, `npm run build`, `npm run spec:validate`, Supabase database tests, database lint, and strict signature verification.
+- [x] 4.7 Accept canonical checklist UUID text from native encoders regardless of hexadecimal letter casing and cover the Swift representation in pgTAP.
 
 ## 5. Production Rollout and Cleanup
 
 - [x] 5.1 Prepare a read-only production preflight for the new private credential and RPC dependencies and obtain explicit approval before mutation.
 - [x] 5.2 Apply and independently read back the approved migration and deploy/read back the matching native-action Edge Function before enabling the client.
-- [ ] 5.3 Publish the matching web credential bridge, rebuild/sign/install the macOS companion, and run and clean up an owner-scoped complete-capture acceptance fixture.
+- [x] 5.3 Publish the matching web credential bridge, rebuild/sign/install the macOS companion, and run and clean up an owner-scoped complete-capture acceptance fixture.
 - [x] 5.4 Make native Quick Entry the shipping default after parity acceptance and remove the hosted Quick Entry WebKit, readiness, JavaScript forwarding, and compatibility-timeout path.
 - [ ] 5.5 Synchronize durable specs, archive the OpenSpec change, and verify the repository and deployed artifacts are aligned.

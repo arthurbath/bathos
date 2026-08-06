@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(25);
+SELECT plan(26);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -267,6 +267,32 @@ SELECT is(
   ),
   1::bigint,
   'does not duplicate the retried task'
+);
+
+SELECT is(
+  public.tasks_create_from_native_quick_entry(
+    'tqe_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    jsonb_build_object(
+      'payloadSchemaVersion', 1,
+      'contractFingerprint',
+        '5ea30f93f4269dcb3423c4a5ca3c8c9e3b505a545e2052e584d7b56cc653cfe1',
+      'clientMutationID', 'AE000000-0000-4000-8000-000000000060',
+      'operationID', 'AE000000-0000-4000-8000-000000000061',
+      'summary', 'Uppercase Swift UUID capture',
+      'destination', 'anytime',
+      'todaySection', 'inbox',
+      'actionability', 'actionable',
+      'checklist', jsonb_build_array(
+        jsonb_build_object(
+          'clientID', 'AE000000-0000-4000-8000-000000000062',
+          'title', 'Swift checklist item',
+          'position', 0
+        )
+      )
+    )
+  ) #>> '{outcome}',
+  'accepted',
+  'accepts the uppercase hexadecimal UUID representation emitted by Swift'
 );
 
 SELECT is(
