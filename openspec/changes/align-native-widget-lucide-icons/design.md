@@ -36,11 +36,11 @@ The generated asset catalog and typed SwiftUI wrapper will compile into the iOS 
 
 ### Preserve system-owned widget constraints
 
-Custom icon geometry is permitted inside ordinary SwiftUI widget content. For Control Center, the implementation will use a custom `Label` icon view if the installed SDK accepts it. If the Control Widget API requires an SF Symbol for that surface, the control will retain its system symbol and the tested exception will be documented rather than weakening other widget parity.
+Custom icon geometry is permitted inside ordinary SwiftUI widget content. Live-device validation established that the system-owned Control Center and Lock Screen presentation requires symbol-image semantics even though a plain vector asset may compile and appear in the control gallery. The New Task control therefore retains Apple's adaptive `plus.square` SF Symbol. This narrow platform exception does not change Lucide rendering in ordinary iOS and macOS widgets or the watch complication.
 
 ## Risks / Trade-offs
 
 - [Lucide package upgrades change geometry] -> Keep the generated assets checked in, provide a deterministic check mode, and regenerate intentionally when the canonical web icon changes.
 - [Tiny accessory rendering loses detail] -> Preserve Lucide geometry while scaling stroke width proportionally and validate the smallest lock-screen and complication sizes.
 - [Target membership drifts] -> Add the shared source explicitly to every affected target and build each target in validation.
-- [Control Widget rejects arbitrary icon views] -> Prove the API through compilation and retain the narrow platform exception only if required by the SDK.
+- [Control Widget rejects arbitrary icon views] -> Keep the live-device-proven `plus.square` platform exception and guard it with a focused source contract test; compilation and gallery rendering alone are insufficient validation.

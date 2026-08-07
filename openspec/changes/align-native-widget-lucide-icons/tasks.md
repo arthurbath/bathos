@@ -9,7 +9,7 @@
 - [x] 2.1 Replace list-header, Today-horizon, task-state, recurrence, add-action, and empty-state substitutes in the shared iOS/macOS list widget.
 - [x] 2.2 Replace generic and protocol-specific Primary Link substitutes in the shared list widget.
 - [x] 2.3 Replace the watch complication's SF Symbol checkmark with the canonical Lucide checkmark.
-- [x] 2.4 Use the canonical Lucide add-task icon in the iOS Control Center widget if the installed SDK supports custom Control Widget label content, or document the compiled platform exception.
+- [x] 2.4 Retain the adaptive `plus.square` symbol in the iOS New Task control as the live-device-proven system-surface exception, document it, and guard it against ordinary-image regression.
 
 ## 3. Verification
 

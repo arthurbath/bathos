@@ -5,7 +5,7 @@ Tasks widgets currently mix hand-drawn approximations and Apple SF Symbols with 
 ## What Changes
 
 - Add a dependency-free native Lucide renderer for the bounded set of icons used by Tasks widgets and complications.
-- Replace SF Symbol and approximate widget icons with the exact canonical Lucide choices for task state, list identity, Today horizons, recurrence, Primary Link protocols, add actions, empty states, and the watch complication.
+- Replace SF Symbol and approximate ordinary-widget icons with the exact canonical Lucide choices for task state, list identity, Today horizons, recurrence, Primary Link protocols, add actions, empty states, and the watch complication while retaining an adaptive SF Symbol where a system-owned control requires symbol-image semantics.
 - Keep WidgetKit rendering semantic and platform-aware, including monochrome accessory rendering, semantic color, accessibility labels, and existing control behavior.
 - Add a contract test that guards native widget icon assignments against the canonical Tasks icon map.
 
@@ -17,7 +17,7 @@ None.
 
 ### Modified Capabilities
 
-- `tasks-ios-companion`: Require the iOS list and control widgets to render the canonical Tasks Lucide vocabulary.
+- `tasks-ios-companion`: Require the iOS list widgets to render the canonical Tasks Lucide vocabulary while preserving the native symbol required by the system-owned New Task control.
 - `tasks-macos-companion`: Require the shared macOS widget to use the same canonical Lucide vocabulary as the Tasks application and iOS widget.
 - `tasks-watch-companion`: Require the complication center mark to use the canonical Lucide checkmark geometry.
 

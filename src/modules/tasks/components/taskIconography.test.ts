@@ -82,6 +82,23 @@ describe('Tasks iconography', () => {
     }
   });
 
+  it('keeps the system-owned New Task control on its supported symbol image', () => {
+    const controlSource = readFileSync(
+      resolve(
+        process.cwd(),
+        'ios/TasksCompanion/TasksWidgets/NewTaskControl.swift',
+      ),
+      'utf8',
+    );
+
+    expect(controlSource).toContain(
+      'Label("New Task", systemImage: "plus.square")',
+    );
+    expect(controlSource).not.toContain(
+      'TaskWidgetLucideIconView(icon: .addTask)',
+    );
+  });
+
   it('records every registered concept in the human iconography reference', () => {
     const documentation = readFileSync(
       resolve(process.cwd(), 'docs/human/TASKS_ICONOGRAPHY.md'),
