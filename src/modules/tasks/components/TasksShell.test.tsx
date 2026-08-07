@@ -9894,6 +9894,212 @@ describe('TasksShell', () => {
     }
   });
 
+  it('centers editor Start and Deadline pickers behind a modal backdrop on mobile touch viewports', async () => {
+    const innerWidthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const maxTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      'maxTouchPoints',
+    );
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 5,
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]')?.click();
+      });
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('#task-start-task-a')?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.querySelector('[data-task-start-picker-placement="viewport-center"]'))
+        .not.toBeNull();
+      expect(document.querySelector('[data-task-start-picker-backdrop]')).not.toBeNull();
+      expect(document.querySelector('[data-task-start-picker-viewport-anchor]'))
+        .toHaveStyle({ top: 'var(--bathos-modal-vv-center)' });
+
+      await act(async () => {
+        document.querySelector<HTMLElement>('[data-task-start-picker-backdrop]')
+          ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      await waitFor(() => expect(document.querySelector(
+        '[data-task-start-picker-placement="viewport-center"]',
+      )).toBeNull());
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('#task-deadline-task-a')?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.querySelector('[data-date-picker-placement="viewport-center"]'))
+        .not.toBeNull();
+      expect(document.querySelector('[data-date-picker-backdrop]')).not.toBeNull();
+    } finally {
+      cleanup(root, container);
+      if (innerWidthDescriptor) {
+        Object.defineProperty(window, 'innerWidth', innerWidthDescriptor);
+      } else {
+        Reflect.deleteProperty(window, 'innerWidth');
+      }
+      if (maxTouchPointsDescriptor) {
+        Object.defineProperty(window.navigator, 'maxTouchPoints', maxTouchPointsDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, 'maxTouchPoints');
+      }
+    }
+  });
+
+  it('centers a task-menu temporal picker on a mobile touch viewport', async () => {
+    const innerWidthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const maxTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      'maxTouchPoints',
+    );
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 5,
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await openTaskMenuSurface(container, task.title, 'Start...');
+      expect(document.querySelector('[data-task-row-temporal-picker-placement="viewport-center"]'))
+        .not.toBeNull();
+      expect(document.querySelector('[data-task-row-temporal-picker-backdrop]')).not.toBeNull();
+      expect(document.querySelector('[data-task-temporal-picker-anchor]'))
+        .toHaveClass('fixed', 'top-[var(--bathos-modal-vv-center)]');
+    } finally {
+      cleanup(root, container);
+      if (innerWidthDescriptor) {
+        Object.defineProperty(window, 'innerWidth', innerWidthDescriptor);
+      } else {
+        Reflect.deleteProperty(window, 'innerWidth');
+      }
+      if (maxTouchPointsDescriptor) {
+        Object.defineProperty(window.navigator, 'maxTouchPoints', maxTouchPointsDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, 'maxTouchPoints');
+      }
+    }
+  });
+
+  it('scrolls a centered Start picker to keep its focused Reminder input above the keyboard', async () => {
+    const innerWidthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const maxTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      'maxTouchPoints',
+    );
+    const visualViewportDescriptor = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+    const visualViewport = new EventTarget() as VisualViewport;
+    Object.defineProperties(visualViewport, {
+      height: { configurable: true, writable: true, value: 700 },
+      offsetTop: { configurable: true, writable: true, value: 0 },
+    });
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: visualViewport,
+    });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 5,
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [],
+      byRootId: new Map(),
+      dueItems: [],
+      claimError: null,
+      projectionError: null,
+      mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles',
+      loading: false,
+      error: null,
+      save: vi.fn().mockResolvedValue(undefined),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      claimDue: vi.fn().mockResolvedValue(undefined),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('#task-start-task-a')?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      const popover = document.querySelector<HTMLElement>(
+        '[data-task-start-picker-placement="viewport-center"]',
+      )!;
+      const reminderInput = document.querySelector<HTMLInputElement>(
+        '#task-start-reminder-task-a',
+      )!;
+      act(() => reminderInput.focus());
+      expect(document.activeElement).toBe(reminderInput);
+      vi.spyOn(popover, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        bottom: 300,
+        left: 0,
+        right: 276,
+        width: 276,
+        height: 300,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      vi.spyOn(reminderInput, 'getBoundingClientRect').mockReturnValue({
+        top: 460,
+        bottom: 496,
+        left: 0,
+        right: 276,
+        width: 276,
+        height: 36,
+        x: 0,
+        y: 460,
+        toJSON: () => ({}),
+      });
+
+      await act(async () => {
+        Object.defineProperty(visualViewport, 'height', {
+          configurable: true,
+          writable: true,
+          value: 320,
+        });
+        visualViewport.dispatchEvent(new Event('resize'));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 20));
+      });
+
+      expect(popover.scrollTop).toBeGreaterThan(0);
+    } finally {
+      cleanup(root, container);
+      if (innerWidthDescriptor) {
+        Object.defineProperty(window, 'innerWidth', innerWidthDescriptor);
+      } else {
+        Reflect.deleteProperty(window, 'innerWidth');
+      }
+      if (maxTouchPointsDescriptor) {
+        Object.defineProperty(window.navigator, 'maxTouchPoints', maxTouchPointsDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, 'maxTouchPoints');
+      }
+      if (visualViewportDescriptor) {
+        Object.defineProperty(window, 'visualViewport', visualViewportDescriptor);
+      } else {
+        Reflect.deleteProperty(window, 'visualViewport');
+      }
+    }
+  });
+
   it('allows selecting a deadline before the current planning date', async () => {
     const datedTask = {
       ...task,

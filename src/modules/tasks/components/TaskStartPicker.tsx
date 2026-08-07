@@ -36,9 +36,11 @@ import {
 import {
   Popover,
   PopoverAnchor,
+  PopoverBackdrop,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { useModalViewportStyle } from '@/components/ui/modal-viewport';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { focusAdjacentFormControl } from '@/platform/formInteractions';
@@ -105,11 +107,13 @@ export function TaskStartPickerPanel({
   clearEnabled,
   focusTarget,
   active,
+  viewportCentered = false,
   onRequestClose,
   onTabExit,
 }: TaskStartPickerProps & {
   focusTarget: TaskStartPickerFocusTarget;
   active: boolean;
+  viewportCentered?: boolean;
   onRequestClose: () => void;
   onTabExit: (backwards: boolean) => void;
 }) {
@@ -148,6 +152,37 @@ export function TaskStartPickerPanel({
     [reminderHourNow, reminderTimeZone, reminderUsesTodayRules],
   );
   const reminderHourMenuDisabled = reminderDisabled || reminderHourOptions.length === 0;
+
+  const keepFocusedReminderVisible = useCallback(() => {
+    if (!viewportCentered || document.activeElement !== reminderRef.current) return;
+    const input = reminderRef.current;
+    const scrollport = input?.closest<HTMLElement>(
+      '[data-task-start-picker-placement="viewport-center"]',
+    );
+    if (!input || !scrollport) return;
+
+    window.requestAnimationFrame(() => {
+      const inputBounds = input.getBoundingClientRect();
+      const scrollportBounds = scrollport.getBoundingClientRect();
+      const margin = 12;
+      if (inputBounds.bottom > scrollportBounds.bottom - margin) {
+        scrollport.scrollTop += inputBounds.bottom - scrollportBounds.bottom + margin;
+      } else if (inputBounds.top < scrollportBounds.top + margin) {
+        scrollport.scrollTop -= scrollportBounds.top - inputBounds.top + margin;
+      }
+    });
+  }, [viewportCentered]);
+
+  useEffect(() => {
+    if (!active || !viewportCentered) return undefined;
+    const visualViewport = window.visualViewport;
+    visualViewport?.addEventListener('resize', keepFocusedReminderVisible);
+    visualViewport?.addEventListener('scroll', keepFocusedReminderVisible);
+    return () => {
+      visualViewport?.removeEventListener('resize', keepFocusedReminderVisible);
+      visualViewport?.removeEventListener('scroll', keepFocusedReminderVisible);
+    };
+  }, [active, keepFocusedReminderVisible, viewportCentered]);
 
   useEffect(() => {
     if (document.activeElement === reminderRef.current) return;
@@ -665,6 +700,7 @@ export function TaskStartPickerPanel({
               className="h-9 py-1.5"
               data-bathos-field-return-owned="true"
               disabled={reminderDisabled}
+              onFocus={keepFocusedReminderVisible}
               onChange={(event) => {
                 reminderInputConfirmedRef.current = false;
                 setReminderInput(event.target.value);
@@ -843,6 +879,11 @@ export function TaskStartPickerField({
   const [open, setOpen] = useState(false);
   const [focusTarget, setFocusTarget] = useState<TaskStartPickerFocusTarget>('start');
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const viewportCentered = popoverPlacement === 'viewport-center';
+  const viewportStyle = useModalViewportStyle(viewportCentered ? {
+    maxHeight: 'calc(var(--bathos-modal-vv-height) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem)',
+    maxWidth: 'calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 2rem)',
+  } : undefined, viewportCentered);
 
   useEffect(() => {
     const handleClose = (event: Event) => {
@@ -886,6 +927,7 @@ export function TaskStartPickerField({
   return (
     <Popover
       open={open}
+      modal={viewportCentered}
       onOpenChange={(nextOpen) => {
         if (nextOpen) setFocusTarget('start');
         setOpen(nextOpen);
@@ -925,25 +967,29 @@ export function TaskStartPickerField({
           />
         </Button>
       </PopoverTrigger>
-      {popoverPlacement === 'viewport-center' ? (
+      {open && viewportCentered ? <PopoverBackdrop data-task-start-picker-backdrop /> : null}
+      {viewportCentered ? (
         <PopoverAnchor asChild>
           <span
             aria-hidden="true"
-            className="pointer-events-none fixed left-1/2 top-1/2 h-px w-px"
+            className="pointer-events-none fixed left-1/2 top-[var(--bathos-modal-vv-center)] h-px w-px"
             data-task-start-picker-viewport-anchor
+            style={viewportStyle}
           />
         </PopoverAnchor>
       ) : null}
       <PopoverContent
-        align={popoverPlacement === 'viewport-center' ? 'center' : 'start'}
-        side={popoverPlacement === 'viewport-center' ? 'bottom' : undefined}
-        sideOffset={popoverPlacement === 'viewport-center' ? 0 : undefined}
-        avoidCollisions={popoverPlacement !== 'viewport-center'}
+        align={viewportCentered ? 'center' : 'start'}
+        side={viewportCentered ? 'bottom' : undefined}
+        sideOffset={viewportCentered ? 0 : undefined}
+        avoidCollisions={!viewportCentered}
         className={cn(
           'w-auto p-0 shadow-none',
-          popoverPlacement === 'viewport-center' && '-translate-y-1/2 animate-none',
+          viewportCentered
+            && '-translate-y-1/2 animate-none overflow-y-auto overscroll-contain [scroll-padding-block:1rem]',
         )}
         data-task-start-picker-placement={popoverPlacement}
+        style={viewportCentered ? viewportStyle : undefined}
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => {
           const direction = tabExitDirectionRef.current;
@@ -959,6 +1005,7 @@ export function TaskStartPickerField({
           {...props}
           focusTarget={focusTarget}
           active={open}
+          viewportCentered={viewportCentered}
           onRequestClose={() => setOpen(false)}
           onTabExit={(backwards) => {
             tabExitDirectionRef.current = backwards ? 'backward' : 'forward';

@@ -8,9 +8,11 @@ import { ControlDecoration } from '@/components/ui/control-decoration';
 import {
   Popover,
   PopoverAnchor,
+  PopoverBackdrop,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { useModalViewportStyle } from '@/components/ui/modal-viewport';
 import { cn } from '@/lib/utils';
 import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
@@ -251,6 +253,11 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const tabExitDirectionRef = React.useRef<'forward' | 'backward' | null>(null);
   const selectedDate = parseDatePickerFieldValue(value);
+  const viewportCentered = popoverPlacement === 'viewport-center';
+  const viewportStyle = useModalViewportStyle(viewportCentered ? {
+    maxHeight: 'calc(var(--bathos-modal-vv-height) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem)',
+    maxWidth: 'calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 2rem)',
+  } : undefined, viewportCentered);
 
   React.useImperativeHandle(forwardedRef, () => triggerRef.current as HTMLButtonElement);
 
@@ -263,7 +270,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={viewportCentered}>
       <PopoverTrigger asChild>
         <Button
           ref={triggerRef}
@@ -295,25 +302,29 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
           <CalendarIcon className="ml-auto h-4 w-4 shrink-0 text-foreground opacity-50" />
         </Button>
       </PopoverTrigger>
-      {popoverPlacement === 'viewport-center' ? (
+      {open && viewportCentered ? <PopoverBackdrop data-date-picker-backdrop /> : null}
+      {viewportCentered ? (
         <PopoverAnchor asChild>
           <span
             aria-hidden="true"
-            className="pointer-events-none fixed left-1/2 top-1/2 h-px w-px"
+            className="pointer-events-none fixed left-1/2 top-[var(--bathos-modal-vv-center)] h-px w-px"
             data-date-picker-viewport-anchor
+            style={viewportStyle}
           />
         </PopoverAnchor>
       ) : null}
       <PopoverContent
         className={cn(
           'w-auto p-0',
-          popoverPlacement === 'viewport-center' && '-translate-y-1/2 animate-none',
+          viewportCentered
+            && '-translate-y-1/2 animate-none overflow-y-auto overscroll-contain [scroll-padding-block:1rem]',
         )}
-        align={popoverPlacement === 'viewport-center' ? 'center' : popoverAlign}
-        side={popoverPlacement === 'viewport-center' ? 'bottom' : undefined}
-        sideOffset={popoverPlacement === 'viewport-center' ? 0 : undefined}
-        avoidCollisions={popoverPlacement !== 'viewport-center'}
+        align={viewportCentered ? 'center' : popoverAlign}
+        side={viewportCentered ? 'bottom' : undefined}
+        sideOffset={viewportCentered ? 0 : undefined}
+        avoidCollisions={!viewportCentered}
         data-date-picker-placement={popoverPlacement}
+        style={viewportCentered ? viewportStyle : undefined}
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => {
           const direction = tabExitDirectionRef.current;

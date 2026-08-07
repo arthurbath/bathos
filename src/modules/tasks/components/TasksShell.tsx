@@ -46,8 +46,13 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import {
   Popover,
   PopoverAnchor,
+  PopoverBackdrop,
   PopoverContent,
 } from '@/components/ui/popover';
+import {
+  useIsMobileTouchViewport,
+  useModalViewportStyle,
+} from '@/components/ui/modal-viewport';
 import { Switch } from '@/components/ui/switch';
 import {
   Select,
@@ -601,6 +606,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
+  const mobileTouchTemporalPickers = useIsMobileTouchViewport();
 
   useEffect(() => {
     publishTaskNativeContentReady();
@@ -3700,6 +3706,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         key={task.id}
         task={task}
         navigationHref={searchRow?.href}
+        mobileTouchTemporalPickers={mobileTouchTemporalPickers}
         touchActionsEnabled={!searchRow}
         draftExiting={isCreationDraft && closingTaskId === task.id}
         hasChecklistItems={checklistTaskIds.has(persistedDraftTaskId ?? task.id)}
@@ -4000,6 +4007,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         key={task.id}
         task={task}
         navigationHref={searchRow?.href}
+        mobileTouchTemporalPickers={mobileTouchTemporalPickers}
         touchActionsEnabled={!searchRow}
         draftExiting={false}
         hasChecklistItems={checklistTaskIds.has(task.id)}
@@ -6672,6 +6680,117 @@ function isTaskRowActivationTarget(target: EventTarget | null): boolean {
   return !(target instanceof Element && target.closest(TASK_ROW_NON_ACTIVATION_SELECTOR));
 }
 
+function TaskRowTemporalPickerPopover({
+  mode,
+  mobileModal,
+  task,
+  reminder,
+  reminderTime,
+  reminderTimeZone,
+  reminderMode,
+  planningDate,
+  onPlanningChange,
+  onReminderChange,
+  onClearStart,
+  onDeadlineChange,
+  onRequestClose,
+}: {
+  mode: TaskRowTemporalPickerMode;
+  mobileModal: boolean;
+  task: TaskTodo;
+  reminder: TaskReminder | null;
+  reminderTime: string;
+  reminderTimeZone: string;
+  reminderMode: TaskReminderAvailability;
+  planningDate: string;
+  onPlanningChange: (selection: PlanningSelection) => Promise<void>;
+  onReminderChange: (localTime: string) => Promise<void>;
+  onClearStart: () => Promise<void>;
+  onDeadlineChange: (value: string) => void;
+  onRequestClose: () => void;
+}) {
+  const viewportStyle = useModalViewportStyle(mobileModal ? {
+    maxHeight: 'calc(var(--bathos-modal-vv-height) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem)',
+    maxWidth: 'calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 2rem)',
+  } : undefined, mobileModal);
+
+  return (
+    <Popover open modal={mobileModal} onOpenChange={(open) => {
+      if (!open) onRequestClose();
+    }}>
+      {mobileModal ? <PopoverBackdrop data-task-row-temporal-picker-backdrop /> : null}
+      <PopoverAnchor asChild>
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none left-1/2 h-px w-px',
+            mobileModal
+              ? 'fixed top-[var(--bathos-modal-vv-center)]'
+              : 'absolute top-11',
+          )}
+          data-task-temporal-picker-anchor
+          style={mobileModal ? viewportStyle : undefined}
+        />
+      </PopoverAnchor>
+      <PopoverContent
+        side="bottom"
+        align="center"
+        sideOffset={mobileModal ? 0 : undefined}
+        collisionPadding={16}
+        avoidCollisions={!mobileModal}
+        className={cn(
+          'w-auto p-0 shadow-none',
+          mobileModal
+            && '-translate-y-1/2 animate-none overflow-y-auto overscroll-contain [scroll-padding-block:1rem]',
+        )}
+        style={mobileModal ? viewportStyle : undefined}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        data-task-row-temporal-picker={mode}
+        data-task-row-temporal-picker-placement={mobileModal ? 'viewport-center' : 'anchored'}
+        data-task-start-picker-placement={mode === 'start' && mobileModal
+          ? 'viewport-center'
+          : undefined}
+      >
+        {mode === 'start' ? (
+          <TaskStartPickerPanel
+            task={task}
+            reminder={reminder}
+            reminderTime={reminderTime}
+            reminderTimeZone={reminderTimeZone}
+            reminderDisabled={reminderMode !== 'connected'}
+            showReminder={taskHasReminderEligibleStart(task, planningDate)}
+            reminderUnavailableMessage={reminderMode === 'connected'
+              ? null
+              : getTaskReminderUnavailableMessage(reminderMode)}
+            planningDate={planningDate}
+            onPlanningChange={onPlanningChange}
+            onReminderChange={onReminderChange}
+            onClear={onClearStart}
+            focusTarget="start"
+            active
+            viewportCentered={mobileModal}
+            onRequestClose={onRequestClose}
+            onTabExit={onRequestClose}
+          />
+        ) : (
+          <DatePickerPanel
+            value={task.deadline ?? ''}
+            onValueChange={onDeadlineChange}
+            onRequestClose={onRequestClose}
+            onTabExit={onRequestClose}
+            todayDate={planningDate}
+            clearable
+            clearLabel="Clear"
+            commandScope="task-deadline"
+            active
+          />
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function TaskRow({
   task,
   draftExiting,
@@ -6719,6 +6838,7 @@ function TaskRow({
   onPermanentDelete,
   terminalState,
   navigationHref,
+  mobileTouchTemporalPickers,
   touchActionsEnabled = true,
 }: {
   task: TaskTodo;
@@ -6778,6 +6898,7 @@ function TaskRow({
   onPermanentDelete?: () => Promise<void>;
   terminalState?: 'completed' | 'canceled' | 'deleted';
   navigationHref?: string;
+  mobileTouchTemporalPickers: boolean;
   touchActionsEnabled?: boolean;
 }) {
   const [pending, setPending] = useState(false);
@@ -6868,20 +6989,24 @@ function TaskRow({
     mode: TaskRowTemporalPickerMode,
     origin: 'menu' | 'keyboard' | 'touch',
   ) => {
-    alignOpenedTaskToVisibleContent(
-      articleRef.current,
-      taskMotionAllowed() ? 'smooth' : 'auto',
-    );
+    if (!mobileTouchTemporalPickers) {
+      alignOpenedTaskToVisibleContent(
+        articleRef.current,
+        taskMotionAllowed() ? 'smooth' : 'auto',
+      );
+    }
     setTemporalPicker({ mode, origin });
-  }, []);
+  }, [mobileTouchTemporalPickers]);
 
   const queueMenuTemporalPicker = useCallback((mode: TaskRowTemporalPickerMode) => {
-    alignOpenedTaskToVisibleContent(
-      articleRef.current,
-      taskMotionAllowed() ? 'smooth' : 'auto',
-    );
+    if (!mobileTouchTemporalPickers) {
+      alignOpenedTaskToVisibleContent(
+        articleRef.current,
+        taskMotionAllowed() ? 'smooth' : 'auto',
+      );
+    }
     pendingMenuTemporalPickerRef.current = mode;
-  }, []);
+  }, [mobileTouchTemporalPickers]);
 
   useEffect(() => {
     const handleTemporalPickerRequest = (event: Event) => {
@@ -7866,6 +7991,7 @@ function TaskRow({
               onTitleChange={setVisibleTitle}
               showTemporalFields
               showDragHandles={showDragHandle}
+              mobileTouchTemporalPickers={mobileTouchTemporalPickers}
             />
             <button
               type="button"
@@ -7888,66 +8014,24 @@ function TaskRow({
           </div>
         </div>
       ) : null}
-      {!bulkSelection ? (
-        <Popover
-          open={temporalPicker !== null}
-          onOpenChange={(open) => {
-            if (!open) setTemporalPicker(null);
+      {!bulkSelection && temporalPicker ? (
+        <TaskRowTemporalPickerPopover
+          mode={temporalPicker.mode}
+          mobileModal={mobileTouchTemporalPickers}
+          task={task}
+          reminder={reminder}
+          reminderTime={reminderTime}
+          reminderTimeZone={reminderTimeZone}
+          reminderMode={reminderMode}
+          planningDate={planningDate}
+          onPlanningChange={applyStartPlanning}
+          onReminderChange={applyStartReminder}
+          onClearStart={clearStart}
+          onDeadlineChange={(value) => {
+            void run(() => onUpdate({ deadline: value || null }));
           }}
-        >
-          <PopoverAnchor asChild>
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute left-1/2 top-11 h-px w-px"
-              data-task-temporal-picker-anchor
-            />
-          </PopoverAnchor>
-          <PopoverContent
-            side="bottom"
-            align="center"
-            collisionPadding={16}
-            className="w-auto p-0 shadow-none"
-            onOpenAutoFocus={(event) => event.preventDefault()}
-            onCloseAutoFocus={(event) => event.preventDefault()}
-            data-task-row-temporal-picker={temporalPicker?.mode}
-          >
-            {temporalPicker?.mode === 'start' ? (
-              <TaskStartPickerPanel
-                task={task}
-                reminder={reminder}
-                reminderTime={reminderTime}
-                reminderTimeZone={reminderTimeZone}
-                reminderDisabled={reminderMode !== 'connected'}
-                showReminder={taskHasReminderEligibleStart(task, planningDate)}
-                reminderUnavailableMessage={reminderMode === 'connected'
-                  ? null
-                  : getTaskReminderUnavailableMessage(reminderMode)}
-                planningDate={planningDate}
-                onPlanningChange={applyStartPlanning}
-                onReminderChange={applyStartReminder}
-                onClear={clearStart}
-                focusTarget="start"
-                active
-                onRequestClose={() => setTemporalPicker(null)}
-                onTabExit={() => setTemporalPicker(null)}
-              />
-            ) : temporalPicker?.mode === 'deadline' ? (
-              <DatePickerPanel
-                value={task.deadline ?? ''}
-                onValueChange={(value) => {
-                  void run(() => onUpdate({ deadline: value || null }));
-                }}
-                onRequestClose={() => setTemporalPicker(null)}
-                onTabExit={() => setTemporalPicker(null)}
-                todayDate={planningDate}
-                clearable
-                clearLabel="Clear"
-                commandScope="task-deadline"
-                active
-              />
-            ) : null}
-          </PopoverContent>
-        </Popover>
+          onRequestClose={() => setTemporalPicker(null)}
+        />
       ) : null}
       {!bulkSelection ? (
         <TaskRepeatDialog
@@ -7979,6 +8063,7 @@ function TaskEditor({
   onTitleChange,
   showTemporalFields = true,
   showDragHandles = false,
+  mobileTouchTemporalPickers,
 }: {
   task: TaskTodo;
   hasChecklistItems: boolean;
@@ -8003,6 +8088,7 @@ function TaskEditor({
   onTitleChange: (title: string) => void;
   showTemporalFields?: boolean;
   showDragHandles?: boolean;
+  mobileTouchTemporalPickers: boolean;
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
@@ -8280,7 +8366,7 @@ function TaskEditor({
             onPlanningChange={changeStartPlanning}
             onReminderChange={changeReminderTime}
             onClear={clearStartPlanning}
-            popoverPlacement="anchored"
+            popoverPlacement={mobileTouchTemporalPickers ? 'viewport-center' : 'anchored'}
           />
         </div>
         <div className="min-w-0">
@@ -8304,7 +8390,7 @@ function TaskEditor({
             clearLabel="Clear"
             panelCommandScope="task-deadline"
             popoverAlign="end"
-            popoverPlacement="anchored"
+            popoverPlacement={mobileTouchTemporalPickers ? 'viewport-center' : 'anchored'}
           />
         </div>
         </div>
