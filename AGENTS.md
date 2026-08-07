@@ -55,6 +55,7 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 - **OpenSpec scope**: Do not bulk-backfill specs for untouched existing modules. Create or update specs piecemeal as modules, views, shared components, or global paradigms are touched. Existing docs remain source material; durable behavior contracts live in `openspec/specs/`. Future broad implementation plans should use `openspec/changes/`; `docs/agents/plans/` is historical.
 - **OpenSpec skip policy**: Trivial typo, comment, docs-only, or tooling-only changes may skip OpenSpec only with an explicit "no spec impact" note in the final response or change summary.
 - **Evaluations**: Security, performance, and technology evaluations go in dated files (`docs/agents/evaluations/YYYY-MM-DD_topic.md`). Never delete old evaluations — they serve as a decision log.
+- **Intermittent bug log**: When an observed bug cannot yet be reproduced or does not justify an immediate repair, preserve the report and investigation in `docs/agents/intermittent-bugs/` using its documented workflow. Record user evidence, exact relevant prompts, verified source findings, hypotheses with confidence labels, and the evidence required to resume work. Do not present an unconfirmed cause as fact or implement a speculative repair merely to close the record.
 - **README.md**: Keep updated whenever modules are added, changed, or removed. Only document modules visible to general users (not behind admin-only feature flags).
 - **Public `.env` policy**: This repository is public, and `.env` is intentionally committed for Lovable workflows. Treat `.env` as public and only store client-safe values there. Never commit secrets (for example: service role keys, SMTP passwords, API secrets, private tokens). Store real secrets in managed secret stores (Supabase/hosting environment secrets), not in the repo.
 - **Adding a module**: See `docs/agents/MODULE_GUIDE.md` for the full checklist (namespace, tables, files, routes, launcher registration).
@@ -78,5 +79,6 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 - `docs/agents/MODULE_GUIDE.md` — step-by-step module creation
 - `docs/human/STYLE_GUIDE.md` — full design conventions
 - `docs/agents/evaluations/` — decision log
+- `docs/agents/intermittent-bugs/` — evidence log for unresolved intermittent behavior
 - `docs/agents/plans/` — historical agent-authored implementation plans
 - `docs/human/terms/` — human-facing policy documents
