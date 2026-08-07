@@ -173,6 +173,20 @@ Tasks SHALL store an immutable Start or Deadline basis on every recurrence revis
 - **WHEN** a recurrence revision or compatibility migration changes recurrence representation
 - **THEN** every already generated ordinary task retains its current Start, Deadline, metadata, provenance, and occurrence identity
 
+#### Scenario: Adopt the source task as the first occurrence
+- **WHEN** the user creates a recurrence from an existing ordinary task
+- **THEN** that same ordinary task becomes the first occurrence and receives the first Start and optional Deadline derived from the saved cadence, replacing its prior planning dates
+- **AND** the recurrence prototype advances to the cadence after that adopted occurrence without generating a duplicate
+
+#### Scenario: Activate an adopted occurrence that starts today
+- **WHEN** the first pair of a newly created recurrence has a Start equal to the owner's planning date
+- **THEN** the adopted source task retains that Start, receives Today Inbox, and receives the pair's optional Deadline in the same transaction
+
+#### Scenario: Materialize a same-day prototype edit
+- **WHEN** an active recurrence prototype is edited so the accepted first pair has a Start equal to the owner's planning date
+- **THEN** the server generates that ordinary occurrence exactly once during the save transaction
+- **AND** the generated task retains Start today, receives Today Inbox, receives the pair's optional Deadline, and the prototype advances to its next legal state
+
 ### Requirement: Recurrence Compatibility and Portability
 Tasks SHALL read legacy and version-2 recurrence rules, SHALL expose versioned create/edit APIs for the Start-oriented contract, and SHALL preserve synchronized and portable recurrence data across supported clients.
 

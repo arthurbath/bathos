@@ -684,7 +684,7 @@ describe('TaskRepeatDialog', () => {
     }
   });
 
-  it('excludes an already-realized start date from an existing prototype preview', () => {
+  it('allows an existing prototype to accept an implied start date of today', async () => {
     const task = taskTodoFixture({
       id: 'task-existing-weekly-repeat',
       title: 'Exercise',
@@ -712,10 +712,20 @@ describe('TaskRepeatDialog', () => {
     try {
       const preview = document.querySelector('[aria-label="Next Occurrences"]')!;
       expect(preview.querySelectorAll('li')).toHaveLength(3);
-      expect(preview).not.toHaveTextContent('Start Today');
+      expect(preview).toHaveTextContent('Start 2026 Aug 3');
       expect(preview).toHaveTextContent('Start 2026 Aug 10');
       expect(preview).toHaveTextContent('Start 2026 Aug 17');
-      expect(preview).toHaveTextContent('Start 2026 Aug 24');
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>(
+          `button[form="task-repeat-form-${task.id}"]`,
+        )?.click();
+        await Promise.resolve();
+      });
+      expect(edit).toHaveBeenCalledWith(expect.objectContaining({
+        nextStartDate: '2026-08-03',
+        dateBasis: 'deadline',
+        deadlineAfterStartDays: 6,
+      }));
     } finally {
       cleanup(root, container);
     }

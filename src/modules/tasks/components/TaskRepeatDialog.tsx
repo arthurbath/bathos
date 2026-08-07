@@ -245,7 +245,6 @@ export function TaskRepeatDialog({
         intervalCount,
         ruleConfig,
         endMode: 'never',
-        afterDateExclusive: editing ? minimumAnchorDate : null,
         limit: 3,
       });
   const previewPairs = previewAnchors

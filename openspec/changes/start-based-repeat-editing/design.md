@@ -47,6 +47,8 @@ Legacy shapes remain readable and evaluate exactly as before. Version 2 named we
 
 For Start basis, anchor is Start and Deadline is anchor plus offset. For Deadline basis, anchor is Deadline and Start is anchor minus offset. New Start-basis occurrence keys use `calendar-v2-start:<anchor>` so they cannot collide with historical `calendar:<anchor>` identities. Existing rows and keys are not rewritten.
 
+Creating a recurrence adopts the source ordinary task as the first occurrence for both future and reached Starts. The transaction overwrites that task's prior Start and Deadline with the accepted first pair, links it to the new definition and revision, and advances a calendar prototype beyond the adopted anchor. A reached Start is retained as provenance while Today Inbox is assigned under the authoritative activation context. Editing an existing prototype to a pair whose Start is today evaluates that accepted revision inside the edit transaction, so the ordinary instance exists before the save returns and idempotent logical keys prevent duplicate same-day instances.
+
 ### Protect production date-significant schedules with a private manifest
 
 The production preflight records owner-scoped definitions, current revisions, occurrence identities, status/prototype placement, and at least 50 projected Start/Deadline pairs. A private, uncommitted manifest explicitly lists stable recurrence IDs for every birthday, Christmas, Mother’s Day, and other identified holidays. Migration preconditions require each protected revision to remain Deadline-based and its projected Deadline sequence to remain identical.
@@ -87,6 +89,7 @@ The Tasks Have Deadlines row uses the same major-concept separation beneath it a
 - [Risk] Adding a synchronized column breaks local schemas → Update PowerSync schema, generated types, hydration, portability, and schema tests in the same release.
 - [Risk] Multi-month yearly rules create ambiguous interval semantics → Interval applies to eligible years; every selected month in each eligible year emits in calendar order.
 - [Risk] Rollback after clients create Start-basis revisions → Database compatibility must remain deployed. Roll back only the web client while keeping additive schema/functions until all Start-basis data has been explicitly migrated or the feature is retired.
+- [Risk] A cadence save adopts or generates the first pair twice → Perform source adoption and same-day edit evaluation in the versioned database transaction and rely on mutation receipts plus recurrence logical-key uniqueness for idempotency.
 
 ## Migration Plan
 
