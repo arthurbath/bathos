@@ -7,7 +7,7 @@ This package is the production gate for removing empty in-app reminder checks fr
 1. Run `preflight.sql` against production and preserve its result with the release evidence.
 2. Confirm the live publication still has the expected 17-table pre-release topology and that no earlier partial deployment exists.
 3. Deploy `deploy/tasks-powersync/sync-config.yaml` to the hosted PowerSync instance. This removes the server-only claim table from the owner stream before the publication stops emitting it.
-4. Apply `supabase/migrations/20260807195812_reduce_task_reminder_sync_churn.sql` through the supported Supabase migration workflow.
+4. Apply `supabase/migrations/20260807203338_reduce_task_reminder_sync_churn.sql` through the supported Supabase migration workflow.
 5. Run `verify.sql` and `deploy/tasks-powersync/verify.sql` independently.
 6. Publish the client only after both database readbacks succeed.
 7. Confirm an open fallback surface still receives a due reminder and that repeated empty checks create neither a receipt nor a target timestamp update.

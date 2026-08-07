@@ -1,6 +1,6 @@
 # Tasks Reminder Sync Optimization
 
-**Date:** 2026-08-07  
+**Date:** 2026-08-07
 **Status:** Released and verified
 
 ## Decision
@@ -25,7 +25,7 @@ No protected reminder delivery, recurrence, or task data was changed by the roll
 ## Production changes
 
 - Deployed the 16-table owner-scoped PowerSync topology and removed `tasks_reminder_claims` from the synchronized surface.
-- Applied migration `20260807195812_reduce_task_reminder_sync_churn.sql`.
+- Applied migration `20260807203338_reduce_task_reminder_sync_churn.sql`.
 - Revoked receipt-table access from the PowerSync replication role.
 - Made empty legacy and v2 reminder claims write-free.
 - Added conditional nonempty idempotency receipts with 24-hour retention.
