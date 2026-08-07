@@ -14,6 +14,7 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-08-07 | `2026-08-07_tasks_reminder_sync_optimization.md` | Tasks reminder receipt retention, PowerSync boundary reduction, and production acceptance |
 | 2026-08-04 | `2026-08-04_dependency_hardening_release.md` | Dependency-hardening production release, sync recovery, and cross-container acceptance |
 | 2026-08-04 | `2026-08-04_dependency_upgrade_final_performance.md` | Final repeated dependency-upgrade performance comparison and improvement theory |
 | 2026-08-04 | `2026-08-04_dependency_upgrade_performance_gate_waiver.md` | Temporary performance-gate waiver and required closeout evidence |

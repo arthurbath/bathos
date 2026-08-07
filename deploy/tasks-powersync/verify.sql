@@ -318,6 +318,6 @@ $validation$;
 
 SELECT
   'ready' AS tasks_powersync_database_status,
-  17 AS synchronized_table_count,
+  16 AS synchronized_table_count,
   current_database() AS database_name,
   clock_timestamp() AS verified_at;

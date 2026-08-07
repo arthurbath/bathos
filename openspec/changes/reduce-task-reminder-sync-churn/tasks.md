@@ -21,4 +21,4 @@
 - [x] 4.1 Run focused Tasks reminder, PowerSync schema, and database tests.
 - [x] 4.2 Run lint, build, full Vitest, OpenSpec validation, Supabase database tests, database lint, and advisors.
 - [x] 4.3 Perform a fresh production preflight and obtain explicit approval before applying the migration or changing the hosted PowerSync topology.
-- [ ] 4.4 After approval, apply the migration and PowerSync topology, then verify retained receipts, cron health, role privileges, publication membership, reminder behavior, and synchronized client health.
+- [x] 4.4 After approval, apply the migration and PowerSync topology, then verify retained receipts, cron health, role privileges, publication membership, reminder behavior, and synchronized client health.
