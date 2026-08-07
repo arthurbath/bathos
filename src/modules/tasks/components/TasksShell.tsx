@@ -144,14 +144,9 @@ import { useTaskAutomaticListSorting } from '@/modules/tasks/hooks/useTaskAutoma
 import { useTaskDragHandleVisibility } from '@/modules/tasks/hooks/useTaskDragHandleVisibility';
 import { shouldShowTaskDragHandles } from '@/modules/tasks/domain/taskDragHandles';
 import {
-  UnsafeTaskRedoError,
-  UnsafeTaskUndoError,
-} from '@/modules/tasks/domain/taskHistory';
-import {
-  useTaskUndo,
+  useTaskActionHistory,
   type TaskForwardMutationReservation,
-} from '@/modules/tasks/hooks/useTaskUndo';
-import { useTaskChecklistUndo } from '@/modules/tasks/hooks/useTaskChecklistUndo';
+} from '@/modules/tasks/hooks/useTaskActionHistory';
 import {
   TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
   type TaskChecklistForwardMutationDetail,
@@ -693,33 +688,48 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     available: taskUndoAvailable,
     redoAvailable: taskRedoAvailable,
     pending: taskUndoPending,
-    event: taskUndoEvent,
-    redoEvent: taskRedoEvent,
-    forwardMutationPending: taskForwardMutationPending,
     undoWhenAvailable: undoLastTaskChange,
     redoWhenAvailable: redoLastTaskChange,
     reserveForwardMutation,
+    reserveForwardMutations,
     registerForwardMutation,
-  } = useTaskUndo(userId);
-  const checklistUndo = useTaskChecklistUndo(userId);
+    registerForwardMutations,
+    registerChecklistForwardAction,
+  } = useTaskActionHistory(userId);
   const historyOperationPendingRef = useRef(false);
   const [historyOperation, setHistoryOperation] = useState<'undo' | 'redo' | null>(null);
-  const taskHistoryPending = taskUndoPending
-    || checklistUndo.pending
-    || historyOperation !== null;
-  const taskHistoryUndoAvailable = taskUndoAvailable || checklistUndo.available;
-  const historyRouteRef = useRef<Array<'task' | 'checklist'>>([]);
-  const [historyRedoInvalidated, setHistoryRedoInvalidated] = useState(false);
-  const taskHistoryRedoAvailable = !historyRedoInvalidated
-    && (taskRedoAvailable || checklistUndo.redoAvailable);
-  const invalidateCrossStreamRedo = useCallback(() => {
-    historyRouteRef.current = [];
-    setHistoryRedoInvalidated(true);
-  }, []);
-  const registerTaskForwardMutation = useCallback((task: TaskTodo) => {
-    invalidateCrossStreamRedo();
-    registerForwardMutation(task);
-  }, [invalidateCrossStreamRedo, registerForwardMutation]);
+  const taskHistoryPending = taskUndoPending || historyOperation !== null;
+  const taskHistoryUndoAvailable = taskUndoAvailable;
+  const taskHistoryRedoAvailable = taskRedoAvailable;
+  const registerTaskForwardMutation = registerForwardMutation;
+  const registerTaskForwardMutations = useCallback((tasks: readonly TaskTodo[]) => {
+    if (registerForwardMutations) registerForwardMutations(tasks);
+    else tasks.forEach(registerForwardMutation);
+  }, [registerForwardMutation, registerForwardMutations]);
+  const reserveTaskForwardMutations = useCallback((tasks: readonly TaskTodo[]) => {
+    if (reserveForwardMutations) return reserveForwardMutations(tasks);
+    const reservations = tasks.map((task) => reserveForwardMutation(task));
+    let settled = false;
+    return {
+      commit(afterTasks: readonly TaskTodo[]) {
+        if (settled) return;
+        settled = true;
+        const afterById = new Map(afterTasks.flatMap((task) => (
+          task ? [[task.id, task] as const] : []
+        )));
+        for (const [index, task] of tasks.entries()) {
+          const after = afterById.get(task.id);
+          if (after) reservations[index]?.commit(after);
+          else reservations[index]?.cancel();
+        }
+      },
+      cancel() {
+        if (settled) return;
+        settled = true;
+        reservations.forEach((reservation) => reservation?.cancel());
+      },
+    };
+  }, [reserveForwardMutation, reserveForwardMutations]);
   useEffect(() => {
     const handleChecklistForwardMutation = (event: Event) => {
       const detail = (event as CustomEvent<TaskChecklistForwardMutationDetail>).detail;
@@ -727,11 +737,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         detail?.schemaVersion !== 1
         || !detail.actionId
         || !detail.occurredAt
+        || typeof detail.settled?.then !== 'function'
       ) return;
-      invalidateCrossStreamRedo();
-      checklistUndo.registerForwardAction({
+      registerChecklistForwardAction({
         actionId: detail.actionId,
         occurredAt: detail.occurredAt,
+        settled: detail.settled,
       });
     };
     globalThis.addEventListener(
@@ -742,7 +753,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
       handleChecklistForwardMutation,
     );
-  }, [checklistUndo, invalidateCrossStreamRedo]);
+  }, [registerChecklistForwardAction]);
   const {
     tasks: projectedTasks,
     loading,
@@ -765,6 +776,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     registerTaskForwardMutation,
     reserveForwardMutation,
     reportTaskMetadataMutations,
+    reserveTaskForwardMutations,
   );
   const [taskListTransition, setTaskListTransition] = useState<{
     id: number;
@@ -1181,44 +1193,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setHistoryOperation('undo');
     try {
       await flushOpenTaskEditor();
-      const taskEventTime = taskUndoEvent?.occurred_at ?? '';
-      const checklistEventTime = checklistUndo.event?.occurred_at ?? '';
-      if (
-        !taskForwardMutationPending
-        && (
-          checklistUndo.hasPendingForwardAction()
-          || checklistEventTime > taskEventTime
-        )
-      ) {
-        const event = await checklistUndo.undoWhenAvailable();
-        if (event === null) showTaskHistoryBoundaryToast('undo');
-        else {
-          setHistoryRedoInvalidated(false);
-          historyRouteRef.current.push('checklist');
-        }
-        return;
-      }
-      const task = await undoLastTaskChange();
-      if (task === null) showTaskHistoryBoundaryToast('undo');
-      else {
-        setHistoryRedoInvalidated(false);
-        historyRouteRef.current.push('task');
-      }
+      const action = await undoLastTaskChange();
+      if (action === null) showTaskHistoryBoundaryToast('undo');
     } catch (undoError) {
-      if (undoError instanceof UnsafeTaskUndoError) {
-        showTaskHistoryBoundaryToast('undo');
-      } else {
-        showTaskError('Task Change Could Not Be Undone', undoError);
-      }
+      showTaskError('Task Change Could Not Be Undone', undoError);
     } finally {
       historyOperationPendingRef.current = false;
       setHistoryOperation(null);
     }
   }, [
-    checklistUndo,
     flushOpenTaskEditor,
-    taskForwardMutationPending,
-    taskUndoEvent?.occurred_at,
     undoLastTaskChange,
   ]);
 
@@ -1228,48 +1212,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setHistoryOperation('redo');
     try {
       await flushOpenTaskEditor();
-      if (historyRedoInvalidated) {
-        showTaskHistoryBoundaryToast('redo');
-        return;
-      }
-      const routed = historyRouteRef.current.at(-1) ?? null;
-      if (routed === 'checklist') {
-        const event = await checklistUndo.redoWhenAvailable();
-        if (event === null) showTaskHistoryBoundaryToast('redo');
-        else historyRouteRef.current.pop();
-        return;
-      }
-      if (routed === 'task') {
-        const task = await redoLastTaskChange();
-        if (task === null) showTaskHistoryBoundaryToast('redo');
-        else historyRouteRef.current.pop();
-        return;
-      }
-      const taskEventTime = taskRedoEvent?.occurred_at ?? '';
-      const checklistEventTime = checklistUndo.redoEvent?.occurred_at ?? '';
-      if (checklistEventTime > taskEventTime) {
-        const event = await checklistUndo.redoWhenAvailable();
-        if (event === null) showTaskHistoryBoundaryToast('redo');
-        return;
-      }
-      const task = await redoLastTaskChange();
-      if (task === null) showTaskHistoryBoundaryToast('redo');
+      const action = await redoLastTaskChange();
+      if (action === null) showTaskHistoryBoundaryToast('redo');
     } catch (redoError) {
-      if (redoError instanceof UnsafeTaskRedoError) {
-        showTaskHistoryBoundaryToast('redo');
-      } else {
-        showTaskError('Task Change Could Not Be Redone', redoError);
-      }
+      showTaskError('Task Change Could Not Be Redone', redoError);
     } finally {
       historyOperationPendingRef.current = false;
       setHistoryOperation(null);
     }
   }, [
-    checklistUndo,
     flushOpenTaskEditor,
-    historyRedoInvalidated,
     redoLastTaskChange,
-    taskRedoEvent?.occurred_at,
   ]);
 
   const replaceCreationDraft = useCallback((next: TaskCreationDraft | null) => {
@@ -2344,7 +2297,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         planningTimeZone,
         atTop: false,
       });
-      duplicated.forEach(registerTaskForwardMutation);
+      registerTaskForwardMutations(duplicated);
       if (bulkMode) clearTaskSelection();
       if (duplicatesOpenTask && duplicated[0]) await setOpenTask(duplicated[0].id);
       if (duplicatesFocusedTask && duplicated[0]) focusTaskRow(duplicated[0].id);
@@ -2363,7 +2316,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     mode,
     planningDate,
     planningTimeZone,
-    registerTaskForwardMutation,
+    registerTaskForwardMutations,
     setOpenTask,
     taskClipboardService,
   ]);
@@ -2404,12 +2357,25 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       await writeTaskClipboardRepresentations(representations, event);
       if (operation === 'cut') {
         setBulkPending(true);
+        const groupedReservation = reserveTaskForwardMutations(targets);
+        const transitionedTasks: TaskTodo[] = [];
         try {
           const operationId = globalThis.crypto.randomUUID();
           for (const task of targets) {
-            await transitionTask(task.id, 'delete', undefined, { operationId });
+            const transitionedTask = await transitionTask(
+              task.id,
+              'delete',
+              null,
+              { operationId },
+            );
+            if (transitionedTask) transitionedTasks.push(transitionedTask);
           }
+          groupedReservation.commit(transitionedTasks);
           if (bulkMode) clearTaskSelection();
+        } catch (error) {
+          if (transitionedTasks.length > 0) groupedReservation.commit(transitionedTasks);
+          else groupedReservation.cancel();
+          throw error;
         } finally {
           setBulkPending(false);
         }
@@ -2425,6 +2391,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     bulkMode,
     clearTaskSelection,
     getTaskCommandTargets,
+    reserveTaskForwardMutations,
     taskClipboardService,
     transitionTask,
   ]);
@@ -2462,7 +2429,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         planningTimeZone,
         atTop: true,
       });
-      created.forEach(registerTaskForwardMutation);
+      registerTaskForwardMutations(created);
       clearTaskSelection();
     } catch (pasteError) {
       showTaskError('Tasks Could Not Be Pasted', pasteError);
@@ -2475,7 +2442,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     mode,
     planningDate,
     planningTimeZone,
-    registerTaskForwardMutation,
+    registerTaskForwardMutations,
     taskClipboardService,
   ]);
 
@@ -2626,10 +2593,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const runToggleCompletionShortcut = useCallback(async () => {
     if (bulkMode && bulkSelection.size >= 1) {
       const targets = selectableTasks.filter((task) => bulkSelection.has(task.id));
-      const reservations = new Map(targets.map((task) => [
-        task.id,
-        reserveForwardMutation(task),
-      ]));
+      const groupedReservation = reserveTaskForwardMutations(targets);
+      const transitionedTasks: TaskTodo[] = [];
       setBulkPending(true);
       try {
         if (targets.some((task) => task.lifecycle === 'open')) {
@@ -2641,12 +2606,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             : task.lifecycle === 'open'
               ? 'complete'
               : 'reopen';
-          const reservation = reservations.get(task.id);
-          if (reservation) await transitionTask(task.id, transition, reservation);
-          else await transitionTask(task.id, transition);
+          const transitionedTask = await transitionTask(task.id, transition, null);
+          if (transitionedTask) transitionedTasks.push(transitionedTask);
         }
+        groupedReservation.commit(transitionedTasks);
       } catch (completeError) {
-        for (const reservation of reservations.values()) reservation.cancel();
+        if (transitionedTasks.length > 0) groupedReservation.commit(transitionedTasks);
+        else groupedReservation.cancel();
         showTaskError('Selected Tasks Could Not Be Toggled', completeError);
       } finally {
         setBulkPending(false);
@@ -2685,7 +2651,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [
     bulkMode,
     bulkSelection,
-    reserveForwardMutation,
+    reserveTaskForwardMutations,
     selectableTasks,
     toggleDeferredCompletion,
     transitionTask,
@@ -2708,16 +2674,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const requestedCount = targets.length + recurrenceTargets.length;
     if (requestedCount === 0 || bulkPending) return;
     setBulkPending(true);
+    const groupedReservation = reserveTaskForwardMutations(targets);
     try {
       const operationId = globalThis.crypto.randomUUID();
-      const results = await Promise.allSettled([
-        ...targets.map((task) => (
-          transitionTask(task.id, 'delete', undefined, { operationId })
-        )),
-        ...recurrenceTargets.map(({ definition }) => (
+      const taskResults = await Promise.allSettled(targets.map((task) => (
+        transitionTask(task.id, 'delete', null, { operationId })
+      )));
+      const recurrenceResults = await Promise.allSettled(
+        recurrenceTargets.map(({ definition }) => (
           recurrences.setStatus(definition, 'archived')
         )),
-      ]);
+      );
+      const transitionedTasks = taskResults.flatMap((result) => (
+        result.status === 'fulfilled' && result.value ? [result.value] : []
+      ));
+      if (transitionedTasks.length > 0) groupedReservation.commit(transitionedTasks);
+      else groupedReservation.cancel();
+      const results = [...taskResults, ...recurrenceResults];
       if (selectedTaskIdRef.current !== null) await setOpenTask(null);
       if (!bulkMode) clearTaskSelection();
       const failedResults = results.filter(
@@ -2755,6 +2728,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     clearTaskSelection,
     getTaskCommandTargets,
     recurrences,
+    reserveTaskForwardMutations,
     selectableTasks,
     setOpenTask,
     transitionTask,
@@ -2768,20 +2742,22 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (view !== 'done' || targets.length === 0 || bulkPending) return;
 
     const operationId = globalThis.crypto.randomUUID();
-    const reservations = new Map(targets.map((task) => [
-      task.id,
-      reserveForwardMutation(task),
-    ]));
+    const groupedReservation = reserveTaskForwardMutations(targets);
     setBulkPending(true);
     try {
       const results = await Promise.allSettled(targets.map((task) => (
         transitionTask(
           task.id,
           task.disposition === 'deleted' ? 'restore' : 'reopen',
-          reservations.get(task.id),
+          null,
           { operationId },
         )
       )));
+      const transitionedTasks = results.flatMap((result) => (
+        result.status === 'fulfilled' && result.value ? [result.value] : []
+      ));
+      if (transitionedTasks.length > 0) groupedReservation.commit(transitionedTasks);
+      else groupedReservation.cancel();
       const failedResults = results.filter(
         (result): result is PromiseRejectedResult => result.status === 'rejected',
       );
@@ -2799,7 +2775,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [
     bulkPending,
     getTaskCommandTargets,
-    reserveForwardMutation,
+    reserveTaskForwardMutations,
     transitionTask,
     view,
   ]);

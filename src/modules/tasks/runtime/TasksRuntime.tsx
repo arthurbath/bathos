@@ -26,8 +26,10 @@ import {
 import type { TasksSyncState } from '@/modules/tasks/domain/taskSyncReliability';
 import {
   bindTasksDatabaseOwner,
+  assertTasksDatabaseSchemaCompatibility,
   createTasksPowerSyncDatabase,
   getTasksPowerSyncDatabaseGeneration,
+  TasksDatabaseSchemaCompatibilityError,
 } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
 import {
@@ -62,6 +64,7 @@ import {
   isClosedTasksRuntimeClientError,
   isCurrentTasksRuntimeGeneration,
   isTasksDatabaseCorruptionError,
+  isTasksRecoverableCacheError,
   normalizeTasksRuntimeError,
   TASKS_RUNTIME_ERROR_MESSAGE,
   TASKS_RUNTIME_ERROR_TITLE,
@@ -257,7 +260,7 @@ export function TasksRuntimeProvider({
         !isCurrentGeneration()
         || corruptCacheRecoveryInFlight
         || corruptCacheRecoveryStarted
-        || !isTasksDatabaseCorruptionError(error)
+        || !isTasksRecoverableCacheError(error)
       ) {
         return;
       }
@@ -279,7 +282,9 @@ export function TasksRuntimeProvider({
         if (!isCurrentGeneration()) return;
         if (result.outcome === 'replacement-created') {
           reportTasksRuntimeCacheRecovery({
-            failureClass: 'sqlite-corruption',
+            failureClass: error instanceof TasksDatabaseSchemaCompatibilityError
+              ? 'schema-incompatible'
+              : 'sqlite-corruption',
             queueSafety: 'empty',
             previousGeneration: result.previousGeneration,
             nextGeneration: result.nextGeneration,
@@ -293,7 +298,9 @@ export function TasksRuntimeProvider({
           ? 'nonempty'
           : 'unreadable';
         reportTasksRuntimeCacheRecovery({
-          failureClass: 'sqlite-corruption',
+          failureClass: error instanceof TasksDatabaseSchemaCompatibilityError
+            ? 'schema-incompatible'
+            : 'sqlite-corruption',
           queueSafety,
           previousGeneration: result.previousGeneration,
           nextGeneration: null,
@@ -308,7 +315,9 @@ export function TasksRuntimeProvider({
       }).catch(() => {
         if (!isCurrentGeneration()) return;
         reportTasksRuntimeCacheRecovery({
-          failureClass: 'sqlite-corruption',
+          failureClass: error instanceof TasksDatabaseSchemaCompatibilityError
+            ? 'schema-incompatible'
+            : 'sqlite-corruption',
           queueSafety: 'empty',
           previousGeneration: getTasksPowerSyncDatabaseGeneration(database),
           nextGeneration: null,
@@ -329,7 +338,7 @@ export function TasksRuntimeProvider({
     ) => {
       if (!isCurrentGeneration()) return;
       const error = normalizeTasksRuntimeError(caught);
-      if (isTasksDatabaseCorruptionError(error)) {
+      if (isTasksRecoverableCacheError(error)) {
         recoverCorruptCache(error);
         return;
       }
@@ -357,6 +366,9 @@ export function TasksRuntimeProvider({
 
     const initialize = async () => {
       try {
+        startupPhase = 'schema-compatibility';
+        await assertTasksDatabaseSchemaCompatibility(database);
+        if (!isCurrentGeneration() || initializationExpired) return;
         startupPhase = 'owner-binding';
         await bindTasksDatabaseOwner(database, ownerId);
         if (!isCurrentGeneration() || initializationExpired) return;

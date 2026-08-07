@@ -122,7 +122,15 @@ describe('useTaskChecklist', () => {
         schemaVersion: 1,
         actionId: expect.any(String),
         occurredAt: expect.any(String),
+        settled: expect.any(Promise),
       })));
+      const changes = await Promise.all(forwarded.map(({ settled }) => settled));
+      expect(changes[2]).toEqual([expect.objectContaining({
+        entityType: 'checklist_item',
+        entityId: 'item-b',
+        before: expect.objectContaining({ completed: false, order_key: 'a1' }),
+        after: expect.objectContaining({ completed: true }),
+      })]);
       expect(createChecklistItem.mock.calls[0][0].operationId).toBe(forwarded[0].actionId);
       expect(updateChecklistItem.mock.calls[0][3].operationId).toBe(forwarded[1].actionId);
       expect(updateChecklistItem.mock.calls[1][3].operationId).toBe(forwarded[2].actionId);
@@ -172,6 +180,14 @@ describe('useTaskChecklist', () => {
   });
 
   it('shows the completed state and final order before persistence resolves', async () => {
+    const forwarded: TaskChecklistForwardMutationDetail[] = [];
+    const handleForwardMutation = (event: Event) => {
+      forwarded.push((event as CustomEvent<TaskChecklistForwardMutationDetail>).detail);
+    };
+    globalThis.addEventListener(
+      TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+      handleForwardMutation,
+    );
     let resolveUpdate: (
       item: ReturnType<typeof taskChecklistItemFixture>,
     ) => void = () => undefined;
@@ -196,6 +212,7 @@ describe('useTaskChecklist', () => {
       completed_at: expect.any(String),
       client_mutation_id: expect.stringContaining('optimistic-checklist-completion-'),
     });
+    expect(forwarded).toHaveLength(1);
 
     const projected = result.current.items.at(-1)!;
     const saved = {
@@ -207,6 +224,19 @@ describe('useTaskChecklist', () => {
       resolveUpdate(saved);
       await completion;
     });
+
+    await expect(forwarded[0].settled).resolves.toEqual([
+      expect.objectContaining({
+        entityType: 'checklist_item',
+        entityId: 'item-a',
+        before: expect.objectContaining({ completed: false, order_key: 'a0' }),
+        after: expect.objectContaining({ completed: true }),
+      }),
+    ]);
+    globalThis.removeEventListener(
+      TASK_CHECKLIST_FORWARD_MUTATION_EVENT,
+      handleForwardMutation,
+    );
 
     expect(result.current.items.map(({ id }) => id)).toEqual([
       'item-b',

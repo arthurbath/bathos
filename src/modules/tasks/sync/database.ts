@@ -31,6 +31,30 @@ export type TasksOwnerBindingResult = {
   clearedPreviousOwner: boolean;
 };
 
+export type TasksSchemaCompatibilityDatabase = Pick<
+  AbstractPowerSyncDatabase,
+  'getOptional'
+>;
+
+export class TasksDatabaseSchemaCompatibilityError extends Error {
+  readonly cause: unknown;
+
+  constructor(cause: unknown) {
+    super('The local Tasks cache schema is incompatible with this application version');
+    this.name = 'TasksDatabaseSchemaCompatibilityError';
+    this.cause = cause;
+  }
+}
+
+const TASKS_DATABASE_SCHEMA_PROBES = [
+  `SELECT action_id
+   FROM tasks_hierarchy_history_events
+   WHERE 0 = 1`,
+  `SELECT sequence, action_id, occurred_at, expires_at, state, snapshot_version, changes
+   FROM tasks_action_journal
+   WHERE 0 = 1`,
+] as const;
+
 export function tasksDatabaseFilenameForGeneration(generation: number): string {
   return `bathos-tasks-v${normalizeTasksDatabaseGeneration(generation)}.db`;
 }
@@ -130,6 +154,18 @@ export async function bindTasksDatabaseOwner(
   }
 
   return { clearedPreviousOwner };
+}
+
+export async function assertTasksDatabaseSchemaCompatibility(
+  database: TasksSchemaCompatibilityDatabase,
+): Promise<void> {
+  try {
+    for (const query of TASKS_DATABASE_SCHEMA_PROBES) {
+      await database.getOptional(query);
+    }
+  } catch (error) {
+    throw new TasksDatabaseSchemaCompatibilityError(error);
+  }
 }
 
 export async function clearTasksDatabaseForSignOut(

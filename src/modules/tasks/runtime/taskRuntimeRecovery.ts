@@ -4,6 +4,7 @@ import {
   advanceTasksDatabaseGeneration,
   createTasksPowerSyncDatabase,
   getTasksPowerSyncDatabaseGeneration,
+  TasksDatabaseSchemaCompatibilityError,
 } from '@/modules/tasks/sync/database';
 
 export const TASKS_RUNTIME_INITIALIZATION_TIMEOUT_MS = 15_000;
@@ -55,6 +56,11 @@ export function isTasksDatabaseCorruptionError(error: unknown): boolean {
   return false;
 }
 
+export function isTasksRecoverableCacheError(error: unknown): boolean {
+  return error instanceof TasksDatabaseSchemaCompatibilityError
+    || isTasksDatabaseCorruptionError(error);
+}
+
 export function shouldAutomaticallyRecoverTasksRuntime(
   error: unknown,
   automaticRecoveryAttempts: number,
@@ -99,7 +105,7 @@ export function createTasksCorruptCacheRecoveryController(): TasksCorruptCacheRe
   return {
     consumeAutomaticRecovery(error) {
       if (
-        !isTasksDatabaseCorruptionError(error)
+        !isTasksRecoverableCacheError(error)
         || attempts >= TASKS_CORRUPT_CACHE_AUTOMATIC_RECOVERY_LIMIT
       ) {
         return false;

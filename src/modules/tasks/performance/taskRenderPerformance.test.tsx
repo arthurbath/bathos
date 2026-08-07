@@ -23,8 +23,8 @@ vi.mock('@/modules/tasks/hooks/useTaskQuickFilterPreference', () => ({
     setFilter: vi.fn(),
   }),
 }));
-vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
-  useTaskUndo: () => ({
+vi.mock('@/modules/tasks/hooks/useTaskActionHistory', () => ({
+  useTaskActionHistory: () => ({
     available: false,
     pending: false,
     loading: false,
@@ -34,7 +34,9 @@ vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
     redo: vi.fn(),
     undoWhenAvailable: vi.fn().mockResolvedValue(null),
     redoWhenAvailable: vi.fn().mockResolvedValue(null),
+    reserveForwardMutation: vi.fn(),
     registerForwardMutation: vi.fn(),
+    registerChecklistForwardAction: vi.fn(),
   }),
 }));
 vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({

@@ -15,9 +15,10 @@ import {
 import type {
   TaskChecklistClipboardItem,
 } from '@/modules/tasks/domain/taskChecklistClipboard';
+import { checklistJournalSnapshot } from '@/modules/tasks/domain/taskActionJournal';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskChecklistItem } from '@/modules/tasks/types/tasks';
-import { notifyTaskChecklistForwardMutation } from './taskChecklistForwardMutationEvents';
+import { reserveTaskChecklistForwardMutation } from './taskChecklistForwardMutationEvents';
 
 export function useTaskChecklist(ownerId: string, taskId: string) {
   const { hierarchyOperationsRepository, hierarchyRepository } = useTasksRuntime();
@@ -66,17 +67,28 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     const orderKey = checklistInsertionOrderKey(items, boundedIndex);
     const occurredAt = context?.occurredAt ?? new Date().toISOString();
     const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
-    const item = await hierarchyRepository.createChecklistItem({
-      ownerId,
-      taskId,
-      title,
-      orderKey,
-      operationId,
-      occurredAt,
-    });
-    setOptimistic((current) => ({ ...current, [item.id]: item }));
-    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
-    return item;
+    const reservation = reserveTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
+    try {
+      const item = await hierarchyRepository.createChecklistItem({
+        ownerId,
+        taskId,
+        title,
+        orderKey,
+        operationId,
+        occurredAt,
+      });
+      setOptimistic((current) => ({ ...current, [item.id]: item }));
+      reservation.commit([{
+        entityType: 'checklist_item',
+        entityId: item.id,
+        before: null,
+        after: checklistJournalSnapshot(item),
+      }]);
+      return item;
+    } catch (error) {
+      reservation.cancel();
+      throw error;
+    }
   }, [hierarchyRepository, items, ownerId, taskId]);
 
   const createItemCopies = useCallback(async (
@@ -98,28 +110,45 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     const occurredAt = context?.occurredAt ?? new Date().toISOString();
     const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
     const mutationContext = { ...context, occurredAt, operationId };
-    for (const [index, copiedItem] of normalizedItems.entries()) {
-      let item = await hierarchyRepository.createChecklistItem({
-        ownerId,
-        taskId,
-        title: copiedItem.title,
-        orderKey: orderKeys[index],
-        operationId,
-        occurredAt,
-      });
-      if (copiedItem.completed) {
-        item = await hierarchyRepository.completeChecklistItem(
+    const reservation = reserveTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
+    try {
+      for (const [index, copiedItem] of normalizedItems.entries()) {
+        let item = await hierarchyRepository.createChecklistItem({
           ownerId,
-          item.id,
-          true,
-          mutationContext,
-        );
+          taskId,
+          title: copiedItem.title,
+          orderKey: orderKeys[index],
+          operationId,
+          occurredAt,
+        });
+        if (copiedItem.completed) {
+          item = await hierarchyRepository.completeChecklistItem(
+            ownerId,
+            item.id,
+            true,
+            mutationContext,
+          );
+        }
+        created.push(item);
+        setOptimistic((current) => ({ ...current, [item.id]: item }));
       }
-      created.push(item);
-      setOptimistic((current) => ({ ...current, [item.id]: item }));
+      reservation.commit(created.map((item) => ({
+        entityType: 'checklist_item' as const,
+        entityId: item.id,
+        before: null,
+        after: checklistJournalSnapshot(item),
+      })));
+      return created;
+    } catch (error) {
+      if (created.length === 0) reservation.cancel();
+      else reservation.commit(created.map((item) => ({
+        entityType: 'checklist_item' as const,
+        entityId: item.id,
+        before: null,
+        after: checklistJournalSnapshot(item),
+      })));
+      throw error;
     }
-    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
-    return created;
   }, [hierarchyRepository, items, ownerId, taskId]);
 
   const createItems = useCallback((
@@ -137,6 +166,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     patch: TaskChecklistItemPatch,
     context?: TaskMutationContext,
   ) => {
+    const before = items.find(({ id }) => id === itemId) ?? null;
     const mutationEpoch = beginItemMutation([itemId]).get(itemId)!;
     const occurredAt = context?.occurredAt ?? new Date().toISOString();
     const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
@@ -145,20 +175,31 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       occurredAt,
       operationId,
     };
-    const item = await hierarchyRepository.updateChecklistItem(
-      ownerId,
-      itemId,
-      patch,
-      mutationContext,
-    );
-    setOptimistic((current) => (
-      isCurrentItemMutation(item.id, mutationEpoch)
-        ? { ...current, [item.id]: item }
-        : current
-    ));
-    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
-    return item;
-  }, [beginItemMutation, hierarchyRepository, isCurrentItemMutation, ownerId]);
+    const reservation = reserveTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
+    try {
+      const item = await hierarchyRepository.updateChecklistItem(
+        ownerId,
+        itemId,
+        patch,
+        mutationContext,
+      );
+      setOptimistic((current) => (
+        isCurrentItemMutation(item.id, mutationEpoch)
+          ? { ...current, [item.id]: item }
+          : current
+      ));
+      reservation.commit([{
+        entityType: 'checklist_item',
+        entityId: item.id,
+        before: before === null ? null : checklistJournalSnapshot(before),
+        after: checklistJournalSnapshot(item),
+      }]);
+      return item;
+    } catch (error) {
+      reservation.cancel();
+      throw error;
+    }
+  }, [beginItemMutation, hierarchyRepository, isCurrentItemMutation, items, ownerId]);
 
   const setCompleted = useCallback(async (
     item: TaskChecklistItem,
@@ -185,6 +226,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       client_mutation_id: optimisticMutationId,
       updated_at: occurredAt,
     };
+    const reservation = reserveTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
 
     setOptimistic((current) => ({ ...current, [item.id]: projected }));
 
@@ -201,9 +243,15 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
           ? { ...current, [item.id]: saved }
           : current
       ));
-      notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
+      reservation.commit([{
+        entityType: 'checklist_item',
+        entityId: saved.id,
+        before: checklistJournalSnapshot(item),
+        after: checklistJournalSnapshot(saved),
+      }]);
       return saved;
     } catch (error) {
+      reservation.cancel();
       setOptimistic((current) => {
         if (
           !isCurrentItemMutation(item.id, mutationEpoch)
@@ -218,6 +266,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
   }, [beginItemMutation, hierarchyRepository, isCurrentItemMutation, items, ownerId]);
 
   const deleteItem = useCallback(async (itemId: string, context?: TaskMutationContext) => {
+    const before = items.find(({ id }) => id === itemId) ?? null;
     const occurredAt = context?.occurredAt ?? new Date().toISOString();
     const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
     const mutationContext = {
@@ -225,17 +274,28 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       occurredAt,
       operationId,
     };
-    await hierarchyOperationsRepository.request({
-      ownerId,
-      rootType: 'checklist_item',
-      rootId: itemId,
-      operation: 'delete',
-      descendantPolicy: 'reject',
-      context: mutationContext,
-    });
-    setOptimistic((current) => ({ ...current, [itemId]: null }));
-    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
-  }, [hierarchyOperationsRepository, ownerId]);
+    const reservation = reserveTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
+    try {
+      await hierarchyOperationsRepository.request({
+        ownerId,
+        rootType: 'checklist_item',
+        rootId: itemId,
+        operation: 'delete',
+        descendantPolicy: 'reject',
+        context: mutationContext,
+      });
+      setOptimistic((current) => ({ ...current, [itemId]: null }));
+      reservation.commit(before === null ? [] : [{
+        entityType: 'checklist_item',
+        entityId: before.id,
+        before: checklistJournalSnapshot(before),
+        after: null,
+      }]);
+    } catch (error) {
+      reservation.cancel();
+      throw error;
+    }
+  }, [hierarchyOperationsRepository, items, ownerId]);
 
   const deleteItems = useCallback(async (
     itemIds: readonly string[],
@@ -245,16 +305,16 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     const targets = items.filter(({ id }) => requestedIds.has(id));
     if (targets.length === 0) return;
 
+    const deletedIds = new Set<string>();
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
+    const mutationContext = { ...context, occurredAt, operationId };
+    const reservation = reserveTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
     setOptimistic((current) => {
       const next = { ...current };
       for (const item of targets) next[item.id] = null;
       return next;
     });
-
-    const deletedIds = new Set<string>();
-    const occurredAt = context?.occurredAt ?? new Date().toISOString();
-    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
-    const mutationContext = { ...context, occurredAt, operationId };
     try {
       for (const item of targets) {
         await hierarchyOperationsRepository.request({
@@ -268,6 +328,15 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
         deletedIds.add(item.id);
       }
     } catch (error) {
+      if (deletedIds.size === 0) reservation.cancel();
+      else reservation.commit(targets
+        .filter((item) => deletedIds.has(item.id))
+        .map((item) => ({
+          entityType: 'checklist_item' as const,
+          entityId: item.id,
+          before: checklistJournalSnapshot(item),
+          after: null,
+        })));
       setOptimistic((current) => {
         const next = { ...current };
         for (const item of targets) {
@@ -277,7 +346,12 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       });
       throw error;
     }
-    notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
+    reservation.commit(targets.map((item) => ({
+      entityType: 'checklist_item' as const,
+      entityId: item.id,
+      before: checklistJournalSnapshot(item),
+      after: null,
+    })));
   }, [hierarchyOperationsRepository, items, ownerId]);
 
   const reorderItem = useCallback(async (
@@ -330,17 +404,17 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       return movingItems;
     }
 
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
+    const mutationContext = { ...context, occurredAt, operationId };
+    const reservation = reserveTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
     const mutationEpochById = beginItemMutation(projections.map(({ id }) => id));
-
     setOptimistic((current) => ({
       ...current,
       ...Object.fromEntries(projections.map((item) => [item.id, item])),
     }));
 
     const savedItems: TaskChecklistItem[] = [];
-    const occurredAt = context?.occurredAt ?? new Date().toISOString();
-    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
-    const mutationContext = { ...context, occurredAt, operationId };
     try {
       for (const projected of projections) {
         savedItems.push(await hierarchyRepository.updateChecklistItem(
@@ -358,9 +432,27 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
         }
         return next;
       });
-      notifyTaskChecklistForwardMutation({ actionId: operationId, occurredAt });
+      reservation.commit(savedItems.map((item) => {
+        const before = itemById.get(item.id) ?? null;
+        return {
+          entityType: 'checklist_item' as const,
+          entityId: item.id,
+          before: before === null ? null : checklistJournalSnapshot(before),
+          after: checklistJournalSnapshot(item),
+        };
+      }));
       return savedItems;
     } catch (error) {
+      if (savedItems.length === 0) reservation.cancel();
+      else reservation.commit(savedItems.map((item) => {
+        const before = itemById.get(item.id) ?? null;
+        return {
+          entityType: 'checklist_item' as const,
+          entityId: item.id,
+          before: before === null ? null : checklistJournalSnapshot(before),
+          after: checklistJournalSnapshot(item),
+        };
+      }));
       setOptimistic((current) => {
         const next = { ...current };
         for (const projection of projections) {

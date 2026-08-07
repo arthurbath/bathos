@@ -2,6 +2,11 @@ import type { AbstractPowerSyncDatabase, Transaction } from '@powersync/web';
 
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
 import {
+  checklistJournalSnapshot,
+  checklistJournalSnapshotsEqual,
+  type TaskChecklistHistorySnapshot,
+} from '@/modules/tasks/domain/taskActionJournal';
+import {
   InvalidTaskMutationError,
   type TaskMutationContext,
 } from '@/modules/tasks/data/taskRepository';
@@ -166,6 +171,62 @@ export class TaskHierarchyRepository {
       { completed, completed_at: completed ? this.now() : null },
       context,
     );
+  }
+
+  replayChecklistItemSnapshot(
+    ownerId: string,
+    itemId: string,
+    expected: TaskChecklistHistorySnapshot,
+    target: TaskChecklistHistorySnapshot,
+    context?: TaskMutationContext,
+  ): Promise<TaskChecklistItem> {
+    assertOwner(ownerId);
+    requireId(itemId, 'A checklist item identifier is required');
+    return this.database.writeTransaction(async (transaction) => {
+      const stored = await transaction.getOptional<TaskChecklistItem>(
+        'SELECT * FROM tasks_checklist_items WHERE id = ? AND owner_id = ?',
+        [itemId, ownerId],
+      );
+      if (stored === null) throw new TaskHierarchyNotFoundError('checklist item');
+      const current = normalizeStoredHierarchyRow('tasks_checklist_items', stored);
+      if (!checklistJournalSnapshotsEqual(checklistJournalSnapshot(current), expected)) {
+        throw new InvalidTaskMutationError(
+          'The checklist item changed after this action and cannot be replayed safely',
+        );
+      }
+      const mutationContext = normalizeContext(context);
+      const clientMutationId = this.createId();
+      const next: TaskChecklistItem = {
+        ...current,
+        ...target,
+        last_mutation_channel: mutationContext.channel,
+        last_actor_type: mutationContext.actorType,
+        last_operation_id: mutationContext.operationId || clientMutationId,
+        revision: current.revision + 1,
+        client_mutation_id: clientMutationId,
+        updated_at: context?.occurredAt ?? this.now(),
+      };
+      assertChecklistCompletion(next);
+      const columns: Array<keyof TaskChecklistItem> = [
+        'title',
+        'completed',
+        'completed_at',
+        'order_key',
+        'last_mutation_channel',
+        'last_actor_type',
+        'last_operation_id',
+        'revision',
+        'client_mutation_id',
+        'updated_at',
+      ];
+      await transaction.execute(
+        `UPDATE tasks_checklist_items
+         SET ${columns.map((columnName) => `${String(columnName)} = ?`).join(', ')}
+         WHERE id = ? AND owner_id = ?`,
+        [...columns.map((columnName) => toSqliteValue(next[columnName])), itemId, ownerId],
+      );
+      return next;
+    });
   }
 
   private createMetadata(input: CreateHierarchyInput) {

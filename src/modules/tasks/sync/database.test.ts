@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   advanceTasksDatabaseGeneration,
+  assertTasksDatabaseSchemaCompatibility,
   bindTasksDatabaseOwner,
   clearTasksDatabaseForSignOut,
   normalizeTasksDatabaseGeneration,
   readTasksDatabaseGeneration,
   TASKS_DATABASE_GENERATION_STORAGE_KEY,
   tasksDatabaseFilenameForGeneration,
+  TasksDatabaseSchemaCompatibilityError,
   type TasksDatabaseGenerationStorage,
   type TasksOwnerBindingDatabase,
 } from './database';
@@ -120,5 +122,29 @@ describe('tasks local owner binding', () => {
     await expect(bindTasksDatabaseOwner(database, '')).rejects.toThrow(
       'A signed-in owner is required',
     );
+  });
+});
+
+describe('tasks local schema compatibility', () => {
+  it('probes the synchronized hierarchy action identity and local journal contract', async () => {
+    const getOptional = vi.fn().mockResolvedValue(null);
+
+    await expect(assertTasksDatabaseSchemaCompatibility({ getOptional })).resolves.toBeUndefined();
+
+    expect(getOptional).toHaveBeenCalledTimes(2);
+    expect(getOptional.mock.calls[0]?.[0]).toContain('action_id');
+    expect(getOptional.mock.calls[0]?.[0]).toContain('tasks_hierarchy_history_events');
+    expect(getOptional.mock.calls[1]?.[0]).toContain('tasks_action_journal');
+    expect(getOptional.mock.calls[1]?.[0]).toContain('snapshot_version');
+  });
+
+  it('classifies a missing legacy-cache column as schema incompatibility', async () => {
+    const cause = new Error('no such column: action_id');
+    const getOptional = vi.fn().mockRejectedValue(cause);
+
+    await expect(assertTasksDatabaseSchemaCompatibility({ getOptional })).rejects.toMatchObject({
+      name: 'TasksDatabaseSchemaCompatibilityError',
+      cause,
+    } satisfies Partial<TasksDatabaseSchemaCompatibilityError>);
   });
 });

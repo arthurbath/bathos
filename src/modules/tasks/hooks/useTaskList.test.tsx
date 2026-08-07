@@ -34,6 +34,7 @@ let harnessView: TaskListView;
 let harnessRetainedTaskId: string | null;
 let harnessForwardMutation: ReturnType<typeof vi.fn>;
 let harnessReserveForwardMutation: ReturnType<typeof vi.fn>;
+let harnessReserveForwardMutations: ReturnType<typeof vi.fn>;
 let harnessMetadataMutation: ReturnType<typeof vi.fn>;
 
 function Harness() {
@@ -44,6 +45,7 @@ function Harness() {
     harnessForwardMutation,
     harnessReserveForwardMutation,
     harnessMetadataMutation,
+    harnessReserveForwardMutations,
   );
   return null;
 }
@@ -81,6 +83,7 @@ describe('useTaskList optimistic display', () => {
     harnessRetainedTaskId = null;
     harnessForwardMutation = vi.fn();
     harnessReserveForwardMutation = vi.fn();
+    harnessReserveForwardMutations = vi.fn();
     harnessMetadataMutation = vi.fn();
     queryData = [originalTask];
     mocks.useQuery.mockReset().mockImplementation(() => ({
@@ -208,6 +211,55 @@ describe('useTaskList optimistic display', () => {
       queryData = [newerTask];
       rerender(root);
       expect(latest.tasks[0].today_section).toBe('inbox');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('registers a bulk move as one grouped history action', async () => {
+    const secondTask = taskTodoFixture({
+      ...originalTask,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+    });
+    queryData = [originalTask, secondTask];
+    const movedTasks = [originalTask, secondTask].map((task) => ({
+      ...task,
+      today_section: 'later' as const,
+      revision: task.revision + 1,
+      client_mutation_id: `moved-${task.id}`,
+    }));
+    const commit = vi.fn();
+    const cancel = vi.fn();
+    harnessReserveForwardMutations.mockReturnValue({ commit, cancel });
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      moveTasks: vi.fn().mockResolvedValue(movedTasks),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.moveTasks(['task-a', 'task-b'], {
+          destination: 'anytime',
+          todaySection: 'later',
+          startDate: null,
+        });
+      });
+
+      expect(harnessReserveForwardMutations).toHaveBeenCalledWith([
+        originalTask,
+        secondTask,
+      ]);
+      expect(harnessReserveForwardMutation).not.toHaveBeenCalled();
+      expect(commit).toHaveBeenCalledOnce();
+      expect(commit).toHaveBeenCalledWith(movedTasks);
+      expect(cancel).not.toHaveBeenCalled();
     } finally {
       cleanup(root, container);
     }
@@ -512,7 +564,44 @@ describe('useTaskList optimistic display', () => {
       });
       expect(commit).toHaveBeenCalledWith(completedTask);
       expect(cancel).not.toHaveBeenCalled();
-      expect(harnessForwardMutation).toHaveBeenCalledWith(completedTask);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('lets an owning grouped action suppress the automatic single-task reservation', async () => {
+    const completedTask = {
+      ...originalTask,
+      lifecycle: 'completed' as const,
+      completed_at: '2026-07-20T04:02:00.000Z',
+      revision: 2,
+      client_mutation_id: 'mutation-completed',
+    };
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn().mockResolvedValue(completedTask),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.transitionTask(
+          'task-a',
+          'complete',
+          null,
+          { operationId: 'grouped-action' },
+        );
+      });
+
+      expect(harnessReserveForwardMutation).not.toHaveBeenCalled();
+      expect(repository.transitionTask).toHaveBeenCalledWith(
+        'owner-a',
+        'task-a',
+        'complete',
+        { operationId: 'grouped-action' },
+      );
     } finally {
       cleanup(root, container);
     }
@@ -564,7 +653,6 @@ describe('useTaskList optimistic display', () => {
       await act(async () => {
         await latest.transitionTask('task-a', 'complete');
       });
-      expect(harnessForwardMutation).toHaveBeenCalledWith(completedTask);
       expect(latest.tasks).toEqual([completedTask]);
 
       harnessRetainedTaskId = null;

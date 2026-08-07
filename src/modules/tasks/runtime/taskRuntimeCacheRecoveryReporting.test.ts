@@ -54,4 +54,20 @@ describe('Tasks runtime cache recovery reporting', () => {
 
     expect(readTasksRuntimeCacheRecoveryReports()).toEqual([]);
   });
+
+  it('preserves the schema-incompatible failure classification', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const report = reportTasksRuntimeCacheRecovery({
+      failureClass: 'schema-incompatible',
+      queueSafety: 'empty',
+      previousGeneration: 4,
+      nextGeneration: 5,
+      outcome: 'replacement-created',
+    });
+
+    expect(report.failureClass).toBe('schema-incompatible');
+    expect(readTasksRuntimeCacheRecoveryReports()[0]?.failureClass)
+      .toBe('schema-incompatible');
+  });
 });

@@ -172,6 +172,7 @@ const taskHierarchyHistoryEvents = new Table(
     entity_id: column.text,
     client_mutation_id: column.text,
     operation_id: column.text,
+    action_id: column.text,
     actor_type: column.text,
     mutation_channel: column.text,
     affected_ids: column.text,
@@ -186,6 +187,27 @@ const taskHierarchyHistoryEvents = new Table(
     indexes: {
       ownerOccurred: ['owner_id', '-occurred_at'],
       ownerEntityOccurred: ['owner_id', 'entity_type', 'entity_id', '-occurred_at'],
+    },
+  },
+);
+
+const taskActionJournal = new Table(
+  {
+    owner_id: column.text,
+    sequence: column.integer,
+    action_id: column.text,
+    occurred_at: column.text,
+    expires_at: column.text,
+    state: column.text,
+    snapshot_version: column.integer,
+    changes: column.text,
+  },
+  {
+    localOnly: true,
+    indexes: {
+      ownerSequence: ['owner_id', 'sequence'],
+      ownerExpiry: ['owner_id', 'expires_at'],
+      ownerStateSequence: ['owner_id', 'state', 'sequence'],
     },
   },
 );
@@ -458,6 +480,7 @@ export const tasksPowerSyncSchema = new Schema({
   tasks_history_events: taskHistoryEvents,
   tasks_hierarchy_operations: taskHierarchyOperations,
   tasks_hierarchy_history_events: taskHierarchyHistoryEvents,
+  tasks_action_journal: taskActionJournal,
   tasks_user_settings: taskUserSettings,
   tasks_recurrence_definitions: taskRecurrenceDefinitions,
   tasks_recurrence_revisions: taskRecurrenceRevisions,

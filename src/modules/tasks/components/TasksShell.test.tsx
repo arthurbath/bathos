@@ -61,7 +61,6 @@ const mockTaskHierarchy = vi.fn();
 const mockTaskDeletedHierarchyRoots = vi.fn();
 const mockTaskReminders = vi.fn();
 const mockTaskUndo = vi.fn();
-const mockTaskChecklistUndo = vi.fn();
 const mockTaskRecurrences = vi.fn();
 const mockTaskChecklist = vi.fn();
 const mockPrepareForSignOut = vi.fn();
@@ -163,12 +162,8 @@ vi.mock('@/modules/tasks/hooks/useTaskReminders', () => ({
   useTaskReminders: (...args: unknown[]) => mockTaskReminders(...args),
 }));
 
-vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
-  useTaskUndo: (...args: unknown[]) => mockTaskUndo(...args),
-}));
-
-vi.mock('@/modules/tasks/hooks/useTaskChecklistUndo', () => ({
-  useTaskChecklistUndo: (...args: unknown[]) => mockTaskChecklistUndo(...args),
+vi.mock('@/modules/tasks/hooks/useTaskActionHistory', () => ({
+  useTaskActionHistory: (...args: unknown[]) => mockTaskUndo(...args),
 }));
 
 vi.mock('@/modules/tasks/hooks/useTaskRecurrences', () => ({
@@ -691,23 +686,13 @@ describe('TasksShell', () => {
       undoWhenAvailable: vi.fn().mockResolvedValue(null),
       redoWhenAvailable: vi.fn().mockResolvedValue(null),
       reserveForwardMutation: vi.fn(),
+      reserveForwardMutations: vi.fn(() => ({
+        commit: vi.fn(),
+        cancel: vi.fn(),
+      })),
       registerForwardMutation: vi.fn(),
-    });
-    mockTaskChecklistUndo.mockReset().mockReturnValue({
-      available: false,
-      redoAvailable: false,
-      pending: false,
-      loading: false,
-      error: null,
-      event: null,
-      redoEvent: null,
-      forwardActionPending: false,
-      undo: vi.fn().mockResolvedValue(null),
-      redo: vi.fn().mockResolvedValue(null),
-      undoWhenAvailable: vi.fn().mockResolvedValue(null),
-      redoWhenAvailable: vi.fn().mockResolvedValue(null),
-      registerForwardAction: vi.fn(),
-      hasPendingForwardAction: vi.fn(() => false),
+      registerForwardMutations: vi.fn(),
+      registerChecklistForwardAction: vi.fn(),
     });
     mockTaskSearch.mockReset().mockReturnValue({
       tasks: [task],
@@ -1881,6 +1866,7 @@ describe('TasksShell', () => {
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),
+        expect.any(Function),
       );
       expect(upcomingEvent.defaultPrevented).toBe(true);
     } finally {
@@ -1909,6 +1895,7 @@ describe('TasksShell', () => {
         'owner-a',
         'upcoming',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),
@@ -2515,6 +2502,7 @@ describe('TasksShell', () => {
         'owner-a',
         'upcoming',
         'task-future',
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),
@@ -3395,42 +3383,30 @@ describe('TasksShell', () => {
     }
   });
 
-  it('registers an accepted checklist action and routes immediate undo and redo through checklist history', async () => {
-    const taskUndo = vi.fn().mockResolvedValue(task);
+  it('registers checklist snapshots and routes immediate undo and redo through unified history', async () => {
+    const changes = [{
+      entityType: 'checklist_item' as const,
+      entityId: 'item-a',
+      before: null,
+      after: null,
+    }];
+    const settled = Promise.resolve(changes);
+    const undoAction = vi.fn().mockResolvedValue({ id: 'checklist-action' });
+    const redoAction = vi.fn().mockResolvedValue({ id: 'checklist-action' });
+    const registerChecklistForwardAction = vi.fn();
     mockTaskUndo.mockReturnValue({
-      available: true,
-      redoAvailable: false,
-      pending: false,
-      loading: false,
-      error: null,
-      event: { id: 'older-task-event', occurred_at: '2026-07-20T17:00:00.000Z' },
-      redoEvent: null,
-      forwardMutationPending: false,
-      undo: vi.fn(),
-      redo: vi.fn(),
-      undoWhenAvailable: taskUndo,
-      redoWhenAvailable: vi.fn().mockResolvedValue(null),
-      reserveForwardMutation: vi.fn(),
-      registerForwardMutation: vi.fn(),
-    });
-    const registerForwardAction = vi.fn();
-    const checklistUndo = vi.fn().mockResolvedValue({ id: 'checklist-event' });
-    const checklistRedo = vi.fn().mockResolvedValue({ id: 'checklist-event' });
-    mockTaskChecklistUndo.mockReturnValue({
       available: true,
       redoAvailable: true,
       pending: false,
       loading: false,
       error: null,
-      event: null,
-      redoEvent: null,
-      forwardActionPending: true,
       undo: vi.fn(),
       redo: vi.fn(),
-      undoWhenAvailable: checklistUndo,
-      redoWhenAvailable: checklistRedo,
-      registerForwardAction,
-      hasPendingForwardAction: vi.fn(() => true),
+      undoWhenAvailable: undoAction,
+      redoWhenAvailable: redoAction,
+      reserveForwardMutation: vi.fn(),
+      registerForwardMutation: vi.fn(),
+      registerChecklistForwardAction,
     });
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell();
@@ -3442,12 +3418,14 @@ describe('TasksShell', () => {
             schemaVersion: 1,
             actionId: 'accepted-checklist-action',
             occurredAt: '2026-07-20T18:00:00.000Z',
+            settled,
           },
         }));
       });
-      expect(registerForwardAction).toHaveBeenCalledWith({
+      expect(registerChecklistForwardAction).toHaveBeenCalledWith({
         actionId: 'accepted-checklist-action',
         occurredAt: '2026-07-20T18:00:00.000Z',
+        settled,
       });
 
       await act(async () => {
@@ -3455,15 +3433,14 @@ describe('TasksShell', () => {
           'button[aria-label="Undo Last Task Change"]',
         )?.click();
       });
-      await waitFor(() => expect(checklistUndo).toHaveBeenCalledOnce());
-      expect(taskUndo).not.toHaveBeenCalled();
+      await waitFor(() => expect(undoAction).toHaveBeenCalledOnce());
 
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
           'button[aria-label="Redo Last Task Change"]',
         )?.click();
       });
-      await waitFor(() => expect(checklistRedo).toHaveBeenCalledOnce());
+      await waitFor(() => expect(redoAction).toHaveBeenCalledOnce());
     } finally {
       cleanup(root, container);
     }
@@ -4046,7 +4023,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('uses neutral toasts when undo or redo has no safely traversable change', async () => {
+  it('reserves neutral boundary toasts for an empty cursor and reports unsafe replay', async () => {
     const undo = vi.fn().mockResolvedValue(null);
     const redo = vi.fn().mockRejectedValue(
       new UnsafeTaskRedoError('There are no more task changes to redo'),
@@ -4085,11 +4062,11 @@ describe('TasksShell', () => {
         }));
       });
       await waitFor(() => expect(mockToast).toHaveBeenCalledWith({
-        title: 'Nothing to Redo',
-      }));
-      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Task Change Could Not Be Redone',
+        description: 'There are no more task changes to redo',
         variant: 'destructive',
       }));
+      expect(mockToast).not.toHaveBeenCalledWith({ title: 'Nothing to Redo' });
     } finally {
       cleanup(root, container);
     }
@@ -4607,13 +4584,13 @@ describe('TasksShell', () => {
       expect(taskList.transitionTask).toHaveBeenCalledWith(
         'task-completed',
         'reopen',
-        undefined,
+        null,
         { operationId: expect.any(String) },
       );
       expect(taskList.transitionTask).toHaveBeenCalledWith(
         'task-deleted',
         'restore',
-        undefined,
+        null,
         { operationId: expect.any(String) },
       );
       const operationIds = taskList.transitionTask.mock.calls.map(
@@ -6011,7 +5988,15 @@ describe('TasksShell', () => {
       order_key: 'a1',
       client_mutation_id: 'mutation-b',
     };
-    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [task, secondTask],
+      transitionTask: vi.fn().mockImplementation(async (taskId: string) => ({
+        ...(taskId === task.id ? task : secondTask),
+        lifecycle: 'completed' as const,
+        completed_at: '2026-08-06T23:00:00.000Z',
+      })),
+    };
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell();
 
@@ -6030,8 +6015,16 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 200));
       });
       expect(complete.defaultPrevented).toBe(true);
-      expect(taskList.transitionTask).toHaveBeenNthCalledWith(1, 'task-a', 'complete');
-      expect(taskList.transitionTask).toHaveBeenNthCalledWith(2, 'task-b', 'complete');
+      expect(taskList.transitionTask).toHaveBeenNthCalledWith(1, 'task-a', 'complete', null);
+      expect(taskList.transitionTask).toHaveBeenNthCalledWith(2, 'task-b', 'complete', null);
+      const actionHistory = mockTaskUndo.mock.results.at(-1)?.value;
+      expect(actionHistory.reserveForwardMutations).toHaveBeenCalledOnce();
+      const groupedReservation = actionHistory.reserveForwardMutations.mock.results[0]?.value;
+      expect(groupedReservation.commit).toHaveBeenCalledOnce();
+      expect(groupedReservation.commit).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'task-a', lifecycle: 'completed' }),
+        expect.objectContaining({ id: 'task-b', lifecycle: 'completed' }),
+      ]);
       expect(container.querySelector('section[aria-label="Task Selection"]')).toHaveTextContent(
         '2 Tasks',
       );
@@ -6272,6 +6265,13 @@ describe('TasksShell', () => {
           startDate: null,
         });
       }
+      const actionHistory = mockTaskUndo.mock.results.at(-1)?.value;
+      expect(actionHistory.registerForwardMutations).toHaveBeenCalledOnce();
+      expect(actionHistory.registerForwardMutations).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'task-pasted-3' }),
+        expect.objectContaining({ id: 'task-pasted-2' }),
+        expect.objectContaining({ id: 'task-pasted-1' }),
+      ]);
       expect(paste.defaultPrevented).toBe(true);
       expect(mockToast).not.toHaveBeenCalled();
     } finally {
@@ -12019,6 +12019,7 @@ describe('TasksShell', () => {
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),
+        expect.any(Function),
       );
       expect(container).toHaveTextContent(
         'Items in Done are permanently deleted after 30 days.',
@@ -12173,6 +12174,7 @@ describe('TasksShell', () => {
         'owner-a',
         'upcoming',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),
@@ -13205,7 +13207,7 @@ describe('TasksShell', () => {
       await waitFor(() => expect(taskList.transitionTask).toHaveBeenCalledWith(
         ordinaryTask.id,
         'delete',
-        undefined,
+        null,
         { operationId: expect.any(String) },
       ));
       expect(setRecurrenceStatus).toHaveBeenCalledWith(definition, 'archived');
@@ -13918,6 +13920,7 @@ describe('TasksShell', () => {
         'owner-a',
         'anytime',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),
@@ -14753,6 +14756,7 @@ describe('TasksShell', () => {
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),
+        expect.any(Function),
       );
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
       expect(container.querySelector('section[aria-label="Someday Tasks"]')).toBeTruthy();
@@ -14896,6 +14900,7 @@ describe('TasksShell', () => {
         'owner-a',
         'done',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),

@@ -22,8 +22,9 @@ import {
 import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
 import type {
   TaskForwardMutationReservation,
+  TaskForwardMutationGroupReservation,
   TaskForwardMutationSource,
-} from '@/modules/tasks/hooks/useTaskUndo';
+} from '@/modules/tasks/hooks/useTaskActionHistory';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
@@ -76,6 +77,9 @@ export function useTaskList(
   onMetadataMutation?: (
     mutations: readonly TaskMetadataMutation[],
   ) => void,
+  reserveForwardMutations?: (
+    sources: readonly TaskTodo[],
+  ) => TaskForwardMutationGroupReservation,
 ) {
   const { repository, planningTimeZone } = useTasksRuntime();
   const planningDate = useTaskPlanningDate(planningTimeZone);
@@ -327,7 +331,6 @@ export function useTaskList(
       try {
         const updatedTask = await repository.updateTask(ownerId, taskId, patch);
         reservation?.commit(updatedTask);
-        onForwardMutation?.(updatedTask);
         if (currentTask) {
           onMetadataMutation?.([{ before: currentTask, after: updatedTask }]);
         }
@@ -346,7 +349,6 @@ export function useTaskList(
     },
     [
       allTasks,
-      onForwardMutation,
       onMetadataMutation,
       ownerId,
       planningDate,
@@ -362,13 +364,13 @@ export function useTaskList(
     async (
       taskId: string,
       transition: TaskStateTransition,
-      reservedMutation?: TaskForwardMutationReservation,
+      reservedMutation?: TaskForwardMutationReservation | null,
       context?: TaskMutationContext,
     ) => {
       const currentTask = allTasks.find((task) => task.id === taskId);
-      const reservation = reservedMutation ?? (
-        currentTask ? reserveForwardMutation?.(currentTask) : undefined
-      );
+      const reservation = reservedMutation === undefined
+        ? currentTask ? reserveForwardMutation?.(currentTask) : undefined
+        : reservedMutation ?? undefined;
       const leavesCurrentView = transition === 'complete'
         || transition === 'cancel'
         || transition === 'delete'
@@ -385,7 +387,6 @@ export function useTaskList(
           context,
         );
         reservation?.commit(transitionedTask);
-        onForwardMutation?.(transitionedTask);
         setAcceptedTaskProjection(
           transitionedTask,
           retainedTaskId === taskId
@@ -402,7 +403,6 @@ export function useTaskList(
     },
     [
       allTasks,
-      onForwardMutation,
       ownerId,
       planningDate,
       repository,
@@ -437,9 +437,10 @@ export function useTaskList(
         view,
         planningDate,
       ) ? duplicated : null);
+      onForwardMutation?.(duplicated);
       return duplicated;
     },
-    [allTasks, ownerId, planningDate, repository, setAcceptedTaskProjection, view],
+    [allTasks, onForwardMutation, ownerId, planningDate, repository, setAcceptedTaskProjection, view],
   );
   const moveTask = useCallback(
     async (taskId: string, input: TaskPlanningMoveInput) => {
@@ -472,7 +473,6 @@ export function useTaskList(
       try {
         const movedTask = await repository.moveTask(ownerId, taskId, input);
         reservation?.commit(movedTask);
-        onForwardMutation?.(movedTask);
         if (currentTask) {
           onMetadataMutation?.([{ before: currentTask, after: movedTask }]);
         }
@@ -491,7 +491,6 @@ export function useTaskList(
     },
     [
       allTasks,
-      onForwardMutation,
       onMetadataMutation,
       ownerId,
       planningDate,
@@ -507,7 +506,8 @@ export function useTaskList(
     async (taskIds: string[], input: TaskPlanningMoveInput) => {
       const taskIdSet = new Set(taskIds);
       const currentTasks = allTasks.filter((task) => taskIdSet.has(task.id));
-      const reservations = new Map(currentTasks.map((task) => [
+      const groupedReservation = reserveForwardMutations?.(currentTasks);
+      const reservations = groupedReservation ? new Map() : new Map(currentTasks.map((task) => [
         task.id,
         reserveForwardMutation?.(task),
       ]));
@@ -538,7 +538,6 @@ export function useTaskList(
         const movedTaskIds = new Set(movedTasks.map(({ id }) => id));
         for (const movedTask of movedTasks) {
           reservations.get(movedTask.id)?.commit(movedTask);
-          onForwardMutation?.(movedTask);
           setAcceptedTaskProjection(
             movedTask,
             retainedTaskId === movedTask.id
@@ -547,6 +546,7 @@ export function useTaskList(
             : null,
           );
         }
+        groupedReservation?.commit(movedTasks);
         for (const [taskId, reservation] of reservations) {
           if (!movedTaskIds.has(taskId)) reservation?.cancel();
         }
@@ -558,6 +558,7 @@ export function useTaskList(
         if (mutations.length > 0) onMetadataMutation?.(mutations);
         return movedTasks;
       } catch (error) {
+        groupedReservation?.cancel();
         for (const reservation of reservations.values()) reservation?.cancel();
         for (const taskId of taskIds) setOptimisticTask(taskId, undefined);
         throw error;
@@ -565,12 +566,12 @@ export function useTaskList(
     },
     [
       allTasks,
-      onForwardMutation,
       onMetadataMutation,
       ownerId,
       planningDate,
       repository,
       reserveForwardMutation,
+      reserveForwardMutations,
       retainedTaskId,
       setAcceptedTaskProjection,
       setOptimisticTask,
@@ -580,7 +581,8 @@ export function useTaskList(
   const applyTaskPatches = useCallback(async (inputs: readonly TaskBulkPatchInput[]) => {
     const inputById = new Map(inputs.map((input) => [input.taskId, input]));
     const currentTasks = allTasks.filter((task) => inputById.has(task.id));
-    const reservations = new Map(currentTasks.map((task) => [
+    const groupedReservation = reserveForwardMutations?.(currentTasks);
+    const reservations = groupedReservation ? new Map() : new Map(currentTasks.map((task) => [
       task.id,
       reserveForwardMutation?.(task),
     ]));
@@ -598,12 +600,12 @@ export function useTaskList(
       const updatedTasks = await repository.applyTaskPatches(ownerId, inputs);
       for (const updatedTask of updatedTasks) {
         reservations.get(updatedTask.id)?.commit(updatedTask);
-        onForwardMutation?.(updatedTask);
         setAcceptedTaskProjection(
           updatedTask,
           taskIsVisible(updatedTask, ownerId, view, planningDate) ? updatedTask : null,
         );
       }
+      groupedReservation?.commit(updatedTasks);
       const currentTaskById = new Map(currentTasks.map((task) => [task.id, task]));
       const mutations = updatedTasks.flatMap((after) => {
         const before = currentTaskById.get(after.id);
@@ -612,18 +614,19 @@ export function useTaskList(
       if (mutations.length > 0) onMetadataMutation?.(mutations);
       return updatedTasks;
     } catch (error) {
+      groupedReservation?.cancel();
       for (const reservation of reservations.values()) reservation?.cancel();
       for (const { taskId } of inputs) setOptimisticTask(taskId, undefined);
       throw error;
     }
   }, [
     allTasks,
-    onForwardMutation,
     onMetadataMutation,
     ownerId,
     planningDate,
     repository,
     reserveForwardMutation,
+    reserveForwardMutations,
     setAcceptedTaskProjection,
     setOptimisticTask,
     view,

@@ -9,11 +9,13 @@ import {
   isClosedTasksRuntimeClientError,
   isCurrentTasksRuntimeGeneration,
   isTasksDatabaseCorruptionError,
+  isTasksRecoverableCacheError,
   shouldAutomaticallyRecoverTasksRuntime,
   TASKS_CLOSED_CLIENT_ERROR_MESSAGE,
   TASKS_RUNTIME_ERROR_MESSAGE,
   waitForTasksRuntimeInitialization,
 } from './taskRuntimeRecovery';
+import { TasksDatabaseSchemaCompatibilityError } from '@/modules/tasks/sync/database';
 
 function createCorruptCacheDatabase({
   queueCount = 0,
@@ -165,12 +167,39 @@ describe('Tasks corrupt synchronized-cache recovery', () => {
     )).toBe(true);
     expect(isTasksDatabaseCorruptionError({ code: 'SQLITE_CORRUPT' })).toBe(true);
     expect(isTasksDatabaseCorruptionError({ code: 11 })).toBe(true);
-    expect(isTasksDatabaseCorruptionError(
-      new Error('PowerSync download failed', {
-        cause: { message: 'SQLITE_CORRUPT: malformed page graph' },
-      }),
-    )).toBe(true);
+    const causalError = Object.assign(new Error('PowerSync download failed'), {
+      cause: { message: 'SQLITE_CORRUPT: malformed page graph' },
+    });
+    expect(isTasksDatabaseCorruptionError(causalError)).toBe(true);
     expect(isTasksDatabaseCorruptionError(new Error('Network unavailable'))).toBe(false);
+  });
+
+  it('classifies a legacy schema mismatch for the same queue-safe cache replacement', () => {
+    expect(isTasksRecoverableCacheError(
+      new TasksDatabaseSchemaCompatibilityError(
+        new Error('no such column: action_id'),
+      ),
+    )).toBe(true);
+    expect(isTasksRecoverableCacheError(new Error('Network unavailable'))).toBe(false);
+  });
+
+  it('rotates a legacy cache only after proving its upload queue is empty', async () => {
+    const controller = createTasksCorruptCacheRecoveryController();
+    const database = createCorruptCacheDatabase();
+    const replacement = { replacement: true } as unknown as PowerSyncDatabase;
+    const factory = vi.fn().mockReturnValue(replacement);
+
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      new TasksDatabaseSchemaCompatibilityError(new Error('no such column: action_id')),
+      controller,
+      database,
+      factory,
+    )).resolves.toMatchObject({
+      outcome: 'replacement-created',
+      queueCount: 0,
+      previousGeneration: 1,
+      nextGeneration: 2,
+    });
   });
 
   it('rotates to one fresh generation only after proving the upload queue is empty', async () => {

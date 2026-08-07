@@ -10,6 +10,7 @@ describe('tasks PowerSync schema', () => {
     const tables = Object.fromEntries(schema.tables.map((table) => [table.name, table]));
 
     expect(Object.keys(tables).sort()).toEqual([
+      'tasks_action_journal',
       'tasks_areas',
       'tasks_checklist_items',
       'tasks_delivery_targets',
@@ -38,6 +39,7 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_checklist_items.local_only).toBe(false);
     expect(tables.tasks_hierarchy_operations.local_only).toBe(false);
     expect(tables.tasks_hierarchy_history_events.local_only).toBe(false);
+    expect(tables.tasks_action_journal.local_only).toBe(true);
     expect(tables.tasks_recurrence_definitions.local_only).toBe(false);
     expect(tables.tasks_recurrence_revisions.local_only).toBe(false);
     expect(tables.tasks_recurrence_occurrences.local_only).toBe(false);
@@ -82,6 +84,19 @@ describe('tasks PowerSync schema', () => {
     );
     expect(tables.tasks_history_events.columns.map(({ name }) => name)).toContain('before_state');
     expect(tables.tasks_history_events.columns.map(({ name }) => name)).toContain('operation_id');
+    expect(
+      tables.tasks_hierarchy_history_events.columns.map(({ name }) => name),
+    ).toContain('action_id');
+    expect(tables.tasks_action_journal.columns.map(({ name }) => name)).toEqual([
+      'owner_id',
+      'sequence',
+      'action_id',
+      'occurred_at',
+      'expires_at',
+      'state',
+      'snapshot_version',
+      'changes',
+    ]);
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('last_operation_id');
     expect(tables.tasks_checklist_items.columns.map(({ name }) => name)).toContain(
       'last_operation_id',

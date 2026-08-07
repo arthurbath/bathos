@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/react';
 
 export type TasksRuntimeStartupPhase =
+  | 'schema-compatibility'
   | 'owner-binding'
   | 'planning-settings'
   | 'planning-date-activation'

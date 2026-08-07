@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { taskChecklistItemFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskChecklistItem } from '@/modules/tasks/types/tasks';
+import { checklistJournalSnapshot } from '@/modules/tasks/domain/taskActionJournal';
 import {
   TaskHierarchyRepository,
   type TaskHierarchyRepositoryDatabase,
@@ -64,5 +65,57 @@ describe('task hierarchy repository', () => {
     const { repository } = createHarness([existing]);
     await expect(repository.completeChecklistItem('owner-a', 'item-a', true))
       .resolves.toMatchObject({ completed: true, completed_at: timestamp, revision: 2 });
+  });
+
+  it('replays a checklist snapshot only when the semantic current state matches', async () => {
+    const existing = taskChecklistItemFixture({
+      id: 'item-a',
+      title: 'After',
+      completed: true,
+      completed_at: '2026-07-20T06:00:00.000Z',
+      order_key: 'z9',
+    });
+    const target = {
+      ...checklistJournalSnapshot(existing),
+      title: 'Before',
+      completed: false,
+      completed_at: null,
+      order_key: 'a1',
+    };
+    const { repository, transaction } = createHarness([existing]);
+
+    await expect(repository.replayChecklistItemSnapshot(
+      'owner-a',
+      existing.id,
+      checklistJournalSnapshot(existing),
+      target,
+      { operationId: 'undo-action-a' },
+    )).resolves.toMatchObject({
+      title: 'Before',
+      completed: false,
+      completed_at: null,
+      order_key: 'a1',
+      last_operation_id: 'undo-action-a',
+      revision: 2,
+    });
+    expect(vi.mocked(transaction.execute).mock.calls[0]?.[0])
+      .toContain('UPDATE tasks_checklist_items');
+  });
+
+  it('rejects checklist replay after a conflicting semantic change', async () => {
+    const existing = taskChecklistItemFixture({ id: 'item-a', title: 'Changed elsewhere' });
+    const expected = {
+      ...checklistJournalSnapshot(existing),
+      title: 'Expected',
+    };
+    const { repository, transaction } = createHarness([existing]);
+
+    await expect(repository.replayChecklistItemSnapshot(
+      'owner-a',
+      existing.id,
+      expected,
+      expected,
+    )).rejects.toThrow('changed after this action');
+    expect(transaction.execute).not.toHaveBeenCalled();
   });
 });

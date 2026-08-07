@@ -15,6 +15,7 @@ import {
   createTaskRedoPatch,
   createTaskUndoPatch,
   parseTaskHistoryEvent,
+  snapshotTask,
   UnsafeTaskRedoError,
   UnsafeTaskUndoError,
   type TaskHistorySnapshot,
@@ -925,6 +926,31 @@ export class TaskRepository {
         },
         this.createId(),
         this.now(),
+        normalizeMutationContext(context),
+      );
+    });
+  }
+
+  async replayTaskSnapshot(
+    ownerId: string,
+    taskId: string,
+    expected: TaskHistorySnapshot,
+    target: TaskHistorySnapshot,
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo> {
+    return this.database.writeTransaction(async (transaction) => {
+      const current = await getOwnedTask(transaction, ownerId, taskId);
+      if (JSON.stringify(snapshotTask(current)) !== JSON.stringify(expected)) {
+        throw new InvalidTaskMutationError(
+          'The task changed after this action and cannot be replayed safely',
+        );
+      }
+      return updateOwnedTask(
+        transaction,
+        current,
+        target,
+        this.createId(),
+        context?.occurredAt ?? this.now(),
         normalizeMutationContext(context),
       );
     });

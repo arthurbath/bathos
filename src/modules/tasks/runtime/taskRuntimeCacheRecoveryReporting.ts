@@ -9,7 +9,7 @@ export type TasksRuntimeCacheRecoveryOutcome =
 export type TasksRuntimeCacheRecoveryReport = {
   event: 'tasks-runtime-cache-recovery';
   timestamp: string;
-  failureClass: 'sqlite-corruption';
+  failureClass: 'sqlite-corruption' | 'schema-incompatible';
   queueSafety: 'empty' | 'nonempty' | 'unreadable';
   previousGeneration: number;
   nextGeneration: number | null;
@@ -29,7 +29,7 @@ export function reportTasksRuntimeCacheRecovery(
   const safeReport: TasksRuntimeCacheRecoveryReport = {
     event: 'tasks-runtime-cache-recovery',
     timestamp: new Date().toISOString(),
-    failureClass: 'sqlite-corruption',
+    failureClass: report.failureClass,
     queueSafety: report.queueSafety,
     previousGeneration: report.previousGeneration,
     nextGeneration: report.nextGeneration,
@@ -101,7 +101,8 @@ function parseTasksRuntimeCacheRecoveryReport(
   const report = value as Record<string, unknown>;
   if (
     report.event !== 'tasks-runtime-cache-recovery'
-    || report.failureClass !== 'sqlite-corruption'
+    || (report.failureClass !== 'sqlite-corruption'
+      && report.failureClass !== 'schema-incompatible')
     || (report.queueSafety !== 'empty'
       && report.queueSafety !== 'nonempty'
       && report.queueSafety !== 'unreadable')
