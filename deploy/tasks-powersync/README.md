@@ -17,13 +17,13 @@ The repository test `src/modules/tasks/sync/deploymentConfig.test.ts` keeps thes
 
 ## Production State
 
-The active `Tasks Development` instance is in a US region on PowerSync Cloud Free. It uses Supabase Auth, the dedicated `tasks_powersync_role`, the exact 17-table `powersync` publication, and the committed `owner_tasks` stream. The public client endpoint is configured only after the synthetic production topology gate passed and an independent cleanup audit found no residual synthetic users or task rows.
+The active `Tasks Development` instance is in a US region on PowerSync Cloud Free. It uses Supabase Auth, the dedicated `tasks_powersync_role`, the exact 16-table `powersync` publication, and the committed `owner_tasks` stream. Server-only in-app reminder claim receipts are deliberately excluded from the publication and owner stream because clients never read or upload them. The public client endpoint is configured only after the synthetic production topology gate passed and an independent cleanup audit found no residual synthetic users or task rows.
 
 The Done-retention migration does not add a synchronized table. Its content-free duplicate-suppression receipts remain in `tasks_private`, outside the publication and PowerSync role. Expired rows disappearing from the synchronized public tables project through the ordinary delete stream.
 
 The replication password remains in macOS Keychain. Server-only Supabase keys are resolved only in memory by `scripts/provision-tasks-production.mjs` when the explicit synthetic gate is run. Do not upgrade a billing plan, rotate credentials, change the publication, or alter the production database merely because this runbook exists.
 
-Run `node scripts/provision-tasks-production.mjs verify-sync-database` for a read-only production check of the effective role, exact 17-table publication, RLS and replica identity, and the documented Supabase-managed `pg_net` exception. Unlike `sync-database`, this verification command never normalizes the role or changes the publication.
+Run `node scripts/provision-tasks-production.mjs verify-sync-database` for a read-only production check of the effective role, exact 16-table publication, RLS and replica identity, and the documented Supabase-managed `pg_net` exception. Unlike `sync-database`, this verification command never normalizes the role or changes the publication.
 
 ## Database Preparation
 
@@ -41,7 +41,7 @@ ORDER BY pubname, schemaname, tablename;
 
 Use `publication-create.sql` only when `powersync` does not exist. Use `publication-update.sql` only after proving an existing `powersync` publication belongs exclusively to this Tasks deployment. The update intentionally removes unapproved tables from that publication.
 
-Run `verify.sql` before giving PowerSync the database connection. Its final row must report `ready` and 17 synchronized tables. Verification evaluates schema usage together with effective relation and column privileges, and it rejects executable public `SECURITY DEFINER` functions. Hosted Supabase currently gives every database role inherited access to the `supabase_admin`-owned `net` schema, its two operational queue tables, and its request functions. The project `postgres` role cannot revoke that managed grant. Verification treats only that exact owner-controlled pg_net surface as an explicit infrastructure exception, rejects direct pg_net grants to the PowerSync role, and rejects every other non-Tasks schema or relation. The `powersync` publication and Sync Streams contain only the approved 17 Tasks tables. Removing the pg_net exception requires Supabase support or replacement of the reminder scheduler.
+Run `verify.sql` before giving PowerSync the database connection. Its final row must report `ready` and 16 synchronized tables. Verification evaluates schema usage together with effective relation and column privileges, and it rejects executable public `SECURITY DEFINER` functions. Hosted Supabase currently gives every database role inherited access to the `supabase_admin`-owned `net` schema, its two operational queue tables, and its request functions. The project `postgres` role cannot revoke that managed grant. Verification treats only that exact owner-controlled pg_net surface as an explicit infrastructure exception, rejects direct pg_net grants to the PowerSync role, and rejects every other non-Tasks schema or relation. The `powersync` publication and Sync Streams contain only the approved 16 Tasks tables. Removing the pg_net exception requires Supabase support or replacement of the reminder scheduler.
 
 ## PowerSync Cloud Configuration
 

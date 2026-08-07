@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(49);
+SELECT plan(63);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -76,6 +76,48 @@ INSERT INTO public.tasks_user_settings (
   'UTC',
   '98000000-0000-4000-8000-000000000011'
 );
+
+SELECT set_config(
+  'test.empty_in_app_claim',
+  public.tasks_claim_due_reminders_v2(
+    '2098-12-31 23:00:00+00',
+    '98000000-0000-4000-8000-000000000012',
+    'browser:98000000-0000-4000-8000-000000000013',
+    'Idle Synthetic Browser'
+  )::text,
+  false
+);
+SELECT is(
+  jsonb_array_length(current_setting('test.empty_in_app_claim')::jsonb -> 'items'),
+  0,
+  'returns an accepted empty in-app claim when no reminder is due'
+);
+
+RESET ROLE;
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_reminder_claims
+    WHERE id = '98000000-0000-4000-8000-000000000012'
+  ),
+  0::bigint,
+  'does not persist an empty in-app claim receipt'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_delivery_targets
+    WHERE owner_id = '98000000-0000-4000-8000-000000000001'
+  ),
+  0::bigint,
+  'does not create or refresh a delivery target for an empty check'
+);
+
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', '98000000-0000-4000-8000-000000000001', true
+);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 INSERT INTO public.tasks_todos (
   id, owner_id, title, destination, start_date, order_key, client_mutation_id
 ) VALUES
@@ -293,6 +335,51 @@ SELECT is(
   'reports the surface that owns the fallback claim'
 );
 SELECT is(
+  public.tasks_claim_due_reminders_v2(
+    '2099-01-01 08:30:00+00',
+    '98000000-0000-4000-8000-000000000041',
+    'browser:98000000-0000-4000-8000-000000000051',
+    'Synthetic ChatGPT Browser'
+  ),
+  current_setting('test.in_app_fallback_claim')::jsonb,
+  'returns the immutable nonempty claim result for an exact retry'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_reminder_claims
+    WHERE id = '98000000-0000-4000-8000-000000000041'
+  ),
+  1::bigint,
+  'persists exactly one receipt for a nonempty claim'
+);
+SELECT throws_ok(
+  $$
+    SELECT public.tasks_claim_due_reminders_v2(
+      '2099-01-01 08:31:00+00',
+      '98000000-0000-4000-8000-000000000041',
+      'browser:98000000-0000-4000-8000-000000000051',
+      'Synthetic ChatGPT Browser'
+    )
+  $$,
+  '23514',
+  'A reminder claim identifier cannot be reused with another request',
+  'rejects a retained claim identifier reused with another cutoff'
+);
+SELECT throws_ok(
+  $$
+    SELECT public.tasks_claim_due_reminders_v2(
+      '2099-01-01 08:30:00+00',
+      '98000000-0000-4000-8000-000000000041',
+      'macos:98000000-0000-4000-8000-000000000052',
+      'Synthetic Mac App'
+    )
+  $$,
+  '23514',
+  'A reminder claim identifier cannot be reused with another request',
+  'rejects a retained claim identifier reused by another surface'
+);
+SELECT is(
   (
     SELECT status
     FROM public.tasks_reminder_deliveries
@@ -379,6 +466,61 @@ SELECT is(
   ),
   0,
   'does not create an in-app delivery after the occurrence is acknowledged'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_reminder_claims
+    WHERE id = '98000000-0000-4000-8000-000000000040'
+  ),
+  0::bigint,
+  'does not persist an empty legacy claim receipt'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_delivery_targets
+    WHERE owner_id = '98000000-0000-4000-8000-000000000001'
+      AND channel = 'in_app'
+      AND endpoint_key = 'account'
+  ),
+  0::bigint,
+  'does not create the legacy account target for an empty check'
+);
+
+SELECT set_config(
+  'test.idle_target_seen_at',
+  (
+    SELECT last_seen_at::text
+    FROM public.tasks_delivery_targets
+    WHERE owner_id = '98000000-0000-4000-8000-000000000001'
+      AND channel = 'in_app'
+      AND endpoint_key = 'browser:98000000-0000-4000-8000-000000000051'
+  ),
+  false
+);
+SELECT is(
+  jsonb_array_length(
+    public.tasks_claim_due_reminders_v2(
+      '2099-01-01 08:30:00+00',
+      '98000000-0000-4000-8000-000000000043',
+      'browser:98000000-0000-4000-8000-000000000051',
+      'Synthetic ChatGPT Browser'
+    ) -> 'items'
+  ),
+  0,
+  'returns an empty result after acknowledgement without reviving a delivery'
+);
+SELECT is(
+  (
+    SELECT last_seen_at::text
+    FROM public.tasks_delivery_targets
+    WHERE owner_id = '98000000-0000-4000-8000-000000000001'
+      AND channel = 'in_app'
+      AND endpoint_key = 'browser:98000000-0000-4000-8000-000000000051'
+  ),
+  current_setting('test.idle_target_seen_at'),
+  'does not refresh an existing target when the check has no delivery work'
 );
 
 RESET ROLE;
@@ -548,6 +690,56 @@ SELECT is(
   ),
   'revoked:account_signed_out',
   'records the sign-out reason on the current owner target'
+);
+
+RESET ROLE;
+UPDATE public.tasks_reminder_claims
+SET created_at = '2100-01-02 00:00:00+00';
+INSERT INTO public.tasks_reminder_claims (
+  id, owner_id, through_at, result, created_at
+) VALUES
+  (
+    '98000000-0000-4000-8000-000000000060',
+    '98000000-0000-4000-8000-000000000001',
+    '2099-01-01 08:30:00+00',
+    '{"outcome":"accepted","items":[{"delivery_id":"old"}]}'::jsonb,
+    '2100-01-01 00:00:00+00'
+  ),
+  (
+    '98000000-0000-4000-8000-000000000061',
+    '98000000-0000-4000-8000-000000000001',
+    '2099-01-01 08:30:00+00',
+    '{"outcome":"accepted","items":[{"delivery_id":"new"}]}'::jsonb,
+    '2100-01-02 00:00:00+00'
+  );
+
+SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
+SELECT is(
+  tasks_private.purge_expired_reminder_claims('2100-01-01 12:00:00+00'),
+  1,
+  'purges only claim receipts older than the deterministic cutoff'
+);
+
+RESET ROLE;
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_reminder_claims
+    WHERE id = '98000000-0000-4000-8000-000000000060'
+  ),
+  0::bigint,
+  'removes an expired claim receipt'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_reminder_claims
+    WHERE id = '98000000-0000-4000-8000-000000000061'
+  ),
+  1::bigint,
+  'retains a claim receipt inside the retention window'
 );
 
 SELECT * FROM finish();

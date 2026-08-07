@@ -417,16 +417,6 @@ const taskReminderDeliveries = new Table(
   { indexes: { ownerStatus: ['owner_id', 'status', '-updated_at'] } },
 );
 
-const taskReminderClaims = new Table(
-  {
-    owner_id: column.text,
-    through_at: column.text,
-    result: column.text,
-    created_at: column.text,
-  },
-  { indexes: { ownerCreated: ['owner_id', '-created_at'] } },
-);
-
 const taskSyncIssues = new Table(
   {
     task_id: column.text,
@@ -491,7 +481,6 @@ export const tasksPowerSyncSchema = new Schema({
   tasks_reminder_occurrences: taskReminderOccurrences,
   tasks_delivery_targets: taskDeliveryTargets,
   tasks_reminder_deliveries: taskReminderDeliveries,
-  tasks_reminder_claims: taskReminderClaims,
   tasks_sync_issues: taskSyncIssues,
   tasks_sync_health_events: taskSyncHealthEvents,
   tasks_owner_binding: taskOwnerBinding,

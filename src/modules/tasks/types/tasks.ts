@@ -139,7 +139,6 @@ type TaskReminderRow = Tables<'tasks_reminders'>;
 type TaskReminderOccurrenceRow = Tables<'tasks_reminder_occurrences'>;
 type TaskDeliveryTargetRow = Tables<'tasks_delivery_targets'>;
 type TaskReminderDeliveryRow = Tables<'tasks_reminder_deliveries'>;
-type TaskReminderClaimRow = Tables<'tasks_reminder_claims'>;
 
 type RefinedTaskFields = {
   lifecycle: TaskLifecycle;
@@ -347,7 +346,5 @@ export type TaskDeliveryTarget = Omit<
 export type TaskReminderDelivery = Omit<TaskReminderDeliveryRow, 'status'> & {
   status: TaskReminderDeliveryStatus;
 };
-
-export type TaskReminderClaim = TaskReminderClaimRow;
 
 export type TaskUserSettings = Tables<'tasks_user_settings'>;

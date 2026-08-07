@@ -23,7 +23,6 @@ describe('tasks PowerSync schema', () => {
       'tasks_recurrence_occurrences',
       'tasks_recurrence_revisions',
       'tasks_recurrence_status_events',
-      'tasks_reminder_claims',
       'tasks_reminder_deliveries',
       'tasks_reminder_occurrences',
       'tasks_reminders',
@@ -49,7 +48,6 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_reminder_occurrences.local_only).toBe(false);
     expect(tables.tasks_delivery_targets.local_only).toBe(false);
     expect(tables.tasks_reminder_deliveries.local_only).toBe(false);
-    expect(tables.tasks_reminder_claims.local_only).toBe(false);
     expect(tables.tasks_sync_issues.local_only).toBe(true);
     expect(tables.tasks_sync_health_events.local_only).toBe(true);
     expect(tables.tasks_owner_binding.local_only).toBe(true);

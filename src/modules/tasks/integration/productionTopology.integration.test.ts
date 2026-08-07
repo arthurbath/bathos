@@ -64,8 +64,7 @@ type ProjectionReceiptTable =
   | 'tasks_recurrence_status_events'
   | 'tasks_reminder_occurrences'
   | 'tasks_delivery_targets'
-  | 'tasks_reminder_deliveries'
-  | 'tasks_reminder_claims';
+  | 'tasks_reminder_deliveries';
 
 type SynchronizedTasksTable =
   | ProjectionReceiptTable
@@ -77,7 +76,6 @@ const projectionReceiptTables: ProjectionReceiptTable[] = [
   'tasks_reminder_occurrences',
   'tasks_delivery_targets',
   'tasks_reminder_deliveries',
-  'tasks_reminder_claims',
 ];
 
 let testDirectory: string | null = null;

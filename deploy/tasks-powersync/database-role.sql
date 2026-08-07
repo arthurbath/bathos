@@ -198,6 +198,5 @@ GRANT SELECT ON TABLE
   public.tasks_reminders,
   public.tasks_reminder_occurrences,
   public.tasks_delivery_targets,
-  public.tasks_reminder_deliveries,
-  public.tasks_reminder_claims
+  public.tasks_reminder_deliveries
 TO tasks_powersync_role;

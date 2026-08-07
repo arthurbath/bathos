@@ -14,7 +14,6 @@ DECLARE
     'tasks_recurrence_occurrences',
     'tasks_recurrence_revisions',
     'tasks_recurrence_status_events',
-    'tasks_reminder_claims',
     'tasks_reminder_deliveries',
     'tasks_reminder_occurrences',
     'tasks_reminders',
