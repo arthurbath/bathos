@@ -1,7 +1,8 @@
 import { isValidElement, type ReactNode } from "react";
 
 export const TOAST_APPROXIMATE_CHARACTERS_PER_LINE = 42;
-export const TOAST_MILLISECONDS_PER_LINE = 1_000;
+export const TOAST_BASE_DURATION_MS = 2_000;
+export const TOAST_ADDITIONAL_LINE_DURATION_MS = 1_500;
 
 export type ToastDurationContent = ReactNode | (() => ReactNode);
 
@@ -48,5 +49,6 @@ export function getToastDurationMs(
   description?: ToastDurationContent,
 ): number {
   const estimatedLines = estimateToastTextLines(title) + estimateToastTextLines(description);
-  return Math.max(1, estimatedLines) * TOAST_MILLISECONDS_PER_LINE;
+  const additionalLines = Math.max(0, estimatedLines - 1);
+  return TOAST_BASE_DURATION_MS + additionalLines * TOAST_ADDITIONAL_LINE_DURATION_MS;
 }

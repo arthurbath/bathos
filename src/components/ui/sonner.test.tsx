@@ -58,7 +58,7 @@ describe("showSonnerErrorToast", () => {
 
     expect(sonnerErrorMock).toHaveBeenCalledWith("Operation Failed", {
       description: "Please try again.",
-      duration: 2_000,
+      duration: 3_500,
     });
   });
 });

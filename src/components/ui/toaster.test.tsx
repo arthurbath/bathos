@@ -48,7 +48,7 @@ describe("Toaster", () => {
 
     render(<Toaster />);
 
-    expect(screen.getByTestId("toast")).toHaveAttribute("data-duration", "2000");
+    expect(screen.getByTestId("toast")).toHaveAttribute("data-duration", "3500");
   });
 
   it("renders a short description-only toast without an empty title gap", () => {
@@ -58,7 +58,7 @@ describe("Toaster", () => {
 
     const { container } = render(<Toaster />);
 
-    expect(screen.getByTestId("toast")).toHaveAttribute("data-duration", "1000");
+    expect(screen.getByTestId("toast")).toHaveAttribute("data-duration", "2000");
     expect(screen.queryByTestId("toast-title")).not.toBeInTheDocument();
     expect(screen.getByTestId("toast-description")).toHaveTextContent(
       "The task now appears in Upcoming.",
