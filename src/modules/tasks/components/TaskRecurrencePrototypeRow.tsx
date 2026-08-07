@@ -268,10 +268,20 @@ function RecurrencePrototypeRow({
     setRepeatOpen(true);
   };
 
-  const closeEditor = useCallback(async () => {
+  const closeEditor = useCallback(async (clearPointerFocus = false) => {
     await editorFlushRef.current();
     await saveQueueRef.current;
-    await onEditorOpenChange(false);
+    const closed = await onEditorOpenChange(false);
+    const activeElement = document.activeElement;
+    if (
+      closed
+      && clearPointerFocus
+      && activeElement instanceof HTMLElement
+      && rowRef.current?.contains(activeElement)
+    ) {
+      activeElement.blur();
+    }
+    return closed;
   }, [onEditorOpenChange]);
 
   const deletePrototype = async () => {
@@ -440,7 +450,7 @@ function RecurrencePrototypeRow({
               if (shouldHandleWithBrowser(event)) return;
               if (onSelect) {
                 onSelect(event);
-              } else if (editorOpen) void closeEditor();
+              } else if (editorOpen) void closeEditor(true);
               else void onEditorOpenChange(true);
             }}
             aria-label={`Open ${visibleTitle}`}
@@ -483,7 +493,7 @@ function RecurrencePrototypeRow({
               }
               if (onSelect) {
                 onSelect(event);
-              } else if (editorOpen) void closeEditor();
+              } else if (editorOpen) void closeEditor(true);
               else void onEditorOpenChange(true);
             }}
             aria-label={`Open ${visibleTitle}`}

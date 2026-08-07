@@ -1686,6 +1686,22 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setBulkSelectionAnchorId(null);
   }, []);
 
+  const clearWholeTaskFocusAfterPointer = useCallback(() => {
+    const activeElement = document.activeElement;
+    if (
+      activeElement instanceof HTMLElement
+      && activeElement.closest(
+        '[data-task-row-id], [data-task-recurrence-prototype]',
+      )
+    ) {
+      activeElement.blur();
+    }
+    forcedTaskDomFocusIdRef.current = null;
+    focusedTaskIdRef.current = null;
+    setFocusedTaskId(null);
+    setBulkSelectionAnchorId(null);
+  }, []);
+
   const focusTaskRow = useCallback((
     taskId: string | null,
     forceDomFocus = false,
@@ -1755,28 +1771,34 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (targetTaskId !== null) focusTaskRow(targetTaskId);
   }, [focusTaskRow]);
 
-  const closeOpenTaskToFocus = useCallback(async (): Promise<boolean> => {
+  const closeOpenTaskWithFocusIntent = useCallback(async (
+    focusIntent: 'clear' | 'restore',
+  ): Promise<boolean> => {
     const currentTaskId = selectedTaskIdRef.current;
     const closed = await setOpenTask(null);
     if (!closed) return false;
     const abandonFocus = currentTaskId !== null
       && filteredDepartureFocusAbandonmentRef.current === currentTaskId;
     filteredDepartureFocusAbandonmentRef.current = null;
-    if (abandonFocus) {
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-      }
-      forcedTaskDomFocusIdRef.current = null;
-      focusedTaskIdRef.current = null;
-      setFocusedTaskId(null);
-      setBulkSelectionAnchorId(null);
+    if (focusIntent === 'clear' || abandonFocus) {
+      clearWholeTaskFocusAfterPointer();
       return true;
     }
     if (currentTaskId !== null && currentTaskId !== NEW_TASK_DRAFT_ID) {
       focusTaskRow(currentTaskId);
     }
     return true;
-  }, [focusTaskRow, setOpenTask]);
+  }, [clearWholeTaskFocusAfterPointer, focusTaskRow, setOpenTask]);
+
+  const closeOpenTaskAfterPointer = useCallback(
+    () => closeOpenTaskWithFocusIntent('clear'),
+    [closeOpenTaskWithFocusIntent],
+  );
+
+  const closeOpenTaskToFocus = useCallback(
+    () => closeOpenTaskWithFocusIntent('restore'),
+    [closeOpenTaskWithFocusIntent],
+  );
 
   const openRelativeTask = useCallback((direction: -1 | 1) => {
     const rows = Array.from(document.querySelectorAll<HTMLElement>(
@@ -2135,7 +2157,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   useEffect(() => {
     if (!searchTarget) return;
     if (searchTarget.kind === 'recurrence') {
-      void setOpenTask(null);
+      if (view !== 'upcoming') return;
+      const targetAvailable = recurrences.datedPrototypes.some(
+        ({ definition }) => definition.id === searchTarget.definitionId,
+      ) || waitingRecurrences.some(
+        ({ id }) => id === searchTarget.definitionId,
+      );
+      if (!targetAvailable) return;
+      void setOpenRecurrencePrototype(searchTarget.definitionId).then((opened) => {
+        if (!opened) return;
+        clearWholeTaskFocusPreservingDomFocus();
+      });
       return;
     }
     if (location.pathname !== searchTarget.targetPath.split(/[?#]/, 1)[0]) return;
@@ -2146,9 +2178,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       current?.kind === 'task' && current.taskId === target.id ? null : current
     ));
   }, [
+    clearWholeTaskFocusPreservingDomFocus,
     recurrences.datedPrototypes,
     location.pathname,
     searchTarget,
+    setOpenRecurrencePrototype,
     setOpenTask,
     tasks,
     view,
@@ -3193,12 +3227,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     view,
   ]);
 
-  const openCommandSurface = (open: (value: boolean) => void) => {
-    commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    open(true);
-  };
   const restoreCommandFocus = () => {
     const returnFocus = commandReturnFocusRef.current;
     commandReturnFocusRef.current = null;
@@ -3234,7 +3262,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     });
     if (!bulkEligible || next === null) {
       if (selectedTaskIdRef.current === taskId) {
-        void closeOpenTaskToFocus();
+        void closeOpenTaskAfterPointer();
       } else {
         void setOpenTask(taskId);
       }
@@ -3275,9 +3303,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       macLikePlatform,
     });
     if (!bulkEligible || next === null) {
+      const closingCurrentPrototype = openRecurrencePrototypeIdRef.current === definitionId;
       void setOpenRecurrencePrototype(
-        openRecurrencePrototypeIdRef.current === definitionId ? null : definitionId,
-      );
+        closingCurrentPrototype ? null : definitionId,
+      ).then((changed) => {
+        if (changed && closingCurrentPrototype) clearWholeTaskFocusAfterPointer();
+      });
       return;
     }
     event.preventDefault();
@@ -3314,7 +3345,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     });
     if (next === null) {
       if (selectedTaskIdRef.current === taskId) {
-        void closeOpenTaskToFocus();
+        void closeOpenTaskAfterPointer();
       } else {
         void setOpenTask(taskId);
       }
@@ -4501,16 +4532,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   data-task-selection-entry
                 >
                   <TASK_ICONS.MultiSelect className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="clear"
-                  size="icon"
-                  aria-label="Quick Find Tasks"
-                  className="h-9 w-9 text-muted-foreground"
-                  onClick={() => openCommandSurface(setQuickFindOpen)}
-                >
-                  <TASK_ICONS.Search className="h-4 w-4" aria-hidden="true" />
                 </Button>
                 {bulkEligible ? (
                   <TaskQuickFilterControl

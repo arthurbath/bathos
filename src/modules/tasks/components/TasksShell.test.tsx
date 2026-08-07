@@ -2086,7 +2086,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('opens Quick Find from the visible list action and by typing', async () => {
+  it('omits the visible Quick Find action and opens Quick Find by typing', async () => {
     const mailTask = {
       ...task,
       id: 'task-mail',
@@ -2106,20 +2106,7 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      const quickFindAction = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Quick Find Tasks"]',
-      );
-      expect(quickFindAction).toBeTruthy();
-      await act(async () => quickFindAction?.click());
-      expect(document.querySelector<HTMLElement>('[role="dialog"]'))
-        .toHaveAccessibleName('Quick Find');
-      await act(async () => {
-        document.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Escape',
-          bubbles: true,
-          cancelable: true,
-        }));
-      });
+      expect(container.querySelector('button[aria-label="Quick Find Tasks"]')).toBeNull();
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'r',
@@ -2407,10 +2394,12 @@ describe('TasksShell', () => {
       expect(document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`)).toBeNull();
 
       await act(async () => {
-        container.querySelector<HTMLButtonElement>('button[aria-label="Quick Find Tasks"]')?.click();
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'n', bubbles: true, cancelable: true,
+        }));
         await Promise.resolve();
       });
-      expect(document.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')?.value).toBe('');
+      expect(document.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')?.value).toBe('n');
     } finally {
       cleanup(root, container);
     }
@@ -2865,7 +2854,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('focuses a scheduled after-completion prototype from Quick Find without opening repeat management', async () => {
+  it('transfers focus and opens a scheduled prototype activated from Quick Find', async () => {
     const definition = taskRecurrenceDefinitionFixture({
       id: 'recurrence-search',
     });
@@ -2891,7 +2880,13 @@ describe('TasksShell', () => {
         },
       },
     });
-    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [] });
+    const upcomingTask = taskTodoFixture({
+      id: 'task-before-recurrence-search',
+      title: 'Previously focused task',
+      destination: 'anytime',
+      start_date: '2026-07-25',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [upcomingTask] });
     mockTaskSearch.mockReturnValue({
       tasks: [],
       loading: false,
@@ -2919,9 +2914,20 @@ describe('TasksShell', () => {
       setStatus: vi.fn(),
       evaluate: vi.fn(),
     });
-    const { container, root } = renderShell();
+    const { container, root } = renderShell('/tasks/upcoming');
 
     try {
+      const ordinaryRow = container.querySelector<HTMLElement>(
+        `[data-task-row-id="${upcomingTask.id}"]`,
+      )!;
+      await act(async () => {
+        ordinaryRow.focus();
+        ordinaryRow.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(ordinaryRow).toHaveAttribute('aria-current', 'true');
+
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'r', bubbles: true, cancelable: true,
@@ -2936,18 +2942,21 @@ describe('TasksShell', () => {
       expect(result.querySelector('svg')).toBeTruthy();
 
       await act(async () => {
-        result.dispatchEvent(new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-        }));
+        dialog.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')
+          ?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+          }));
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
       await waitFor(() => {
         expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Upcoming');
-        expect(document.activeElement).toBe(container.querySelector(
+        const prototype = container.querySelector<HTMLElement>(
           `[data-task-recurrence-prototype="${definition.id}"]`,
-        ));
+        )!;
+        expect(prototype.querySelector('[data-task-recurrence-prototype-editor]')).toBeTruthy();
+        expect(document.activeElement).toBe(prototype);
       });
+      expect(ordinaryRow).not.toHaveAttribute('aria-current');
       expect(document.querySelector('[role="dialog"]')).toBeNull();
     } finally {
       cleanup(root, container);
@@ -3249,7 +3258,6 @@ describe('TasksShell', () => {
             'button[aria-label="Undo Last Task Change"], '
             + 'button[aria-label="Redo Last Task Change"], '
             + 'button[aria-label="Select Tasks"], '
-            + 'button[aria-label="Quick Find Tasks"], '
             + 'button[aria-label="Quick Filters"]',
           ),
         ).map((button) => button.getAttribute('aria-label')),
@@ -3257,9 +3265,9 @@ describe('TasksShell', () => {
         'Undo Last Task Change',
         'Redo Last Task Change',
         'Select Tasks',
-        'Quick Find Tasks',
         'Quick Filters',
       ]);
+      expect(container.querySelector('button[aria-label="Quick Find Tasks"]')).toBeNull();
 
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
@@ -3984,12 +3992,15 @@ describe('TasksShell', () => {
         '[data-task-row-id="task-filter-hidden-quick-find"]',
       )).toBeNull();
 
-      await user.click(container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Quick Find Tasks"]',
-      )!);
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'H', bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
       await user.type(
         document.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')!,
-        'Hidden Quick Find Task',
+        'idden Quick Find Task',
       );
       const result = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
         .find((option) => option.textContent?.includes('Hidden Quick Find Task'));
@@ -5751,6 +5762,37 @@ describe('TasksShell', () => {
     }
   });
 
+  it('clears lightweight and DOM focus when a pointer closes an open task', async () => {
+    const user = userEvent.setup();
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      const title = container.querySelector<HTMLButtonElement>(
+        '[data-task-id="task-a"]',
+      )!;
+      const row = container.querySelector<HTMLElement>(
+        '[data-task-row-id="task-a"]',
+      )!;
+
+      await act(async () => user.click(title));
+      const summary = await waitFor(() => {
+        const input = container.querySelector<HTMLInputElement>('#task-title-task-a');
+        expect(input).not.toBeNull();
+        return input!;
+      });
+      expect(document.activeElement).toBe(summary);
+
+      await act(async () => user.click(title));
+      await waitForTaskEditorExit(container);
+
+      expect(row).not.toHaveAttribute('aria-current');
+      expect(document.activeElement?.closest('[data-task-row-id]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('applies task commands to one focused closed task and toggles it open and closed', async () => {
     vi.useFakeTimers();
     const taskList = defaultTaskList();
@@ -5793,6 +5835,7 @@ describe('TasksShell', () => {
       expect(container.querySelector('#task-title-task-a')).toBeTruthy();
       await act(async () => toggleOpen());
       await waitForTaskEditorExit(container);
+      expect(row).toHaveAttribute('aria-current', 'true');
       expect(document.activeElement).toBe(
         container.querySelector('[data-task-row-id="task-a"]'),
       );
@@ -12568,6 +12611,28 @@ describe('TasksShell', () => {
           }),
         }),
       }));
+
+      const prototypeTitle = row.querySelector<HTMLButtonElement>(
+        'button[aria-label^="Open Quarterly Review"]',
+      )!;
+      await act(async () => {
+        prototypeTitle.focus();
+        prototypeTitle.click();
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(row.querySelector('[data-task-recurrence-prototype-editor]')).toBeNull();
+      });
+      expect(document.activeElement).not.toBe(prototypeTitle);
+      expect(document.activeElement?.closest('[data-task-recurrence-prototype]')).toBeNull();
+
+      await act(async () => {
+        prototypeTitle.click();
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(row.querySelector('[data-task-recurrence-prototype-editor]')).toBeTruthy();
+      });
 
       await act(async () => {
         const ordinaryRow = container.querySelector<HTMLElement>(
