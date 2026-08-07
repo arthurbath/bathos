@@ -32,3 +32,20 @@ This audit covers every unresolved production issue returned by the BathOS Sentr
 ## Release Follow-up
 
 Publish the corrected web client, verify that opening Tasks reconstructs the full owner history without a new BATHOS-Z event, then resolve BATHOS-Z. Because Sentry resolution reopens on recurrence, all resolved legacy groups remain effective tripwires for regressions.
+
+## Post-publication Readback
+
+A later live readback on 2026 Aug 6 confirmed that production serves Tasks chunk
+`TasksIndex-DSek9GWv.js`. Its task-history decoder accepts an empty Summary string,
+while every BATHOS-Z event came from the superseded `TasksIndex-udX-W00M.js`
+chunk. No BATHOS-Z event occurred after the corrected decoder was committed and
+published, so the issue is ready to resolve without changing production data.
+
+BATHOS-T reopened immediately after a manual resolution because the Mac native
+surface still had an active upload-error episode. Its event was a bounded warning,
+not an exception: the client had completed a prior synchronization, had no queued
+writes, and remained degraded for 2-4 minutes. A fresh native-app readback later
+showed Healthy, zero pending changes, and a successful synchronization after the
+warning. The episode therefore recovered and the issue is ready to resolve. A new
+sustained degradation will reopen the group and preserve its value as an operational
+tripwire.
