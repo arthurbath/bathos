@@ -4,7 +4,14 @@ export type TasksRuntimeCacheRecoveryOutcome =
   | 'replacement-created'
   | 'queue-not-empty'
   | 'queue-unreadable'
+  | 'circuit-open'
   | 'replacement-failed';
+
+export type TasksRuntimeCacheRecoveryCircuitReason =
+  | 'same-release'
+  | 'cooldown-active'
+  | 'ledger-unreadable'
+  | 'ledger-unwritable';
 
 export type TasksRuntimeCacheRecoveryReport = {
   event: 'tasks-runtime-cache-recovery';
@@ -14,6 +21,7 @@ export type TasksRuntimeCacheRecoveryReport = {
   previousGeneration: number;
   nextGeneration: number | null;
   outcome: TasksRuntimeCacheRecoveryOutcome;
+  circuitReason: TasksRuntimeCacheRecoveryCircuitReason | null;
   sentryEventId: string | null;
 };
 
@@ -23,7 +31,10 @@ export const TASKS_RUNTIME_CACHE_RECOVERY_RETENTION = 10;
 type TasksRuntimeCacheRecoveryStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 export function reportTasksRuntimeCacheRecovery(
-  report: Omit<TasksRuntimeCacheRecoveryReport, 'event' | 'timestamp' | 'sentryEventId'>,
+  report: Omit<
+    TasksRuntimeCacheRecoveryReport,
+    'event' | 'timestamp' | 'sentryEventId' | 'circuitReason'
+  > & { circuitReason?: TasksRuntimeCacheRecoveryCircuitReason | null },
   storage: TasksRuntimeCacheRecoveryStorage | undefined = browserStorage(),
 ): TasksRuntimeCacheRecoveryReport {
   const safeReport: TasksRuntimeCacheRecoveryReport = {
@@ -34,6 +45,7 @@ export function reportTasksRuntimeCacheRecovery(
     previousGeneration: report.previousGeneration,
     nextGeneration: report.nextGeneration,
     outcome: report.outcome,
+    circuitReason: report.circuitReason ?? null,
     sentryEventId: null,
   };
   safeReport.sentryEventId = Sentry.getClient()
@@ -45,6 +57,7 @@ export function reportTasksRuntimeCacheRecovery(
           failure_class: safeReport.failureClass,
           queue_safety: safeReport.queueSafety,
           recovery_outcome: safeReport.outcome,
+          recovery_circuit_reason: safeReport.circuitReason ?? 'none',
         },
         contexts: {
           tasks_cache_recovery: {
@@ -52,6 +65,7 @@ export function reportTasksRuntimeCacheRecovery(
             nextGeneration: safeReport.nextGeneration,
             queueSafety: safeReport.queueSafety,
             outcome: safeReport.outcome,
+            circuitReason: safeReport.circuitReason,
           },
         },
       })
@@ -109,7 +123,14 @@ function parseTasksRuntimeCacheRecoveryReport(
     || (report.outcome !== 'replacement-created'
       && report.outcome !== 'queue-not-empty'
       && report.outcome !== 'queue-unreadable'
+      && report.outcome !== 'circuit-open'
       && report.outcome !== 'replacement-failed')
+    || (report.circuitReason !== undefined
+      && report.circuitReason !== null
+      && report.circuitReason !== 'same-release'
+      && report.circuitReason !== 'cooldown-active'
+      && report.circuitReason !== 'ledger-unreadable'
+      && report.circuitReason !== 'ledger-unwritable')
     || typeof report.timestamp !== 'string'
     || Number.isNaN(Date.parse(report.timestamp))
     || !Number.isSafeInteger(report.previousGeneration)
@@ -118,7 +139,10 @@ function parseTasksRuntimeCacheRecoveryReport(
   ) {
     return null;
   }
-  return report as TasksRuntimeCacheRecoveryReport;
+  return {
+    ...report,
+    circuitReason: report.circuitReason ?? null,
+  } as TasksRuntimeCacheRecoveryReport;
 }
 
 function browserStorage(): TasksRuntimeCacheRecoveryStorage | undefined {

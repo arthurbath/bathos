@@ -11,6 +11,10 @@ export const TASKS_RUNTIME_INITIALIZATION_TIMEOUT_MS = 15_000;
 export const TASKS_CLOSED_CLIENT_ERROR_MESSAGE = 'Client has already been closed';
 export const TASKS_RUNTIME_AUTOMATIC_RECOVERY_LIMIT = 1;
 export const TASKS_CORRUPT_CACHE_AUTOMATIC_RECOVERY_LIMIT = 1;
+export const TASKS_CACHE_RECOVERY_LEDGER_STORAGE_KEY =
+  'bathos.tasks.cache-recovery-ledger-v1';
+export const TASKS_CACHE_RECOVERY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1_000;
+export const TASKS_CACHE_RECOVERY_FALLBACK_RELEASE_ID = 'tasks-runtime-source';
 export const TASKS_RUNTIME_ERROR_TITLE = 'Tasks Could Not Open';
 export const TASKS_RUNTIME_ERROR_MESSAGE =
   'The tasks could not open. The issue was logged and reported to the webmaster.';
@@ -139,13 +143,134 @@ export type TasksCorruptCacheRecoveryResult =
       outcome: 'queue-unreadable' | 'not-eligible';
       queueCount: null;
       previousGeneration: number;
+    }
+  | {
+      outcome: 'circuit-open';
+      queueCount: 0;
+      previousGeneration: number;
+      reason: TasksCacheRecoveryCircuitReason;
     };
+
+type TasksCacheRecoveryLedgerStorage = Pick<Storage, 'getItem' | 'setItem'>;
+
+export type TasksCacheRecoveryCircuitReason =
+  | 'same-release'
+  | 'cooldown-active'
+  | 'ledger-unreadable'
+  | 'ledger-unwritable';
+
+export type TasksCacheRecoveryLedger = {
+  version: 1;
+  releaseId: string;
+  recoveredAt: string;
+  sourceGeneration: number;
+};
+
+export type TasksCacheRecoveryPolicy = {
+  releaseId?: string;
+  now?: Date;
+  storage?: TasksCacheRecoveryLedgerStorage;
+};
+
+type TasksCacheRecoveryEligibility =
+  | { allowed: true }
+  | { allowed: false; reason: Exclude<TasksCacheRecoveryCircuitReason, 'ledger-unwritable'> };
+
+export function resolveTasksCacheRecoveryReleaseId(): string {
+  return (typeof __BATHOS_RELEASE_ID__ === 'string' ? __BATHOS_RELEASE_ID__.trim() : '')
+    || (import.meta.url ? `tasks-runtime:${import.meta.url}` : TASKS_CACHE_RECOVERY_FALLBACK_RELEASE_ID);
+}
+
+export function readTasksCacheRecoveryLedger(
+  storage: Pick<Storage, 'getItem'> | undefined = browserRecoveryStorage(),
+): TasksCacheRecoveryLedger | null | 'unreadable' {
+  if (!storage) return 'unreadable';
+  try {
+    const raw = storage.getItem(TASKS_CACHE_RECOVERY_LEDGER_STORAGE_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== 'object') return 'unreadable';
+    const candidate = parsed as Record<string, unknown>;
+    if (
+      candidate.version !== 1
+      || typeof candidate.releaseId !== 'string'
+      || candidate.releaseId.trim().length === 0
+      || typeof candidate.recoveredAt !== 'string'
+      || Number.isNaN(Date.parse(candidate.recoveredAt))
+      || !Number.isSafeInteger(candidate.sourceGeneration)
+      || Number(candidate.sourceGeneration) < 1
+    ) {
+      return 'unreadable';
+    }
+    return candidate as TasksCacheRecoveryLedger;
+  } catch {
+    return 'unreadable';
+  }
+}
+
+export function evaluateTasksCacheRecoveryEligibility({
+  releaseId = resolveTasksCacheRecoveryReleaseId(),
+  now = new Date(),
+  storage = browserRecoveryStorage(),
+}: TasksCacheRecoveryPolicy = {}): TasksCacheRecoveryEligibility {
+  const normalizedReleaseId = releaseId.trim();
+  if (!normalizedReleaseId || Number.isNaN(now.getTime())) {
+    return { allowed: false, reason: 'ledger-unreadable' };
+  }
+  const ledger = readTasksCacheRecoveryLedger(storage);
+  if (ledger === 'unreadable') {
+    return { allowed: false, reason: 'ledger-unreadable' };
+  }
+  if (ledger === null) return { allowed: true };
+  if (ledger.releaseId === normalizedReleaseId) {
+    return { allowed: false, reason: 'same-release' };
+  }
+  const elapsedMs = now.getTime() - Date.parse(ledger.recoveredAt);
+  if (elapsedMs < TASKS_CACHE_RECOVERY_COOLDOWN_MS) {
+    return { allowed: false, reason: 'cooldown-active' };
+  }
+  return { allowed: true };
+}
+
+export function commitTasksCacheRecoveryLedger(
+  sourceGeneration: number,
+  {
+    releaseId = resolveTasksCacheRecoveryReleaseId(),
+    now = new Date(),
+    storage = browserRecoveryStorage(),
+  }: TasksCacheRecoveryPolicy = {},
+): boolean {
+  if (!storage || !Number.isSafeInteger(sourceGeneration) || sourceGeneration < 1) {
+    return false;
+  }
+  const normalizedReleaseId = releaseId.trim();
+  if (!normalizedReleaseId || Number.isNaN(now.getTime())) return false;
+  const ledger: TasksCacheRecoveryLedger = {
+    version: 1,
+    releaseId: normalizedReleaseId,
+    recoveredAt: now.toISOString(),
+    sourceGeneration,
+  };
+  try {
+    storage.setItem(TASKS_CACHE_RECOVERY_LEDGER_STORAGE_KEY, JSON.stringify(ledger));
+    const persisted = readTasksCacheRecoveryLedger(storage);
+    return persisted !== null
+      && persisted !== 'unreadable'
+      && persisted.version === ledger.version
+      && persisted.releaseId === ledger.releaseId
+      && persisted.recoveredAt === ledger.recoveredAt
+      && persisted.sourceGeneration === ledger.sourceGeneration;
+  } catch {
+    return false;
+  }
+}
 
 export async function createAutomaticCorruptTasksCacheReplacement(
   error: unknown,
   recoveryController: TasksCorruptCacheRecoveryController,
   database: Pick<PowerSyncDatabase, 'close' | 'getUploadQueueStats'> & PowerSyncDatabase,
   databaseFactory: (generation: number) => PowerSyncDatabase = createTasksPowerSyncDatabase,
+  recoveryPolicy: TasksCacheRecoveryPolicy = {},
 ): Promise<TasksCorruptCacheRecoveryResult> {
   const previousGeneration = getTasksPowerSyncDatabaseGeneration(database);
   if (!recoveryController.consumeAutomaticRecovery(error)) {
@@ -176,6 +301,25 @@ export async function createAutomaticCorruptTasksCacheReplacement(
     };
   }
 
+  const eligibility = evaluateTasksCacheRecoveryEligibility(recoveryPolicy);
+  if ('reason' in eligibility) {
+    return {
+      outcome: 'circuit-open',
+      queueCount: 0,
+      previousGeneration,
+      reason: eligibility.reason,
+    };
+  }
+
+  if (!commitTasksCacheRecoveryLedger(previousGeneration, recoveryPolicy)) {
+    return {
+      outcome: 'circuit-open',
+      queueCount: 0,
+      previousGeneration,
+      reason: 'ledger-unwritable',
+    };
+  }
+
   const advanced = advanceTasksDatabaseGeneration(previousGeneration);
   const nextGeneration = advanced.generation;
   const replacement = databaseFactory(nextGeneration);
@@ -187,6 +331,15 @@ export async function createAutomaticCorruptTasksCacheReplacement(
     nextGeneration,
     replacement,
   };
+}
+
+function browserRecoveryStorage(): TasksCacheRecoveryLedgerStorage | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 export function createAutomaticTasksRuntimeReplacement(

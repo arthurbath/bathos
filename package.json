@@ -36,7 +36,8 @@
     "generate:tasks:native-quick-entry-contract": "node scripts/generate-tasks-native-quick-entry-contract.mjs",
     "verify:tasks:native-quick-entry-contract": "node scripts/generate-tasks-native-quick-entry-contract.mjs --check",
     "generate:tasks:native-widget-iconography": "node scripts/generate-tasks-native-widget-iconography.mjs",
-    "verify:tasks:native-widget-iconography": "node scripts/generate-tasks-native-widget-iconography.mjs --check"
+    "verify:tasks:native-widget-iconography": "node scripts/generate-tasks-native-widget-iconography.mjs --check",
+    "test:tasks:native-install": "node --test scripts/install-tasks-native.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

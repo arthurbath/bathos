@@ -6,12 +6,15 @@ import {
   createAutomaticTasksRuntimeReplacement,
   createTasksCorruptCacheRecoveryController,
   createTasksRuntimeRecoveryController,
+  evaluateTasksCacheRecoveryEligibility,
   isClosedTasksRuntimeClientError,
   isCurrentTasksRuntimeGeneration,
   isTasksDatabaseCorruptionError,
   isTasksRecoverableCacheError,
   shouldAutomaticallyRecoverTasksRuntime,
   TASKS_CLOSED_CLIENT_ERROR_MESSAGE,
+  TASKS_CACHE_RECOVERY_COOLDOWN_MS,
+  TASKS_CACHE_RECOVERY_LEDGER_STORAGE_KEY,
   TASKS_RUNTIME_ERROR_MESSAGE,
   waitForTasksRuntimeInitialization,
 } from './taskRuntimeRecovery';
@@ -283,5 +286,126 @@ describe('Tasks corrupt synchronized-cache recovery', () => {
       factory,
     )).resolves.toMatchObject({ outcome: 'not-eligible' });
     expect(factory).toHaveBeenCalledOnce();
+  });
+
+  it('persists the recovery circuit across runtime-controller restarts', async () => {
+    const error = new Error('database disk image is malformed');
+    const firstFactory = vi.fn().mockReturnValue(
+      { first: true } as unknown as PowerSyncDatabase,
+    );
+
+    expect((await createAutomaticCorruptTasksCacheReplacement(
+      error,
+      createTasksCorruptCacheRecoveryController(),
+      createCorruptCacheDatabase(),
+      firstFactory,
+      {
+        releaseId: 'release-a',
+        now: new Date('2026-08-08T12:00:00.000Z'),
+      },
+    )).outcome).toBe('replacement-created');
+
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      error,
+      createTasksCorruptCacheRecoveryController(),
+      createCorruptCacheDatabase(),
+      vi.fn(),
+      {
+        releaseId: 'release-a',
+        now: new Date('2026-08-20T12:00:00.000Z'),
+      },
+    )).resolves.toMatchObject({
+      outcome: 'circuit-open',
+      reason: 'same-release',
+    });
+  });
+
+  it('blocks a different release until seven full days have elapsed', async () => {
+    const error = new Error('database disk image is malformed');
+    await createAutomaticCorruptTasksCacheReplacement(
+      error,
+      createTasksCorruptCacheRecoveryController(),
+      createCorruptCacheDatabase(),
+      vi.fn().mockReturnValue({} as PowerSyncDatabase),
+      {
+        releaseId: 'release-a',
+        now: new Date('2026-08-08T12:00:00.000Z'),
+      },
+    );
+
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      error,
+      createTasksCorruptCacheRecoveryController(),
+      createCorruptCacheDatabase(),
+      vi.fn(),
+      {
+        releaseId: 'release-b',
+        now: new Date('2026-08-15T11:59:59.999Z'),
+      },
+    )).resolves.toMatchObject({
+      outcome: 'circuit-open',
+      reason: 'cooldown-active',
+    });
+
+    expect(evaluateTasksCacheRecoveryEligibility({
+      releaseId: 'release-b',
+      now: new Date(
+        new Date('2026-08-08T12:00:00.000Z').getTime()
+          + TASKS_CACHE_RECOVERY_COOLDOWN_MS,
+      ),
+    })).toEqual({ allowed: true });
+  });
+
+  it('fails closed when the persistent ledger is malformed', async () => {
+    window.localStorage.setItem(
+      TASKS_CACHE_RECOVERY_LEDGER_STORAGE_KEY,
+      JSON.stringify({ version: 1, releaseId: 'release-a', recoveredAt: 'not-a-date' }),
+    );
+
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      { code: 'SQLITE_CORRUPT' },
+      createTasksCorruptCacheRecoveryController(),
+      createCorruptCacheDatabase(),
+      vi.fn(),
+      { releaseId: 'release-b' },
+    )).resolves.toMatchObject({
+      outcome: 'circuit-open',
+      reason: 'ledger-unreadable',
+    });
+    expect(window.localStorage.getItem('bathos.tasks.database-generation')).toBeNull();
+  });
+
+  it('keeps the recovery consumed when replacement construction fails', async () => {
+    const error = new Error('database disk image is malformed');
+    const recoveryTime = new Date('2026-08-08T12:00:00.000Z');
+
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      error,
+      createTasksCorruptCacheRecoveryController(),
+      createCorruptCacheDatabase(),
+      () => {
+        throw new Error('replacement failed');
+      },
+      { releaseId: 'release-a', now: recoveryTime },
+    )).rejects.toThrow('replacement failed');
+
+    expect(JSON.parse(
+      window.localStorage.getItem(TASKS_CACHE_RECOVERY_LEDGER_STORAGE_KEY) ?? '{}',
+    )).toMatchObject({
+      version: 1,
+      releaseId: 'release-a',
+      recoveredAt: recoveryTime.toISOString(),
+      sourceGeneration: 1,
+    });
+    await expect(createAutomaticCorruptTasksCacheReplacement(
+      error,
+      createTasksCorruptCacheRecoveryController(),
+      createCorruptCacheDatabase(),
+      vi.fn(),
+      { releaseId: 'release-a', now: new Date('2026-08-09T12:00:00.000Z') },
+    )).resolves.toMatchObject({
+      outcome: 'circuit-open',
+      reason: 'same-release',
+    });
   });
 });

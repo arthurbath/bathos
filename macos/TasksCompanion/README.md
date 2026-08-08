@@ -81,28 +81,27 @@ so their widget registration must target the APNs sandbox. Keep the explicit
 an optimized Release build. A distribution/archive build must instead use the
 production environment and a matching distribution profile.
 
-Only after all checks pass, stage and verify the app at the system application
-location before replacing the current installation:
+Only after all checks pass, use the guarded installer. It repeats signature and
+identity verification, requires Tasks to be stopped, fingerprints every active
+PowerSync database, replaces only the application bundle, and proves that the
+database fingerprints are unchanged before relaunching Tasks:
 
 ```sh
-STAGED_APP='/Applications/.Tasks.installing.app'
-INSTALLED_APP='/Applications/Tasks.app'
-
-ditto "$APP" "$STAGED_APP"
-codesign --verify --deep --strict --verbose=2 "$STAGED_APP"
-codesign --verify --strict --verbose=2 \
-  "$STAGED_APP/Contents/PlugIns/TasksMacWidgets.appex"
-mv "$INSTALLED_APP" "$HOME/.Trash/Tasks.previous.app"
-mv "$STAGED_APP" "$INSTALLED_APP"
-open "$INSTALLED_APP"
+node scripts/install-tasks-native.mjs macos --app "$APP"
 ```
 
-When replacing an existing installation, stage and verify the new output first,
-then move the former `Tasks.app` or `BathOS Tasks.app` to the Trash through a
-recoverable operation before placing the verified replacement. Never overwrite
-the installed bundle in place. A signing or entitlement failure must leave the
-previous installed app untouched. Do not remove the App Group container or
+Do not substitute an uninstall/reinstall sequence or a direct bundle copy. The
+guarded installer stages and verifies the new output, keeps the previous app
+available for rollback until cache continuity passes, and moves that prior
+bundle to the Trash only after success. A signing, identity, running-process,
+or cache-continuity failure leaves the durable application container and the
+last verified installed app intact. Do not remove the App Group container or
 WebKit data when replacing or unregistering a prior build.
+
+The default cache root is
+`~/Library/Containers/garden.bath.tasks/Data/Library/WebKit/WebsiteData`. A
+different test installation may pass `--installed-app` and `--container-root`.
+Use `--no-launch` when post-install inspection must occur before launch.
 
 After installing, inspect LaunchServices and WidgetKit registrations for the
 exact `garden.bath.tasks` app and `garden.bath.tasks.widgets` extension. Remove

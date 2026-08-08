@@ -70,4 +70,27 @@ describe('Tasks runtime cache recovery reporting', () => {
     expect(readTasksRuntimeCacheRecoveryReports()[0]?.failureClass)
       .toBe('schema-incompatible');
   });
+
+  it('records a content-free persistent circuit-open outcome', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const report = reportTasksRuntimeCacheRecovery({
+      failureClass: 'sqlite-corruption',
+      queueSafety: 'empty',
+      previousGeneration: 3,
+      nextGeneration: null,
+      outcome: 'circuit-open',
+      circuitReason: 'cooldown-active',
+    });
+
+    expect(report).toMatchObject({
+      outcome: 'circuit-open',
+      circuitReason: 'cooldown-active',
+    });
+    expect(JSON.stringify(report)).not.toMatch(/owner|task_id|title|database contents/i);
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      'Tasks local cache recovery',
+      expect.objectContaining({ level: 'error' }),
+    );
+  });
 });

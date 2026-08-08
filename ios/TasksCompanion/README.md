@@ -65,6 +65,35 @@ xcodebuild \
 
 Run the `TasksCompanion` scheme from Xcode to perform interactive sign-in and widget acceptance. A physical device and eligible Apple team are required to prove production App Group provisioning and Home Screen behavior.
 
+## Verified Signed Device Installation
+
+After producing a signed device build, install it through the guarded upgrade
+path rather than uninstalling Tasks or invoking `devicectl` directly:
+
+```sh
+APP='/tmp/BathOSTasksIOSSignedDerivedData/Build/Products/Debug-iphoneos/TasksCompanion.app'
+DEVICE='Art iPhone'
+
+node scripts/install-tasks-native.mjs ios \
+  --app "$APP" \
+  --device "$DEVICE"
+```
+
+The installer verifies the signed bundle and `garden.bath.tasks` identity,
+queries the existing app with CoreDevice container access, records its stable
+data-container identity, performs an in-place `devicectl device install app`,
+and requires the same container identity afterward. It fails closed if the
+device is unavailable, Tasks was not installed through a developer profile,
+container access cannot be proven, or the identity changes. On a device where
+Tasks is not yet installed, it reports a new installation rather than claiming
+that an existing PowerSync cache was preserved.
+
+The default developer directory is
+`/Applications/Xcode-beta.app/Contents/Developer`; pass `--developer-dir` only
+when intentionally using a different Xcode installation. Never uninstall the
+existing app before this command, because uninstalling removes the WebKit
+PowerSync cache that the upgrade is designed to retain.
+
 The large Home Screen widget shows up to ten leading tasks from the configured list with interactive task completion and Primary Link actions. Today rows include the task's colored horizon symbol. Upcoming rows include a compact short-weekday or month-and-day chip, and recurrence schedule projections replace the inapplicable completion control with a repeating symbol. Generic Primary Links use the native chain-link symbol, while recognized Mail, Jira, and Obsidian destinations retain protocol-specific symbols. Additional tasks remain implicit rather than consuming a row with an overflow message. The rectangular Lock Screen widget shows up to three leading task summaries from the configured list using the same bounded list context. Tapping the Lock Screen widget opens that list in the native companion.
 
 WidgetKit timeline generation independently requests the current bounded owner projection and schedules another refresh after 30 minutes. On iOS 26 or later, the widget also registers an owner-and-installation-bound WidgetKit push token through the same narrow widget authority. Content-free server invalidations can prompt an earlier timeline after task changes made on any client. iOS ultimately controls both opportunities and may defer them according to system budgets. A successful response is validated and atomically cached. Offline, timed-out, rejected, malformed, oversized, cross-owner, or unpersistable responses leave the last valid cache untouched, so the widget remains useful without instructing the user to open the app merely to refresh it.

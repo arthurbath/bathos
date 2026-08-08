@@ -326,7 +326,9 @@ export function TasksRuntimeProvider({
 
         const queueSafety = result.outcome === 'queue-not-empty'
           ? 'nonempty'
-          : 'unreadable';
+          : result.outcome === 'circuit-open'
+            ? 'empty'
+            : 'unreadable';
         reportTasksRuntimeCacheRecovery({
           failureClass: error instanceof TasksDatabaseSchemaCompatibilityError
             ? 'schema-incompatible'
@@ -336,7 +338,12 @@ export function TasksRuntimeProvider({
           nextGeneration: null,
           outcome: result.outcome === 'queue-not-empty'
             ? 'queue-not-empty'
-            : 'queue-unreadable',
+            : result.outcome === 'circuit-open'
+              ? 'circuit-open'
+              : 'queue-unreadable',
+          circuitReason: result.outcome === 'circuit-open'
+            ? result.reason
+            : null,
         });
         failTerminally(
           new Error('Local synchronized task cache could not be recovered safely'),
