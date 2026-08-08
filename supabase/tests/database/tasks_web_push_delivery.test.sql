@@ -24,6 +24,14 @@ SELECT has_table(
   'public', 'tasks_web_push_subscriptions',
   'stores provider subscription material separately from synchronized targets'
 );
+
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
 SELECT ok(
   (SELECT relrowsecurity FROM pg_catalog.pg_class WHERE oid = 'public.tasks_web_push_subscriptions'::regclass),
   'enables RLS on Web Push subscription material'

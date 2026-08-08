@@ -3,6 +3,7 @@
 DO $validation$
 DECLARE
   expected_tables text[] := ARRAY[
+    'bathos_module_access_grants',
     'tasks_areas',
     'tasks_checklist_items',
     'tasks_delivery_targets',
@@ -318,6 +319,6 @@ $validation$;
 
 SELECT
   'ready' AS tasks_powersync_database_status,
-  16 AS synchronized_table_count,
+  17 AS synchronized_table_count,
   current_database() AS database_name,
   clock_timestamp() AS verified_at;

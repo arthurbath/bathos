@@ -46,6 +46,14 @@ INSERT INTO public.tasks_checklist_items (
   '92000000-0000-4000-8000-000000000031'
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '92000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);

@@ -724,7 +724,9 @@ describe('Calendar keyboard navigation', () => {
     const { container, root } = mount(<Harness />);
 
     try {
-      const finalVisibleDay = getDayButton(container, '7', { outside: true });
+      const finalVisibleDay = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-08-07"]',
+      );
       const clear = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent === 'Clear');
       act(() => {

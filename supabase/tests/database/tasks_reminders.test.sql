@@ -25,6 +25,14 @@ SELECT has_table(
   'public', 'tasks_reminder_occurrences',
   'stores stable logical reminder occurrences'
 );
+
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
 SELECT has_table(
   'public', 'tasks_delivery_targets',
   'stores explicitly registered delivery targets'

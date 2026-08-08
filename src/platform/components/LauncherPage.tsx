@@ -7,6 +7,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { getAvailableModules } from '@/platform/modules';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
+import { useModuleAccess } from '@/platform/hooks/useModuleAccess';
 import { Badge } from '@/components/ui/badge';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import AuthPage from './AuthPage';
@@ -14,16 +15,17 @@ import AuthPage from './AuthPage';
 export default function LauncherPage() {
   const { user, loading, isSigningOut, signOut, displayName } = useAuthContext();
   const { isAdmin, loading: roleLoading, resolved: roleResolved } = useIsAdmin(user?.id);
+  const { access: moduleAccess, loading: accessLoading, resolved: accessResolved } = useModuleAccess(user?.id);
   const navigate = useNavigate();
   const location = useLocation();
-  const modules = getAvailableModules({ isAdmin });
+  const modules = getAvailableModules({ isAdmin, moduleAccess });
 
   useEffect(() => {
     // If there's only one module, skip the launcher and go straight to it
-    if (!loading && !roleLoading && roleResolved && user && modules.length === 1) {
+    if (!loading && !roleLoading && !accessLoading && roleResolved && accessResolved && user && modules.length === 1) {
       navigate(modules[0].launchPath, { replace: true });
     }
-  }, [loading, roleLoading, roleResolved, user, modules, navigate]);
+  }, [accessLoading, accessResolved, loading, roleLoading, roleResolved, user, modules, navigate]);
 
   // Redirect unauthenticated users to /signin (unless already on /signin or /signup)
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function LauncherPage() {
     }
   }, [loading, isSigningOut, user, location.pathname, location.search, location.hash, navigate]);
 
-  if (loading || isSigningOut || (!!user && (!roleResolved || roleLoading))) {
+  if (loading || isSigningOut || (!!user && (!roleResolved || roleLoading || !accessResolved || accessLoading))) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <LoadingSpinner />
@@ -80,6 +82,9 @@ export default function LauncherPage() {
                           </span>
                           <CardTitle>{module.name}</CardTitle>
                           {module.adminOnly && <Badge className="bg-admin text-admin-foreground">Admin</Badge>}
+                          {!isAdmin && moduleAccess[module.id]?.hasExplicitAccess && (
+                            <Badge className="bg-admin text-admin-foreground">Restricted Access</Badge>
+                          )}
                         </div>
                         <ArrowRight className="h-4 w-4 text-muted-foreground" />
                       </div>

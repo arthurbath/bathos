@@ -15,6 +15,14 @@ VALUES (
   '{}', '{}', now(), now()
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 SELECT ok(
   pg_get_constraintdef(
     (

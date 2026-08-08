@@ -30,6 +30,14 @@ VALUES (
   now()
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 SELECT has_column('public', 'tasks_todos', 'start_date', 'stores a date-only start date');
 SELECT has_column('public', 'tasks_todos', 'deadline', 'stores a date-only deadline');
 SELECT col_type_is('public', 'tasks_todos', 'start_date', 'date', 'uses the Postgres date type for starts');

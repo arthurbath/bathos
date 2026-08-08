@@ -14,6 +14,14 @@ INSERT INTO auth.users (
   '{}', '{}', now(), now()
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 INSERT INTO public.tasks_user_settings (
   id, owner_id, planning_timezone, client_mutation_id
 ) VALUES (

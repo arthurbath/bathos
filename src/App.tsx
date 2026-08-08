@@ -18,6 +18,10 @@ import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
 import { InstalledAppNavigationBoundary } from "@/platform/components/InstalledAppNavigationBoundary";
 import { useDocumentHead } from "@/platform/hooks/useDocumentHead";
+import { useAuthContext } from "@/platform/contexts/AuthContext";
+import { useIsAdmin } from "@/platform/hooks/useIsAdmin";
+import { useModuleAccess } from "@/platform/hooks/useModuleAccess";
+import { getModuleById, type PlatformModuleId } from "@/platform/modules";
 import { useBathosFormInteractions } from "@/platform/hooks/useCommandEnterSubmit";
 import { queryClient } from "@/platform/queryClient";
 import { PullToRefresh } from "@/components/PullToRefresh";
@@ -63,6 +67,35 @@ function GlobalFormInteractions() {
   return null;
 }
 
+function ModuleAccessRoute({
+  moduleId,
+  children,
+}: {
+  moduleId: Exclude<PlatformModuleId, 'admin'>;
+  children: ReactNode;
+}) {
+  const { user, loading: authLoading } = useAuthContext();
+  const { isAdmin, loading: roleLoading, resolved: roleResolved } = useIsAdmin(user?.id);
+  const { access, loading: accessLoading, resolved: accessResolved } = useModuleAccess(user?.id);
+
+  if (authLoading || (!!user && (roleLoading || !roleResolved || accessLoading || !accessResolved))) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  const moduleAccess = access[moduleId];
+  const isRestricted = moduleAccess?.isRestricted
+    ?? getModuleById(moduleId)?.restrictedByDefault === true;
+  if (user && !isAdmin && isRestricted && moduleAccess?.hasAccess !== true) {
+    return <NotFound />;
+  }
+
+  return children;
+}
+
 function TasksRoute() {
   const location = useLocation();
 
@@ -71,15 +104,17 @@ function TasksRoute() {
   }
 
   return (
-    <Suspense
-      fallback={(
-        <div className="flex min-h-screen items-center justify-center bg-background">
-          <LoadingSpinner />
-        </div>
-      )}
-    >
-      <TasksIndex />
-    </Suspense>
+    <ModuleAccessRoute moduleId="tasks">
+      <Suspense
+        fallback={(
+          <div className="flex min-h-screen items-center justify-center bg-background">
+            <LoadingSpinner />
+          </div>
+        )}
+      >
+        <TasksIndex />
+      </Suspense>
+    </ModuleAccessRoute>
   );
 }
 
@@ -117,33 +152,33 @@ export function AppRoutes() {
 
         {/* Budget module */}
         <Route path="/budget" element={<Navigate to="/budget/summary" replace />} />
-        <Route path="/budget/incomes" element={<Index />} />
-        <Route path="/budget/expenses" element={<Index />} />
-        <Route path="/budget/summary" element={<Index />} />
-        <Route path="/budget/config" element={<Index />} />
+        <Route path="/budget/incomes" element={<ModuleAccessRoute moduleId="budget"><Index /></ModuleAccessRoute>} />
+        <Route path="/budget/expenses" element={<ModuleAccessRoute moduleId="budget"><Index /></ModuleAccessRoute>} />
+        <Route path="/budget/summary" element={<ModuleAccessRoute moduleId="budget"><Index /></ModuleAccessRoute>} />
+        <Route path="/budget/config" element={<ModuleAccessRoute moduleId="budget"><Index /></ModuleAccessRoute>} />
         <Route path="/budget/restore" element={<Navigate to="/budget/config" replace />} />
 
         {/* Drawers module */}
         <Route path="/drawers" element={<Navigate to="/drawers/plan" replace />} />
-        <Route path="/drawers/plan" element={<DrawersIndex />} />
-        <Route path="/drawers/config" element={<DrawersIndex />} />
+        <Route path="/drawers/plan" element={<ModuleAccessRoute moduleId="drawers"><DrawersIndex /></ModuleAccessRoute>} />
+        <Route path="/drawers/config" element={<ModuleAccessRoute moduleId="drawers"><DrawersIndex /></ModuleAccessRoute>} />
 
         {/* Garage module */}
         <Route path="/garage" element={<Navigate to="/garage/due" replace />} />
-        <Route path="/garage/due" element={<GarageIndex />} />
-        <Route path="/garage/services" element={<GarageIndex />} />
-        <Route path="/garage/servicings" element={<GarageIndex />} />
-        <Route path="/garage/config" element={<GarageIndex />} />
+        <Route path="/garage/due" element={<ModuleAccessRoute moduleId="garage"><GarageIndex /></ModuleAccessRoute>} />
+        <Route path="/garage/services" element={<ModuleAccessRoute moduleId="garage"><GarageIndex /></ModuleAccessRoute>} />
+        <Route path="/garage/servicings" element={<ModuleAccessRoute moduleId="garage"><GarageIndex /></ModuleAccessRoute>} />
+        <Route path="/garage/config" element={<ModuleAccessRoute moduleId="garage"><GarageIndex /></ModuleAccessRoute>} />
 
         {/* Snake module */}
         <Route path="/snake" element={<Navigate to="/snake/weights" replace />} />
-        <Route path="/snake/weights" element={<SnakeIndex />} />
-        <Route path="/snake/config" element={<SnakeIndex />} />
+        <Route path="/snake/weights" element={<ModuleAccessRoute moduleId="snake"><SnakeIndex /></ModuleAccessRoute>} />
+        <Route path="/snake/config" element={<ModuleAccessRoute moduleId="snake"><SnakeIndex /></ModuleAccessRoute>} />
 
         {/* Wardrobe module */}
         <Route path="/wardrobe" element={<Navigate to="/wardrobe/items" replace />} />
-        <Route path="/wardrobe/items" element={<WardrobeIndex />} />
-        <Route path="/wardrobe/config" element={<WardrobeIndex />} />
+        <Route path="/wardrobe/items" element={<ModuleAccessRoute moduleId="wardrobe"><WardrobeIndex /></ModuleAccessRoute>} />
+        <Route path="/wardrobe/config" element={<ModuleAccessRoute moduleId="wardrobe"><WardrobeIndex /></ModuleAccessRoute>} />
 
         {/* Tasks module */}
         <Route path="/tasks" element={<Navigate to="/tasks/today" replace />} />

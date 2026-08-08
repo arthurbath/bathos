@@ -183,6 +183,7 @@ REVOKE ALL PRIVILEGES ON DATABASE postgres FROM tasks_powersync_role;
 GRANT CONNECT ON DATABASE postgres TO tasks_powersync_role;
 GRANT USAGE ON SCHEMA public TO tasks_powersync_role;
 GRANT SELECT ON TABLE
+  public.bathos_module_access_grants,
   public.tasks_areas,
   public.tasks_todos,
   public.tasks_checklist_items,

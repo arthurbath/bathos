@@ -24,6 +24,14 @@ SELECT has_table(
   'stores append-only Mail source retirement events'
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 SELECT is(
   has_table_privilege('authenticated', 'public.tasks_mail_source_events', 'SELECT'),
   true,

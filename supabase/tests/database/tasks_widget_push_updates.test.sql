@@ -29,6 +29,14 @@ INSERT INTO public.tasks_user_settings (
   '9d000000-0000-4000-8000-000000000011'
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 SELECT has_table(
   'tasks_private', 'widget_push_registrations',
   'stores WidgetKit push registrations outside the public schema'

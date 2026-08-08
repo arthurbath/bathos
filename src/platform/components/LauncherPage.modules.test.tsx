@@ -8,6 +8,7 @@ import LauncherPage from '@/platform/components/LauncherPage';
 const mockNavigate = vi.fn();
 const mockAuthContext = vi.fn();
 const mockIsAdmin = vi.fn();
+const mockModuleAccess = vi.fn();
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -23,6 +24,10 @@ vi.mock('@/platform/contexts/AuthContext', () => ({
 
 vi.mock('@/platform/hooks/useIsAdmin', () => ({
   useIsAdmin: (...args: unknown[]) => mockIsAdmin(...args),
+}));
+
+vi.mock('@/platform/hooks/useModuleAccess', () => ({
+  useModuleAccess: (...args: unknown[]) => mockModuleAccess(...args),
 }));
 
 vi.mock('@/platform/components/ToplineHeader', () => ({
@@ -61,6 +66,12 @@ describe('LauncherPage modules', () => {
     mockNavigate.mockReset();
     mockIsAdmin.mockReset();
     mockAuthContext.mockReset();
+    mockModuleAccess.mockReset();
+    mockModuleAccess.mockReturnValue({
+      access: { tasks: { isRestricted: true, hasAccess: true, hasExplicitAccess: true } },
+      loading: false,
+      resolved: true,
+    });
   });
 
   it('shows general modules for signed-in users', () => {
@@ -79,6 +90,7 @@ describe('LauncherPage modules', () => {
       expect(container.textContent).toContain('Garage');
       expect(container.textContent).toContain('Snake');
       expect(container.textContent).toContain('Tasks');
+      expect(container.textContent).toContain('Restricted Access');
       expect(container.textContent).toContain('Wardrobe');
       expect(container.textContent).not.toContain('Administration');
       const moduleLabels = Array.from(container.querySelectorAll('a')).map((link) => link.textContent ?? '');
@@ -98,6 +110,11 @@ describe('LauncherPage modules', () => {
       signOut: vi.fn(),
     });
     mockIsAdmin.mockReturnValue({ isAdmin: true, loading: false, resolved: true });
+    mockModuleAccess.mockReturnValue({
+      access: { tasks: { isRestricted: true, hasAccess: true, hasExplicitAccess: false } },
+      loading: false,
+      resolved: true,
+    });
 
     const { container, root } = renderLauncher();
 

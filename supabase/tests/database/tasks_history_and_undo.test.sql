@@ -60,6 +60,14 @@ VALUES (
   '32000000-0000-4000-8000-000000000020'
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 SELECT has_table('public', 'tasks_history_events', 'creates the task history table');
 SELECT is(
   (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.tasks_history_events'::regclass),

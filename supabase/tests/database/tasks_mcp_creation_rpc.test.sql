@@ -64,6 +64,14 @@ SELECT has_function(
   'creates a generic MCP task through one transactional function'
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 SELECT is(
   has_function_privilege(
     'anon',

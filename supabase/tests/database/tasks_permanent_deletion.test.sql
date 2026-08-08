@@ -24,6 +24,14 @@ SELECT has_function(
   'public', 'tasks_preview_permanent_deletion', ARRAY['text', 'uuid'],
   'previews one owner-scoped permanent-deletion scope'
 );
+
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
 SELECT has_function(
   'public', 'tasks_permanently_delete',
   ARRAY['text', 'uuid', 'text', 'uuid', 'text'],

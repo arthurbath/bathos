@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Shield } from 'lucide-react';
+import { ArrowLeft, LockKeyhole, Shield } from 'lucide-react';
 import * as Sentry from '@sentry/react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,6 +21,18 @@ import {
   writeCachedDefaultGridColumnWidthsOnly,
 } from '@/lib/gridColumnWidthPreferences';
 import NotFound from '@/pages/NotFound';
+
+interface ModuleAccessRow {
+  module_id: string;
+  module_name: string;
+  is_restricted: boolean;
+  user_id: string;
+  user_email: string;
+  display_name: string;
+  is_admin: boolean;
+  has_explicit_access: boolean;
+  has_access: boolean;
+}
 
 export default function AdminPage() {
   const { user, loading } = useAuthContext();
@@ -36,6 +48,27 @@ export default function AdminPage() {
   );
   const [gridWidthSettingLoading, setGridWidthSettingLoading] = useState(false);
   const [gridWidthSettingSaving, setGridWidthSettingSaving] = useState(false);
+  const [moduleAccessRows, setModuleAccessRows] = useState<ModuleAccessRow[]>([]);
+  const [moduleAccessLoading, setModuleAccessLoading] = useState(false);
+  const [moduleAccessSavingKey, setModuleAccessSavingKey] = useState<string | null>(null);
+
+  const loadModuleAccess = async () => {
+    if (!user?.id || !isAdmin) return;
+    setModuleAccessLoading(true);
+    try {
+      const rows = await supabaseRequest(async () => await supabase.rpc('bathos_admin_list_module_access'));
+      setModuleAccessRows(rows ?? []);
+    } catch (error) {
+      console.error('Failed to load restricted module access:', error);
+      toast({
+        title: 'Module Access Unavailable',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setModuleAccessLoading(false);
+    }
+  };
 
   useEffect(() => {
     const nextCachedValue = readCachedDefaultGridColumnWidthsOnly(user?.id);
@@ -84,6 +117,53 @@ export default function AdminPage() {
       cancelled = true;
     };
   }, [isAdmin, user?.id]);
+
+  useEffect(() => {
+    void loadModuleAccess();
+    // Access changes are explicitly reloaded after each mutation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, user?.id]);
+
+  const handleModuleRestrictedChange = async (moduleId: string, restricted: boolean) => {
+    const saveKey = `module:${moduleId}`;
+    setModuleAccessSavingKey(saveKey);
+    try {
+      await supabaseRequest(async () => await supabase.rpc('bathos_admin_set_module_restricted', {
+        _module_id: moduleId,
+        _is_restricted: restricted,
+      }));
+      await loadModuleAccess();
+    } catch (error) {
+      toast({
+        title: 'Failed to Update Module',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setModuleAccessSavingKey(null);
+    }
+  };
+
+  const handleUserModuleAccessChange = async (moduleId: string, userId: string, hasAccess: boolean) => {
+    const saveKey = `grant:${moduleId}:${userId}`;
+    setModuleAccessSavingKey(saveKey);
+    try {
+      await supabaseRequest(async () => await supabase.rpc('bathos_admin_set_module_user_access', {
+        _module_id: moduleId,
+        _user_id: userId,
+        _has_access: hasAccess,
+      }));
+      await loadModuleAccess();
+    } catch (error) {
+      toast({
+        title: 'Failed to Update Access',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setModuleAccessSavingKey(null);
+    }
+  };
 
   const handleSentryTest = async () => {
     if (!hasSentryDsn) {
@@ -227,6 +307,72 @@ export default function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Restricted Modules</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {moduleAccessLoading && moduleAccessRows.length === 0 ? (
+              <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
+            ) : Array.from(new Map(moduleAccessRows.map((row) => [row.module_id, row])).values()).map((moduleRow) => {
+              const users = moduleAccessRows.filter((row) => row.module_id === moduleRow.module_id);
+              const moduleSaveKey = `module:${moduleRow.module_id}`;
+              return (
+                <section key={moduleRow.module_id} className="space-y-3 border-b pb-5 last:border-b-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 font-semibold">
+                        {moduleRow.is_restricted && <LockKeyhole className="h-4 w-4 text-admin" aria-hidden="true" />}
+                        <span>{moduleRow.module_name}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {moduleRow.is_restricted
+                          ? 'Only administrators and explicitly granted users can open or synchronize this module.'
+                          : 'Available to every signed-in user.'}
+                      </p>
+                    </div>
+                    <Switch
+                      aria-label={`Restrict ${moduleRow.module_name}`}
+                      checked={moduleRow.is_restricted}
+                      onCheckedChange={(checked) => void handleModuleRestrictedChange(moduleRow.module_id, checked)}
+                      disabled={moduleAccessSavingKey === moduleSaveKey}
+                    />
+                  </div>
+
+                  {moduleRow.is_restricted && (
+                    <div className="space-y-2 rounded-md border p-3">
+                      {users.map((accessRow) => {
+                        const grantSaveKey = `grant:${accessRow.module_id}:${accessRow.user_id}`;
+                        return (
+                          <div key={accessRow.user_id} className="flex items-center justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{accessRow.display_name}</p>
+                              <p className="truncate text-xs text-muted-foreground">{accessRow.user_email}</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {accessRow.is_admin && <span className="text-xs text-admin">Admin</span>}
+                              <Switch
+                                aria-label={`Grant ${accessRow.user_email} access to ${accessRow.module_name}`}
+                                checked={accessRow.is_admin || accessRow.has_explicit_access}
+                                onCheckedChange={(checked) => void handleUserModuleAccessChange(
+                                  accessRow.module_id,
+                                  accessRow.user_id,
+                                  checked,
+                                )}
+                                disabled={accessRow.is_admin || moduleAccessSavingKey === grantSaveKey}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Grid Width Review</CardTitle>

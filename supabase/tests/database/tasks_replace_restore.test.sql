@@ -29,6 +29,14 @@ SELECT has_function(
   'public', 'tasks_prepare_replace_restore_v14', ARRAY['jsonb'],
   'prepares a current-schema replacement and pre-restore backup'
 );
+
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
 SELECT has_function(
   'public', 'tasks_replace_restore_v14',
   ARRAY['jsonb', 'text', 'uuid', 'text'],

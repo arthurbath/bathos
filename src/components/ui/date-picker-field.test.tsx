@@ -491,12 +491,9 @@ describe('DatePickerField', () => {
         container.querySelector<HTMLButtonElement>('#deadline-boundary')?.click();
       });
       await flushUi();
-      const finalVisibleDay = Array.from(document.body.querySelectorAll<HTMLButtonElement>(
-        'button[name="day"]',
-      )).find((button) => (
-        button.textContent?.trim() === '7'
-        && button.className.includes('day-outside')
-      ));
+      const finalVisibleDay = document.body.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-08-07"]',
+      );
       const clear = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent?.trim() === 'Clear');
 

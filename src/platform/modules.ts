@@ -15,6 +15,7 @@ export interface PlatformModule {
   manifestId?: string;
   manifestPath?: string;
   adminOnly?: boolean;
+  restrictedByDefault?: boolean;
 }
 
 const BUDGET_MODULE: PlatformModule = {
@@ -72,6 +73,7 @@ const TASKS_MODULE: PlatformModule = {
   installStartPath: '/tasks/today',
   manifestId: '/tasks',
   manifestPath: '/tasks/manifest.json',
+  restrictedByDefault: true,
 };
 
 const ADMINISTRATION_MODULE: PlatformModule = {
@@ -88,10 +90,20 @@ const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAG
 
 interface GetAvailableModulesOptions {
   isAdmin?: boolean;
+  moduleAccess?: Partial<Record<PlatformModuleId, {
+    isRestricted: boolean;
+    hasAccess: boolean;
+  }>>;
 }
 
 export function getAvailableModules(options?: GetAvailableModulesOptions): PlatformModule[] {
-  return PLATFORM_MODULES.filter((module) => !module.adminOnly || options?.isAdmin);
+  return PLATFORM_MODULES.filter((module) => {
+    if (module.adminOnly) return options?.isAdmin === true;
+    const access = options?.moduleAccess?.[module.id];
+    const isRestricted = access?.isRestricted ?? module.restrictedByDefault === true;
+    if (!isRestricted) return true;
+    return options?.isAdmin === true || access?.hasAccess === true;
+  });
 }
 
 export function getModuleById(moduleId: PlatformModuleId): PlatformModule | undefined {

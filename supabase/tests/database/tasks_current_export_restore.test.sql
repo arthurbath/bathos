@@ -24,6 +24,14 @@ SELECT has_function(
   'public', 'tasks_create_export_v14', ARRAY[]::text[],
   'creates the current schema-fourteen export'
 );
+
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
 SELECT has_function(
   'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
   'restores supported exports through the current contract'

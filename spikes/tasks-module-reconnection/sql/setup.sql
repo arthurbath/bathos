@@ -1,6 +1,7 @@
 DROP PUBLICATION IF EXISTS powersync;
 
 CREATE PUBLICATION powersync FOR TABLE
+  public.bathos_module_access_grants,
   public.tasks_areas,
   public.tasks_todos,
   public.tasks_checklist_items,

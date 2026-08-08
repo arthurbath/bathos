@@ -32,25 +32,30 @@ describe('Tasks PowerSync deployment configuration', () => {
     .filter(({ local_only: localOnly }) => !localOnly)
     .map(({ name }) => name)
     .sort();
+  const authorizationTables = ['bathos_module_access_grants'];
+  const publicationContract = [...authorizationTables, ...synchronizedTables].sort();
 
   it('keeps every stream and publication aligned with the nonlocal client schema', () => {
     expect(streamTables(productionSyncConfig)).toEqual(synchronizedTables);
     expect(streamTables(disposableSyncConfig)).toEqual(synchronizedTables);
-    expect(publicationTables(productionPublicationCreate)).toEqual(synchronizedTables);
-    expect(publicationTables(productionPublicationUpdate)).toEqual(synchronizedTables);
-    expect(publicationTables(disposablePublication)).toEqual(synchronizedTables);
-    expect(grantedTables(productionRole)).toEqual(synchronizedTables);
-    expect(verifiedTables(productionVerify)).toEqual(synchronizedTables);
+    expect(publicationTables(productionPublicationCreate)).toEqual(publicationContract);
+    expect(publicationTables(productionPublicationUpdate)).toEqual(publicationContract);
+    expect(publicationTables(disposablePublication)).toEqual(publicationContract);
+    expect(grantedTables(productionRole)).toEqual(publicationContract);
+    expect(verifiedTables(productionVerify)).toEqual(publicationContract);
   });
 
-  it('keeps every download query owner-scoped without joins or wildcard table selection', () => {
+  it('keeps every download query owner-scoped and gated by module access', () => {
     const queries = productionSyncConfig.match(/^\s+- SELECT .+$/gm) ?? [];
     expect(queries).toHaveLength(synchronizedTables.length);
     for (const table of synchronizedTables) {
       expect(queries).toContain(
-        `      - SELECT * FROM ${table} WHERE owner_id = auth.user_id()`,
+        `      - SELECT * FROM ${table} WHERE owner_id IN tasks_access`,
       );
     }
+    expect(productionSyncConfig).toContain(
+      "tasks_access: SELECT user_id FROM bathos_module_access_grants WHERE module_id = 'tasks' AND user_id = auth.user_id()",
+    );
     expect(productionSyncConfig).not.toMatch(/JOIN|FOR ALL TABLES/i);
   });
 
@@ -167,7 +172,7 @@ function streamTables(contents: string): string[] {
 }
 
 function publicationTables(contents: string): string[] {
-  return uniqueMatches(contents, /public\.(tasks_[a-z_]+)/g);
+  return uniqueMatches(contents, /public\.((?:bathos_module_access_grants|tasks_[a-z_]+))/g);
 }
 
 function grantedTables(contents: string): string[] {
@@ -177,7 +182,7 @@ function grantedTables(contents: string): string[] {
 
 function verifiedTables(contents: string): string[] {
   const expected = contents.match(/expected_tables text\[\] := ARRAY\[([\s\S]+?)\];/)?.[1] ?? '';
-  return uniqueMatches(expected, /'(tasks_[a-z_]+)'/g);
+  return uniqueMatches(expected, /'((?:bathos_module_access_grants|tasks_[a-z_]+))'/g);
 }
 
 function uniqueMatches(contents: string, pattern: RegExp): string[] {

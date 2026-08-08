@@ -7,6 +7,22 @@ import { AppRoutes, RouteScopedDataGridHistory } from './App';
 
 const mockTasksLifecycle = vi.hoisted(() => ({ mounts: 0, cleanups: 0 }));
 
+vi.mock('@/platform/contexts/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+  useAuthContext: () => ({
+    user: { id: 'owner-a' },
+    loading: false,
+  }),
+}));
+
+vi.mock('@/platform/hooks/useIsAdmin', () => ({
+  useIsAdmin: () => ({ isAdmin: true, loading: false, resolved: true }),
+}));
+
+vi.mock('@/platform/hooks/useModuleAccess', () => ({
+  useModuleAccess: () => ({ access: {}, loading: false, resolved: true }),
+}));
+
 vi.mock('@/modules/tasks/TasksIndex', async () => {
   const ReactModule = await import('react');
   const Router = await import('react-router-dom');

@@ -48,7 +48,11 @@ import {
   prepareTasksOfflineLaunch,
   type TasksOfflineLaunchState,
 } from '@/modules/tasks/pwa/taskServiceWorker';
-import { activateTaskPlanningDate } from '@/modules/tasks/runtime/taskPlanningDate';
+import {
+  activateTaskPlanningDate,
+  shouldActivateTaskPlanningDate,
+  taskQueuePollDelay,
+} from '@/modules/tasks/runtime/taskPlanningDate';
 import {
   reportTasksRuntimeStartupFailure,
   type TasksRuntimeStartupPhase,
@@ -148,12 +152,17 @@ export function TasksRuntimeProvider({
     let initializationExpired = false;
     let startupPhase: TasksRuntimeStartupPhase = 'owner-binding';
     let disposeStatusListener: (() => void) | undefined;
-    let queuePoll: ReturnType<typeof setInterval> | undefined;
+    let queuePoll: ReturnType<typeof setTimeout> | undefined;
     let activationPoll: ReturnType<typeof setInterval> | undefined;
     let startupRefreshTimeout: ReturnType<typeof setTimeout> | undefined;
     let startupSyncBaseline: number | null = null;
     let startupSyncBaselineCaptured = false;
     let nativeReconnectInFlight: Promise<void> | null = null;
+    let queueRefreshInFlight: Promise<number> | null = null;
+    let lastKnownQueueDepth = 0;
+    let activateReachedDates: (() => Promise<void>) | null = null;
+    let planningActivationInFlight: Promise<void> | null = null;
+    let lastActivatedPlanningDate: string | null = null;
     let corruptCacheRecoveryInFlight: Promise<void> | null = null;
     let corruptCacheRecoveryStarted = false;
     const endpoint = configuredEndpoint;
@@ -211,8 +220,10 @@ export function TasksRuntimeProvider({
       beginStartupRefresh();
       setSyncState('connecting');
       if (nativeReconnectInFlight) {
+        void activateReachedDates?.().catch(() => undefined);
         return;
       }
+      void activateReachedDates?.().catch(() => undefined);
       nativeReconnectInFlight = database.connect(connector)
         .catch(() => {
           if (isCurrentGeneration() && !corruptCacheRecoveryStarted) {
@@ -231,11 +242,30 @@ export function TasksRuntimeProvider({
     window.addEventListener('online', refreshBrowserNetworkState);
     window.addEventListener(TASKS_NATIVE_APP_ACTIVE_EVENT, refreshNativeAppSync);
 
-    const refreshQueueDepth = async () => {
-      const queue = await database.getUploadQueueStats();
-      if (isCurrentGeneration()) {
-        setPendingUploadCount(queue.count);
-      }
+    const refreshQueueDepth = (): Promise<number> => {
+      if (queueRefreshInFlight) return queueRefreshInFlight;
+      queueRefreshInFlight = database.getUploadQueueStats()
+        .then((queue) => {
+          lastKnownQueueDepth = queue.count;
+          if (isCurrentGeneration()) {
+            setPendingUploadCount(queue.count);
+          }
+          return queue.count;
+        })
+        .finally(() => {
+          queueRefreshInFlight = null;
+        });
+      return queueRefreshInFlight;
+    };
+    const scheduleQueuePoll = () => {
+      if (!isCurrentGeneration()) return;
+      if (queuePoll !== undefined) clearTimeout(queuePoll);
+      queuePoll = setTimeout(() => {
+        queuePoll = undefined;
+        void refreshQueueDepth()
+          .catch(() => lastKnownQueueDepth)
+          .finally(scheduleQueuePoll);
+      }, taskQueuePollDelay(lastKnownQueueDepth));
     };
 
     const failTerminally = (error: Error, phase: TasksRuntimeStartupPhase) => {
@@ -378,17 +408,26 @@ export function TasksRuntimeProvider({
           resolveTaskPlanningTimeZone(),
         );
         if (!isCurrentGeneration() || initializationExpired) return;
-        const activateReachedDates = async () => {
+        activateReachedDates = async () => {
           const planningDate = taskCalendarDateInTimeZone(
             settings.planning_timezone,
             new Date(),
           );
-          await activateTaskPlanningDate({
+          if (!shouldActivateTaskPlanningDate(lastActivatedPlanningDate, planningDate)) {
+            return;
+          }
+          if (planningActivationInFlight) return planningActivationInFlight;
+          planningActivationInFlight = activateTaskPlanningDate({
             ownerId,
             planningDate,
             planningTimeZone: settings.planning_timezone,
             repository,
+          }).then(() => {
+            lastActivatedPlanningDate = planningDate;
+          }).finally(() => {
+            planningActivationInFlight = null;
           });
+          return planningActivationInFlight;
         };
         startupPhase = 'planning-date-activation';
         await activateReachedDates();
@@ -440,11 +479,7 @@ export function TasksRuntimeProvider({
             },
           );
           await refreshQueueDepth();
-          queuePoll = setInterval(() => {
-            if (isCurrentGeneration()) {
-              void refreshQueueDepth().catch(() => undefined);
-            }
-          }, 1_000);
+          scheduleQueuePoll();
           try {
             await database.connect(connector);
           } catch {
@@ -489,7 +524,7 @@ export function TasksRuntimeProvider({
       window.removeEventListener(TASKS_NATIVE_APP_ACTIVE_EVENT, refreshNativeAppSync);
       disposeStatusListener?.();
       if (queuePoll !== undefined) {
-        clearInterval(queuePoll);
+        clearTimeout(queuePoll);
       }
       if (activationPoll !== undefined) {
         clearInterval(activationPoll);

@@ -72,6 +72,14 @@ INSERT INTO auth.users (
   '{}', '{}', now(), now()
 );
 
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
+
 SET LOCAL ROLE authenticated;
 SELECT set_config(
   'request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true
@@ -943,6 +951,14 @@ INSERT INTO auth.users (
   'authenticated', 'authenticated', 'mixed-order@example.test', '', now(),
   '{}', '{}', now(), now()
 );
+
+INSERT INTO public.bathos_module_access_grants (
+  module_id, user_id, grant_source, granted_by
+)
+SELECT 'tasks', id, 'manual', NULL
+FROM auth.users
+WHERE email LIKE '%@example.test'
+ON CONFLICT DO NOTHING;
 INSERT INTO public.tasks_user_settings (
   id, owner_id, planning_timezone, client_mutation_id
 ) VALUES (
