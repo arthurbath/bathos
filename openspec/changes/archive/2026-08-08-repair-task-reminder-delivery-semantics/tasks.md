@@ -30,4 +30,4 @@
 
 - [x] 5.1 Run focused Vitest, Swift, and pgTAP reminder suites
 - [x] 5.2 Run full lint, test, build, database lint, database tests, and strict OpenSpec validation
-- [ ] 5.3 Apply the migration, deploy the dispatcher, and verify production registration and provider acceptance before native rebuilds
+- [x] 5.3 Apply the migration, deploy the dispatcher, and verify production registration and provider acceptance before native rebuilds

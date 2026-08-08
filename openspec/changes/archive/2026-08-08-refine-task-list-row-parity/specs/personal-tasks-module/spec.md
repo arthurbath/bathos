@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Task summary metadata
 The Tasks module SHALL present compact secondary metadata relevant to the current list context and SHALL omit metadata already communicated by the visible containing bucket.
@@ -41,21 +41,6 @@ Tasks SHALL treat dated recurrence prototypes and ordinary tasks as one rendered
 - **WHEN** a dated recurrence prototype has whole-row keyboard focus and the user presses Return
 - **THEN** Tasks opens that prototype's ordinary metadata drawer
 
-### Requirement: Checklist horizontal boundary traversal
-The system SHALL treat adjacent checklist-item inputs as continuous lines for plain, macOS Option-modified, and macOS Command-modified horizontal caret movement while preserving native text-input and browser behavior away from eligible item boundaries.
-
-#### Scenario: Move left into the preceding checklist item
-- **WHEN** a checklist-item input has a collapsed caret at the beginning, an adjacent preceding item exists, and a Mac user presses Left Arrow with no modifier, Option only, or Command only
-- **THEN** Tasks focuses the preceding checklist input and places the caret at the end of its value
-
-#### Scenario: Move right into the following checklist item
-- **WHEN** a checklist-item input has a collapsed caret at the end, an adjacent following item exists, and a Mac user presses Right Arrow with no modifier, Option only, or Command only
-- **THEN** Tasks focuses the following checklist input and places the caret at the beginning of its value
-
-#### Scenario: Preserve native horizontal behavior elsewhere
-- **WHEN** the caret or selection is not at an eligible boundary, the platform is not Mac-like, or another modifier combination is used
-- **THEN** Tasks leaves the event to native input or browser behavior
-
 ### Requirement: Task and checklist drag handles
 Tasks SHALL expose compact task-row drag handles automatically on touch-capable surfaces, omit them from point-and-click task rows, and always expose a dedicated checklist-item drag handle.
 
@@ -89,3 +74,20 @@ Tasks SHALL align resting task-row content with the horizontal edges of the surr
 #### Scenario: Render an expanded metadata drawer
 - **WHEN** a task drawer appears at any supported viewport width
 - **THEN** it retains 0.875rem inline padding and its checklist completion controls align with the other drawer fields
+
+## MODIFIED Requirements
+
+### Requirement: Checklist Horizontal Boundary Traversal
+The system SHALL treat adjacent checklist-item inputs as continuous lines for plain, macOS Option-modified, and macOS Command-modified horizontal caret movement while preserving native text-input and browser behavior away from eligible item boundaries.
+
+#### Scenario: Move left into the preceding checklist item
+- **WHEN** a checklist-item input has a collapsed caret at the beginning, an adjacent preceding item exists, and a Mac user presses Left Arrow with no modifier, Option only, or Command only
+- **THEN** Tasks focuses the preceding checklist input and places the caret at the end of its value
+
+#### Scenario: Move right into the following checklist item
+- **WHEN** a checklist-item input has a collapsed caret at the end, an adjacent following item exists, and a Mac user presses Right Arrow with no modifier, Option only, or Command only
+- **THEN** Tasks focuses the following checklist input and places the caret at the beginning of its value
+
+#### Scenario: Preserve native horizontal behavior elsewhere
+- **WHEN** the caret or selection is not at an eligible boundary, the platform is not Mac-like, or another modifier combination is used
+- **THEN** Tasks leaves the event to native input or browser behavior

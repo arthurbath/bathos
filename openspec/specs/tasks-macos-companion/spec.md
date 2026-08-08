@@ -311,31 +311,15 @@ The macOS widget SHALL use the same authoritative Upcoming rank as the web list 
 - **THEN** the widget displays the first ten rows in controlling-date and Upcoming-rank order
 
 ### Requirement: Global quick entry presents a compact stable editor
-The macOS Tasks companion SHALL present Global Quick Entry in a balanced, rounded, movable panel large enough for its native controls and focus outlines, SHALL visually distinguish its boundary with a one-pixel lighter dark-gray border and restrained native shadow, and SHALL never expose web loading, stale web content, or a blank web failure state.
+The macOS Tasks companion SHALL present Global Quick Entry in a balanced, rounded, movable panel centered in the visible frame of the display containing the pointer, large enough for its native controls and focus outlines, SHALL visually distinguish its boundary with a one-pixel lighter dark-gray border and restrained native shadow, and SHALL never expose web loading, stale web content, or a blank web failure state.
 
-#### Scenario: Open global quick entry from a cold state
-- **WHEN** the global quick-entry shortcut is invoked before any bootstrap refresh or main Tasks document is ready
-- **THEN** a complete native editor appears immediately with an empty local draft and cached or default reference data while background authority refresh remains nonblocking
+#### Scenario: Open global quick entry on a multi-display Mac
+- **WHEN** the user invokes Global Quick Entry while the pointer is on any attached display
+- **THEN** the complete native editor appears immediately and is centered within that display's visible frame
 
-#### Scenario: Open global quick entry from a warm state
-- **WHEN** the global quick-entry shortcut is invoked after a prior native capture
-- **THEN** Tasks resets the local draft and presents the complete fresh editor without WebKit navigation, a loading spinner, stale content, or content flicker
-
-#### Scenario: Preserve balanced panel padding
-- **WHEN** the native Quick Entry editor is visible
-- **THEN** balanced padding provides enough space that editor and focus outlines do not feel crowded or touch the panel boundary
-
-#### Scenario: Move the panel
-- **WHEN** the user drags the noninteractive background or top region of Quick Entry
-- **THEN** the complete native panel moves with the pointer while form controls retain their ordinary click and drag behavior
-
-#### Scenario: Open the Start picker
-- **WHEN** the user opens the Start picker inside Quick Entry
-- **THEN** the native picker remains usable within the panel's content bounds without forcing the panel to grow or clipping the picker
-
-#### Scenario: Lack current native authority
-- **WHEN** the native editor is open but no valid Quick Entry credential or compatible bootstrap is available
-- **THEN** the draft remains fully editable and intact while Save offers a bounded retry or explains that Tasks must be signed in or refreshed
+#### Scenario: Finish global quick entry
+- **WHEN** the user saves or cancels Global Quick Entry after invoking it from another application
+- **THEN** the overlay closes and macOS restores the application that was active before the overlay opened
 
 ### Requirement: Global quick entry commits explicitly and cancels cleanly
 The macOS Tasks companion SHALL provide a filled primary Save action and an always-available outlined Cancel action, SHALL treat Save and Command+Return as positive quick-entry submission, and SHALL treat Escape, Cancel, panel dismissal, or a second global-shortcut invocation as cancellation whenever no nested control owns Escape.
@@ -365,15 +349,11 @@ The macOS Tasks companion SHALL provide a filled primary Save action and an alwa
 - **THEN** Cancel remains enabled while Save reflects the shared task validity and pending-operation rules
 
 ### Requirement: Native Quick Entry uses bounded owner authority
-The macOS companion SHALL use an expiring credential limited to Quick Entry bootstrap and creation, bound to the authenticated owner and native installation, and stored outside widget-shared files.
+The macOS companion SHALL use an expiring credential limited to Quick Entry bootstrap and creation, bound to the authenticated owner and native installation, and stored in the sandbox-aware macOS data-protection Keychain outside widget-shared files.
 
-#### Scenario: Rotate owner authority
-- **WHEN** the authenticated owner changes, signs out, or the installation identity changes
-- **THEN** Tasks revokes or clears the prior Quick Entry credential and cached owner reference data before accepting another native draft
-
-#### Scenario: Reject an incompatible contract
-- **WHEN** the server requires a newer Quick Entry contract than the installed native client supports
-- **THEN** the editor remains cancellable and preserves its local draft but refuses submission with a refresh-required explanation
+#### Scenario: Persist native Quick Entry authority across a compatible rebuild
+- **WHEN** a consistently identified and signed Tasks build replaces an earlier build
+- **THEN** the replacement reads its bounded credential through the application-scoped data-protection Keychain without presenting a legacy per-item access prompt
 
 ### Requirement: Global Quick Entry retains drafts for interior clicks
 The macOS Global Quick Entry panel SHALL treat its complete visible content area as an interior surface and SHALL cancel a draft only through an explicit cancellation command or an actual panel-dismissal action.
@@ -385,3 +365,54 @@ The macOS Global Quick Entry panel SHALL treat its complete visible content area
 #### Scenario: Dismiss a nested Quick Entry popover
 - **WHEN** the user clicks elsewhere inside Quick Entry while an editor-owned picker or menu is open
 - **THEN** the nested surface may close while the Quick Entry panel and draft remain open
+
+### Requirement: Reliable macOS Native Reminder Notifications
+The macOS companion SHALL register for APNs after operating-system notification authorization is enabled, SHALL retain bounded local scheduling as a fallback, and SHALL receive server-driven native reminders without requiring the app to remain open.
+
+#### Scenario: Register macOS remote notifications
+- **WHEN** macOS notification authorization is enabled and the app receives an application device token
+- **THEN** the trusted Tasks bridge registers that token for the authenticated owner and current installation
+
+#### Scenario: Receive while suspended
+- **WHEN** the server delivers a valid owner-scoped reminder while the app is suspended
+- **THEN** macOS presents the Reminder alert and sound with the task Summary
+
+#### Scenario: Avoid an in-app duplicate
+- **WHEN** macOS notification authorization is enabled
+- **THEN** the embedded Tasks surface does not claim the in-app toast fallback for that surface
+
+#### Scenario: Keep local projection as fallback
+- **WHEN** the embedded Tasks surface has a future canonical reminder projection
+- **THEN** the companion may reconcile local requests using the same app-owned identity without independently computing task dates or recurrence
+
+#### Scenario: Edit enabled notification permission
+- **WHEN** native notifications are already enabled and the user activates `Edit` from `Notifications & Badges`
+- **THEN** the companion opens the operating system notification settings for Tasks
+
+### Requirement: Native Tasks list widget families
+
+The macOS companion SHALL offer the Tasks list widget in medium, large, and extra-large system families, SHALL preserve the same list selection and task interactions in every family, and SHALL use a family-specific visible-task limit.
+
+#### Scenario: Select a shorter widget
+- **WHEN** the user adds the medium Tasks list widget
+- **THEN** the widget shows the established header and interactions with no more than four task rows
+
+#### Scenario: Select a taller widget
+- **WHEN** the user adds the extra-large Tasks list widget
+- **THEN** the widget shows the established header and interactions with no more than sixteen task rows
+
+#### Scenario: Widget needs the app
+- **WHEN** no authenticated widget snapshot is available
+- **THEN** the body centers the task icon and the message `Open Tasks` between the header divider and the widget bottom
+
+### Requirement: Long-running native Tasks sessions
+
+The macOS companion SHALL keep the embedded Tasks runtime connected without repeatedly issuing state-neutral planning transactions or high-frequency empty queue reads throughout an idle long-running session.
+
+#### Scenario: Native app remains open all day
+- **WHEN** the native Tasks window remains open without pending uploads
+- **THEN** the shared runtime uses date-change-only planning activation and idle queue polling
+
+#### Scenario: Native app resumes after midnight
+- **WHEN** the native app becomes active after the planning date has advanced
+- **THEN** the shared runtime immediately checks and activates the new planning date

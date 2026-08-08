@@ -16,4 +16,4 @@
 - [x] 3.1 Filter every Tasks PowerSync query through the access-grant authority.
 - [x] 3.2 Update generated Supabase types.
 - [x] 3.3 Run database tests and lint, targeted Vitest, npm test/lint/build, and strict OpenSpec validation.
-- [ ] 3.4 Archive the completed OpenSpec change and deploy the migration and Sync Streams configuration.
+- [x] 3.4 Archive the completed OpenSpec change and deploy the migration and Sync Streams configuration.
