@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(16);
+SELECT plan(18);
 
 SELECT has_table('public', 'bathos_modules', 'stores platform module restrictions');
 SELECT has_table('public', 'bathos_module_access_grants', 'stores source-specific module grants');
@@ -19,6 +19,16 @@ SELECT is(
   (SELECT is_restricted FROM public.bathos_modules WHERE module_id = 'tasks'),
   true,
   'marks Tasks restricted by default'
+);
+SELECT function_privs_are(
+  'public', 'bathos_sync_admin_module_grants', ARRAY[]::text[], 'authenticated',
+  ARRAY[]::text[],
+  'keeps the administrator grant trigger private from clients'
+);
+SELECT function_privs_are(
+  'public', 'bathos_sync_restricted_module_admin_grants', ARRAY[]::text[], 'authenticated',
+  ARRAY[]::text[],
+  'keeps the restricted-module grant trigger private from clients'
 );
 
 INSERT INTO auth.users (
