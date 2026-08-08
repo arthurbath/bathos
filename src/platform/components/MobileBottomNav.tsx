@@ -212,7 +212,7 @@ export function MobileBottomNav({
       data-installed-touch={installedTouch ? 'true' : undefined}
       data-native-touch={nativeTouch ? 'true' : undefined}
       data-standalone-touch={standaloneTouch ? 'true' : undefined}
-      className="pointer-events-none fixed bottom-[var(--mobile-bottom-nav-bottom-offset)] left-0 z-40 md:hidden"
+      className="bathos-mobile-bottom-nav pointer-events-none fixed bottom-[var(--mobile-bottom-nav-bottom-offset)] left-0 z-40 md:hidden"
       style={viewportStyle ? {
         left: `${viewportStyle.left}px`,
         width: `${viewportStyle.width}px`,

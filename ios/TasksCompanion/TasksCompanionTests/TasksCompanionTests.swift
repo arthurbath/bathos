@@ -60,6 +60,44 @@ final class TasksCompanionTests: XCTestCase {
         )
     }
 
+    func testNativeBadgeAuthorizationRepairOnlyMigratesAuthorizedBadgeGapOnce() {
+        XCTAssertTrue(
+            TaskNativeBadgeAuthorizationRepairPolicy.shouldRequestRepair(
+                authorizationStatus: .authorized,
+                badgeSetting: .notSupported,
+                repairAlreadyAttempted: false
+            )
+        )
+        XCTAssertTrue(
+            TaskNativeBadgeAuthorizationRepairPolicy.shouldRequestRepair(
+                authorizationStatus: .authorized,
+                badgeSetting: .disabled,
+                repairAlreadyAttempted: false
+            )
+        )
+        XCTAssertFalse(
+            TaskNativeBadgeAuthorizationRepairPolicy.shouldRequestRepair(
+                authorizationStatus: .authorized,
+                badgeSetting: .enabled,
+                repairAlreadyAttempted: false
+            )
+        )
+        XCTAssertFalse(
+            TaskNativeBadgeAuthorizationRepairPolicy.shouldRequestRepair(
+                authorizationStatus: .authorized,
+                badgeSetting: .notSupported,
+                repairAlreadyAttempted: true
+            )
+        )
+        XCTAssertFalse(
+            TaskNativeBadgeAuthorizationRepairPolicy.shouldRequestRepair(
+                authorizationStatus: .denied,
+                badgeSetting: .notSupported,
+                repairAlreadyAttempted: false
+            )
+        )
+    }
+
     func testNativeReminderProjectionKeepsTheEarliestFutureItems() throws {
         let now = try XCTUnwrap(
             ISO8601DateFormatter().date(from: "2026-08-06T16:00:00Z")

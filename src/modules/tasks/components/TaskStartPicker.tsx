@@ -801,7 +801,7 @@ export function TaskStartPickerPanel({
       ) : null}
 
       <div
-        className="relative grid grid-cols-2 gap-0 border-t border-[hsl(var(--grid-sticky-line))] p-1"
+        className="relative grid grid-cols-2 gap-0 border-t border-[hsl(var(--grid-sticky-line))]"
         data-task-start-footer
       >
         <Button
@@ -986,7 +986,7 @@ export function TaskStartPickerField({
         className={cn(
           'w-auto p-0 shadow-none',
           viewportCentered
-            && '-translate-y-1/2 animate-none overflow-y-auto overscroll-contain [scroll-padding-block:1rem]',
+            && '-translate-y-1/2 animate-none overflow-y-auto overscroll-contain !rounded-lg !border !border-[hsl(var(--grid-sticky-line))] [scroll-padding-block:1rem]',
         )}
         data-task-start-picker-placement={popoverPlacement}
         style={viewportCentered ? viewportStyle : undefined}

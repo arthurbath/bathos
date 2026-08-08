@@ -13,6 +13,7 @@ import {
   type TaskImmediateDragPoint,
 } from '@/modules/tasks/components/TaskImmediateDragTarget';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
+import { cn } from '@/lib/utils';
 
 function createDragPreview(source: HTMLElement, point: TaskImmediateDragPoint): HTMLElement {
   const bounds = source.getBoundingClientRect();
@@ -46,6 +47,7 @@ export function TaskImmediateDragHandle({
   nativeDraggable = false,
   onNativeDragStart,
   onNativeDragEnd,
+  className,
 }: {
   label: string;
   scope: string;
@@ -56,6 +58,7 @@ export function TaskImmediateDragHandle({
   nativeDraggable?: boolean;
   onNativeDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
   onNativeDragEnd?: (event: ReactDragEvent<HTMLButtonElement>) => void;
+  className?: string;
 }) {
   const gestureRef = useRef<{
     pointerId: number;
@@ -177,7 +180,10 @@ export function TaskImmediateDragHandle({
       aria-label={label}
       data-task-drag-handle-control
       draggable={nativeDraggable}
-      className="h-8 w-8 shrink-0 cursor-grab touch-none select-none text-muted-foreground active:cursor-grabbing"
+      className={cn(
+        'h-8 w-8 shrink-0 cursor-grab touch-none select-none text-muted-foreground active:cursor-grabbing',
+        className,
+      )}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={(event) => finishGesture(event, false)}

@@ -22,6 +22,7 @@ describe('task selection stacking', () => {
     const dialogSource = readSource('src/components/ui/dialog.tsx');
     const alertDialogSource = readSource('src/components/ui/alert-dialog.tsx');
     const navigationSource = readSource('src/platform/components/MobileBottomNav.tsx');
+    const globalStyles = readSource('src/index.css');
 
     const selectionLayer = readLayer(tasksSource, 'aria-label="Task Selection"');
     const dialogBackdropLayer = readLayer(dialogSource, 'DialogOverlay');
@@ -36,5 +37,11 @@ describe('task selection stacking', () => {
     expect(alertDialogBackdropLayer).toBe(dialogBackdropLayer);
     expect(dialogBackdropLayer).toBeLessThan(toastLayer);
     expect(toastLayer).toBeLessThan(navigationLayer);
+    expect(globalStyles).toContain(
+      'body:has([data-task-start-picker-backdrop], [data-date-picker-backdrop])',
+    );
+    expect(globalStyles).toMatch(
+      /\.bathos-mobile-bottom-nav\s*\{\s*z-index:\s*32;/u,
+    );
   });
 });

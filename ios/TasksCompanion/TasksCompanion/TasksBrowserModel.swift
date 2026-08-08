@@ -834,6 +834,20 @@ enum TaskNativeNotificationAuthorizationState: String, Equatable {
     }
 }
 
+enum TaskNativeBadgeAuthorizationRepairPolicy {
+    static let preferenceKey = "tasks.nativeBadgeAuthorizationRepair.v1"
+
+    static func shouldRequestRepair(
+        authorizationStatus: UNAuthorizationStatus,
+        badgeSetting: UNNotificationSetting,
+        repairAlreadyAttempted: Bool
+    ) -> Bool {
+        !repairAlreadyAttempted
+            && TaskNativeNotificationAuthorizationState.resolve(authorizationStatus) == .enabled
+            && badgeSetting != .enabled
+    }
+}
+
 struct TaskNativeReminderProjection: Decodable, Equatable {
     static let maximumReminderCount = 256
 
@@ -915,6 +929,7 @@ final class TaskNativeNotificationCoordinator: NSObject,
     private var latestSnapshot: TaskWidgetSnapshot?
     private var nativePushToken: String?
     private var remotePushRegistrationActive = false
+    private var latestNotificationSettings: UNNotificationSettings?
 
     private override init() {
         super.init()
@@ -942,6 +957,10 @@ final class TaskNativeNotificationCoordinator: NSObject,
                 let status = TaskNativeNotificationAuthorizationState.resolve(
                     settings.authorizationStatus
                 )
+                self.latestNotificationSettings = settings
+                if self.requestBadgeAuthorizationRepairIfNeeded(using: settings) {
+                    return
+                }
                 self.browserModel?.sendNativeNotificationStatus(status)
                 self.applyBadge(using: settings)
                 if status == .enabled {
@@ -955,34 +974,46 @@ final class TaskNativeNotificationCoordinator: NSObject,
     }
 
     func configureNotifications() {
+        if let latestNotificationSettings {
+            configureNotifications(using: latestNotificationSettings)
+            return
+        }
         center.getNotificationSettings { [weak self] settings in
             Task { @MainActor in
                 guard let self else {
                     return
                 }
-                switch TaskNativeNotificationAuthorizationState.resolve(
-                    settings.authorizationStatus
-                ) {
-                case .notDetermined:
-                    self.clearBadge()
-                    self.requestAuthorization()
-                case .denied:
-                    self.clearBadge()
-                    self.openSystemNotificationSettings()
-                    self.browserModel?.sendNativeNotificationStatus(.denied)
-                case .enabled:
-                    self.browserModel?.sendNativeNotificationStatus(.enabled)
-                    self.applyBadge(using: settings)
-                    self.registerForRemoteNotifications()
-                    self.openSystemNotificationSettings()
-                    if let projection = self.latestProjection {
-                        self.reconcileOrUseRemotePush(projection)
-                    }
-                case .checking, .unavailable, .error:
-                    self.browserModel?.sendNativeNotificationStatus(.unavailable)
-                    self.clearBadge()
-                }
+                self.configureNotifications(using: settings)
             }
+        }
+    }
+
+    private func configureNotifications(using settings: UNNotificationSettings) {
+        latestNotificationSettings = settings
+        switch TaskNativeNotificationAuthorizationState.resolve(
+            settings.authorizationStatus
+        ) {
+        case .notDetermined:
+            clearBadge()
+            requestAuthorization()
+        case .denied:
+            clearBadge()
+            openSystemNotificationSettings()
+            browserModel?.sendNativeNotificationStatus(.denied)
+        case .enabled:
+            browserModel?.sendNativeNotificationStatus(.enabled)
+            applyBadge(using: settings)
+            registerForRemoteNotifications()
+            openSystemNotificationSettings()
+            if requestBadgeAuthorizationRepairIfNeeded(using: settings) {
+                return
+            }
+            if let projection = latestProjection {
+                reconcileOrUseRemotePush(projection)
+            }
+        case .checking, .unavailable, .error:
+            browserModel?.sendNativeNotificationStatus(.unavailable)
+            clearBadge()
         }
     }
 
@@ -996,6 +1027,10 @@ final class TaskNativeNotificationCoordinator: NSObject,
                 let status = TaskNativeNotificationAuthorizationState.resolve(
                     settings.authorizationStatus
                 )
+                self.latestNotificationSettings = settings
+                if self.requestBadgeAuthorizationRepairIfNeeded(using: settings) {
+                    return
+                }
                 self.browserModel?.sendNativeNotificationStatus(status)
                 self.applyBadge(using: settings)
                 if status == .enabled {
@@ -1012,6 +1047,7 @@ final class TaskNativeNotificationCoordinator: NSObject,
         latestSnapshot = snapshot
         center.getNotificationSettings { [weak self] settings in
             Task { @MainActor in
+                self?.latestNotificationSettings = settings
                 self?.applyBadge(using: settings)
             }
         }
@@ -1037,6 +1073,28 @@ final class TaskNativeNotificationCoordinator: NSObject,
                 }
             }
         }
+    }
+
+    @discardableResult
+    private func requestBadgeAuthorizationRepairIfNeeded(
+        using settings: UNNotificationSettings
+    ) -> Bool {
+        let repairAlreadyAttempted = UserDefaults.standard.bool(
+            forKey: TaskNativeBadgeAuthorizationRepairPolicy.preferenceKey
+        )
+        guard TaskNativeBadgeAuthorizationRepairPolicy.shouldRequestRepair(
+            authorizationStatus: settings.authorizationStatus,
+            badgeSetting: settings.badgeSetting,
+            repairAlreadyAttempted: repairAlreadyAttempted
+        ) else {
+            return false
+        }
+        UserDefaults.standard.set(
+            true,
+            forKey: TaskNativeBadgeAuthorizationRepairPolicy.preferenceKey
+        )
+        requestAuthorization()
+        return true
     }
 
     func didRegisterForRemoteNotifications(deviceToken: Data) {

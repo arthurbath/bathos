@@ -164,6 +164,11 @@ html[data-mobile-bottom-nav-installed-touch='true'] {
 }
 
 @media (max-width: 767px) {
+  body:has([data-task-start-picker-backdrop], [data-date-picker-backdrop])
+    .bathos-mobile-bottom-nav {
+    z-index: 32;
+  }
+
   html[data-mobile-bottom-nav-visible='true'] {
     --bathos-toast-bottom-offset: calc(var(--mobile-bottom-nav-bottom-offset) + 4.75rem);
   }

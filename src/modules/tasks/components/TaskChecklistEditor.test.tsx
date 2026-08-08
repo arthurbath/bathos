@@ -1603,6 +1603,8 @@ describe('TaskChecklistEditor', () => {
       expect(draftInput.closest<HTMLElement>('[data-checklist-item-id="draft"]')?.draggable)
         .toBe(false);
       expect(container.querySelectorAll('[data-task-drag-handle-control]')).toHaveLength(2);
+      container.querySelectorAll<HTMLElement>('[data-task-drag-handle-control]')
+        .forEach((handle) => expect(handle).toHaveClass('-mr-2.5'));
       expect(container.querySelector('button[aria-label="Add Checklist Item"]')).toBeNull();
       expect(existing.className).toContain('h-8');
       expect(existing.closest('div')?.className).not.toContain('transition-transform');

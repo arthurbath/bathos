@@ -10140,9 +10140,14 @@ describe('TasksShell', () => {
         container.querySelector<HTMLButtonElement>('#task-start-task-a')?.click();
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
-      expect(document.querySelector('[data-task-start-picker-placement="viewport-center"]'))
-        .not.toBeNull();
-      expect(document.querySelector('[data-task-start-picker-backdrop]')).not.toBeNull();
+      const centeredStartPicker = document.querySelector(
+        '[data-task-start-picker-placement="viewport-center"]',
+      );
+      const startPickerBackdrop = document.querySelector('[data-task-start-picker-backdrop]');
+      expect(centeredStartPicker).not.toBeNull();
+      expect(centeredStartPicker).toHaveClass('!rounded-lg', '!border');
+      expect(startPickerBackdrop).not.toBeNull();
+      expect(startPickerBackdrop).toHaveClass('z-[34]');
       expect(document.querySelector('[data-task-start-picker-viewport-anchor]'))
         .toHaveStyle({ top: 'var(--bathos-modal-vv-center)' });
 
@@ -10159,9 +10164,14 @@ describe('TasksShell', () => {
         container.querySelector<HTMLButtonElement>('#task-deadline-task-a')?.click();
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
-      expect(document.querySelector('[data-date-picker-placement="viewport-center"]'))
-        .not.toBeNull();
-      expect(document.querySelector('[data-date-picker-backdrop]')).not.toBeNull();
+      const centeredDeadlinePicker = document.querySelector(
+        '[data-date-picker-placement="viewport-center"]',
+      );
+      const deadlinePickerBackdrop = document.querySelector('[data-date-picker-backdrop]');
+      expect(centeredDeadlinePicker).not.toBeNull();
+      expect(centeredDeadlinePicker).toHaveClass('!rounded-lg', '!border');
+      expect(deadlinePickerBackdrop).not.toBeNull();
+      expect(deadlinePickerBackdrop).toHaveClass('z-[34]');
     } finally {
       cleanup(root, container);
       if (innerWidthDescriptor) {
@@ -12268,6 +12278,7 @@ describe('TasksShell', () => {
       const reminderGroup = document.querySelector('[data-task-start-reminder-group]');
       const startPicker = document.querySelector('[data-task-start-picker]');
       expect(footer).toHaveClass('relative', 'gap-0');
+      expect(footer).not.toHaveClass('p-1');
       expect(divider).toHaveClass(
         'inset-y-2',
         'w-px',

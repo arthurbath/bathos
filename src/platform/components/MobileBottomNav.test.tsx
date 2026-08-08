@@ -63,6 +63,7 @@ describe('MobileBottomNav', () => {
     const viewport = nav.parentElement;
     expect(viewport).toHaveAttribute('data-mobile-bottom-nav-viewport');
     expect(viewport).toHaveClass(
+      'bathos-mobile-bottom-nav',
       'pointer-events-none',
       'bottom-[var(--mobile-bottom-nav-bottom-offset)]',
     );

@@ -1589,6 +1589,7 @@ function ChecklistRow({
       />
       {showDragHandle ? (
         <TaskImmediateDragHandle
+          className="-mr-2.5"
           label={`Reorder ${title || 'Checklist Item'}`}
           scope={immediateDragScope}
           previewRef={immediateRowRef}
@@ -1830,6 +1831,7 @@ function DraftChecklistRow({
       />
       {showDragHandle ? (
         <TaskImmediateDragHandle
+          className="-mr-2.5"
           label="Reorder New Checklist Item"
           scope={immediateDragScope}
           previewRef={immediateRowRef}

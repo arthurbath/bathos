@@ -205,7 +205,7 @@ export function DatePickerPanel({
         initialFocus
       />
       {clearable ? (
-        <div className="border-t border-[hsl(var(--grid-sticky-line))] p-1">
+        <div className="border-t border-[hsl(var(--grid-sticky-line))]">
           <Button
             ref={clearButtonRef}
             type="button"
@@ -317,7 +317,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
         className={cn(
           'w-auto p-0',
           viewportCentered
-            && '-translate-y-1/2 animate-none overflow-y-auto overscroll-contain [scroll-padding-block:1rem]',
+            && '-translate-y-1/2 animate-none overflow-y-auto overscroll-contain !rounded-lg !border !border-[hsl(var(--grid-sticky-line))] [scroll-padding-block:1rem]',
         )}
         align={viewportCentered ? 'center' : popoverAlign}
         side={viewportCentered ? 'bottom' : undefined}
