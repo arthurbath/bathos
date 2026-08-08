@@ -160,6 +160,17 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
+  it('aligns checklist completion controls with the drawer field edge', () => {
+    const { container, root } = renderEditor();
+
+    try {
+      expect(container.querySelector('button[aria-label^="Complete "]'))
+        .toHaveClass('-ml-2.5');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('centers the empty checklist disclosure in paired layout and reports a draft', () => {
     mockUseTaskChecklist.mockReturnValue(checklistModel([]));
     const onContentPresenceChange = vi.fn();
@@ -1017,6 +1028,56 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
+  it('moves horizontally across checklist boundaries with Command on macOS', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      inputs[1].focus();
+      inputs[1].setSelectionRange(0, 0);
+      const left = new KeyboardEvent('keydown', {
+        key: 'ArrowLeft',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        inputs[1].dispatchEvent(left);
+        await waitForAnimationFrames();
+      });
+      expect(left.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(inputs[0]);
+      expect(inputs[0].selectionStart).toBe(inputs[0].value.length);
+
+      const right = new KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        inputs[0].dispatchEvent(right);
+        await waitForAnimationFrames();
+      });
+      expect(right.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(inputs[1]);
+      expect(inputs[1].selectionStart).toBe(0);
+    } finally {
+      cleanup(root, container);
+      platform.mockRestore();
+    }
+  });
+
   it('leaves horizontal input behavior native outside eligible boundaries', () => {
     const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
     const second = taskChecklistItemFixture({
@@ -1521,7 +1582,7 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
-  it('makes an empty row directly draggable and omits handles and the append button', async () => {
+  it('keeps checklist inputs selectable and exposes permanent reorder handles', async () => {
     const { container, root } = renderEditor();
     try {
       const existing = container.querySelector<HTMLInputElement>(
@@ -1538,10 +1599,10 @@ describe('TaskChecklistEditor', () => {
       const draftInput = container.querySelector<HTMLInputElement>(
         'input[aria-label="New Checklist Item"]',
       )!;
-      expect(draftInput.draggable).toBe(true);
+      expect(draftInput.draggable).toBe(false);
       expect(draftInput.closest<HTMLElement>('[data-checklist-item-id="draft"]')?.draggable)
-        .toBe(true);
-      expect(container.querySelector('[data-checklist-reorder-handle]')).toBeNull();
+        .toBe(false);
+      expect(container.querySelectorAll('[data-task-drag-handle-control]')).toHaveLength(2);
       expect(container.querySelector('button[aria-label="Add Checklist Item"]')).toBeNull();
       expect(existing.className).toContain('h-8');
       expect(existing.closest('div')?.className).not.toContain('transition-transform');
@@ -1581,7 +1642,10 @@ describe('TaskChecklistEditor', () => {
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => draftInput.dispatchEvent(dragStart));
+      const draftHandle = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder New Checklist Item"]',
+      )!;
+      await act(async () => draftHandle.dispatchEvent(dragStart));
 
       const secondRow = container.querySelector<HTMLElement>(
         '[data-checklist-item-id="item-b"]',
@@ -1617,7 +1681,7 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
-  it('reorders directly from the checklist input and accepts the final drop position', async () => {
+  it('reorders from the checklist handle and accepts the final drop position', async () => {
     const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
     const second = taskChecklistItemFixture({
       id: 'item-b',
@@ -1631,8 +1695,8 @@ describe('TaskChecklistEditor', () => {
         'input[aria-label="Checklist Item"]',
       )!;
       const row = input.closest<HTMLElement>('[data-checklist-item-id]')!;
-      expect(input.draggable).toBe(true);
-      expect(row.draggable).toBe(true);
+      expect(input.draggable).toBe(false);
+      expect(row.draggable).toBe(false);
       act(() => {
         input.focus();
         input.setSelectionRange(3, 3);
@@ -1647,7 +1711,10 @@ describe('TaskChecklistEditor', () => {
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => input.dispatchEvent(dragStart));
+      const handle = row.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder First step"]',
+      )!;
+      await act(async () => handle.dispatchEvent(dragStart));
       expect(document.activeElement).not.toBe(input);
       expect(row.dataset.selected).toBeUndefined();
       expect(
@@ -1681,8 +1748,8 @@ describe('TaskChecklistEditor', () => {
     document.addEventListener('dragend', outerDragEnd);
     const { container, root } = renderEditor();
     try {
-      const input = container.querySelector<HTMLInputElement>(
-        'input[aria-label="Checklist Item"]',
+      const handle = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder First step"]',
       )!;
       const dataTransfer = {
         effectAllowed: '',
@@ -1694,8 +1761,8 @@ describe('TaskChecklistEditor', () => {
       Object.defineProperty(dragEnd, 'dataTransfer', { value: dataTransfer });
 
       await act(async () => {
-        input.dispatchEvent(dragStart);
-        input.dispatchEvent(dragEnd);
+        handle.dispatchEvent(dragStart);
+        handle.dispatchEvent(dragEnd);
       });
 
       expect(dataTransfer.setData).toHaveBeenCalledWith(
@@ -1731,7 +1798,10 @@ describe('TaskChecklistEditor', () => {
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => input.dispatchEvent(dragStart));
+      const handle = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder First step"]',
+      )!;
+      await act(async () => handle.dispatchEvent(dragStart));
 
       const end = container.querySelector<HTMLElement>('[data-checklist-drop-end]')!;
       const validDragOver = new Event('dragover', { bubbles: true, cancelable: true });
@@ -1789,7 +1859,10 @@ describe('TaskChecklistEditor', () => {
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => draftInput.dispatchEvent(dragStart));
+      const draftHandle = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder New Checklist Item"]',
+      )!;
+      await act(async () => draftHandle.dispatchEvent(dragStart));
 
       const end = container.querySelector<HTMLElement>('[data-checklist-drop-end]')!;
       const validDragOver = new Event('dragover', { bubbles: true, cancelable: true });
@@ -1826,8 +1899,8 @@ describe('TaskChecklistEditor', () => {
     mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
     const { container, root } = renderEditor();
     try {
-      const input = container.querySelector<HTMLInputElement>(
-        'input[aria-label="Checklist Item"]',
+      const handle = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder First step"]',
       )!;
       const dataTransfer = {
         effectAllowed: '',
@@ -1836,7 +1909,7 @@ describe('TaskChecklistEditor', () => {
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => input.dispatchEvent(dragStart));
+      await act(async () => handle.dispatchEvent(dragStart));
 
       const outsideDrop = new Event('drop', { bubbles: true, cancelable: true });
       Object.defineProperty(outsideDrop, 'dataTransfer', { value: dataTransfer });
@@ -1862,8 +1935,8 @@ describe('TaskChecklistEditor', () => {
     mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
     const { container, root } = renderEditor();
     try {
-      const input = container.querySelector<HTMLInputElement>(
-        'input[aria-label="Checklist Item"]',
+      const handle = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder First step"]',
       )!;
       const dataTransfer = {
         effectAllowed: '',
@@ -1872,7 +1945,7 @@ describe('TaskChecklistEditor', () => {
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => input.dispatchEvent(dragStart));
+      await act(async () => handle.dispatchEvent(dragStart));
 
       const end = container.querySelector<HTMLElement>('[data-checklist-drop-end]')!;
       const validDragOver = new Event('dragover', { bubbles: true, cancelable: true });
@@ -1882,7 +1955,7 @@ describe('TaskChecklistEditor', () => {
 
       const dragEnd = new Event('dragend', { bubbles: true, cancelable: true });
       Object.defineProperty(dragEnd, 'dataTransfer', { value: dataTransfer });
-      await act(async () => input.dispatchEvent(dragEnd));
+      await act(async () => handle.dispatchEvent(dragEnd));
 
       expect(reorderItems).not.toHaveBeenCalled();
       expect(end.querySelector('.bg-info')).toBeNull();
@@ -2209,16 +2282,19 @@ describe('TaskChecklistEditor', () => {
         }));
       });
 
-      expect(rows[0].draggable).toBe(true);
-      expect(rows[1].draggable).toBe(true);
-      expect(rows[2].draggable).toBe(true);
+      expect(rows[0].draggable).toBe(false);
+      expect(rows[1].draggable).toBe(false);
+      expect(rows[2].draggable).toBe(false);
       const dataTransfer = {
         effectAllowed: '',
         setData: vi.fn(),
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => rows[0].dispatchEvent(dragStart));
+      const firstHandle = rows[0].querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder First"]',
+      )!;
+      await act(async () => firstHandle.dispatchEvent(dragStart));
 
       expect(dataTransfer.effectAllowed).toBe('move');
       expect(dataTransfer.setData).toHaveBeenCalledWith(
@@ -2249,7 +2325,7 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
-  it('removes input focus when a selected-row drag begins from that input', async () => {
+  it('preserves input text focus until a selected-row drag begins from its handle', async () => {
     const platform = vi.spyOn(window.navigator, 'platform', 'get')
       .mockReturnValue('MacIntel');
     const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
@@ -2276,8 +2352,8 @@ describe('TaskChecklistEditor', () => {
       });
       expect(rows[0].dataset.selected).toBe('true');
       expect(rows[1].dataset.selected).toBe('true');
-      expect(inputs[0].draggable).toBe(true);
-      expect(inputs[1].draggable).toBe(true);
+      expect(inputs[0].draggable).toBe(false);
+      expect(inputs[1].draggable).toBe(false);
 
       act(() => {
         inputs[1].focus();
@@ -2301,7 +2377,7 @@ describe('TaskChecklistEditor', () => {
           clientY: 20,
         }));
       });
-      expect(document.activeElement).not.toBe(inputs[1]);
+      expect(document.activeElement).toBe(inputs[1]);
 
       const dataTransfer = {
         effectAllowed: '',
@@ -2309,7 +2385,10 @@ describe('TaskChecklistEditor', () => {
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => inputs[1].dispatchEvent(dragStart));
+      const secondHandle = rows[1].querySelector<HTMLButtonElement>(
+        'button[aria-label="Reorder Second"]',
+      )!;
+      await act(async () => secondHandle.dispatchEvent(dragStart));
 
       expect(document.activeElement).not.toBe(inputs[1]);
       expect(rows[0].dataset.selected).toBe('true');
@@ -2317,7 +2396,7 @@ describe('TaskChecklistEditor', () => {
 
       const dragEnd = new Event('dragend', { bubbles: true, cancelable: true });
       await act(async () => {
-        inputs[1].dispatchEvent(dragEnd);
+        secondHandle.dispatchEvent(dragEnd);
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
         inputs[1].click();
       });

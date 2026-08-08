@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createReminderDispatchHandler,
   isTrustedWebPushEndpoint,
+  type NativePushDelivery,
+  type NativePushResult,
   providerFailure,
   resolveSupabaseSecretKey,
   type PushDelivery,
@@ -18,6 +20,9 @@ const configuration = {
   TASKS_WEB_PUSH_VAPID_PUBLIC_KEY: 'public-key',
   TASKS_WEB_PUSH_VAPID_PRIVATE_KEY: 'private-key',
   TASKS_WEB_PUSH_SUBJECT: 'mailto:owner@example.test',
+  TASKS_WIDGET_APNS_TEAM_ID: 'TEAM123456',
+  TASKS_WIDGET_APNS_KEY_ID: 'KEY1234567',
+  TASKS_WIDGET_APNS_PRIVATE_KEY: 'private-apns-key',
 };
 
 const delivery = (id: string): PushDelivery => ({
@@ -36,7 +41,10 @@ function buildHandler(options?: {
   environment?: Partial<Record<keyof typeof configuration, string | null>>;
   claim?: ReminderDispatchClient['claim'];
   record?: ReminderDispatchClient['record'];
+  claimNative?: NonNullable<ReminderDispatchClient['claimNative']>;
+  recordNative?: NonNullable<ReminderDispatchClient['recordNative']>;
   sendPush?: (value: PushDelivery) => Promise<void>;
+  sendNativePush?: (value: NativePushDelivery) => Promise<NativePushResult>;
   createClient?: () => ReminderDispatchClient;
 }) {
   const values = { ...configuration, ...options?.environment };
@@ -45,18 +53,33 @@ function buildHandler(options?: {
     error: null,
   }));
   const record = options?.record ?? vi.fn(async () => ({ error: null }));
+  const claimNative = options?.claimNative ?? vi.fn(async () => ({
+    data: { outcome: 'accepted', items: [] },
+    error: null,
+  }));
+  const recordNative = options?.recordNative ?? vi.fn(async () => ({ error: null }));
   const sendPush = options?.sendPush ?? vi.fn(async () => undefined);
   const errors: string[] = [];
   const logs: Array<Record<string, unknown>> = [];
   const handler = createReminderDispatchHandler({
     getEnvironment: (name) => values[name as keyof typeof values] ?? null,
-    createClient: options?.createClient ?? (() => ({ claim, record })),
+    createClient: options?.createClient ?? (() => ({
+      claim, record, claimNative, recordNative,
+    })),
     sendPush,
+    sendNativePush: options?.sendNativePush ?? vi.fn(async () => ({
+      accepted: true,
+      permanent: false,
+      reason: null,
+      providerMessageId: 'provider-id',
+    })),
     now: () => new Date('2026-07-20T12:00:00.000Z'),
     logError: (message) => errors.push(message),
     logInfo: (entry) => logs.push(entry),
   });
-  return { handler, claim, record, sendPush, errors, logs };
+  return {
+    handler, claim, record, claimNative, recordNative, sendPush, errors, logs,
+  };
 }
 
 describe('task reminder dispatcher handler', () => {
@@ -99,7 +122,10 @@ describe('task reminder dispatcher handler', () => {
 
   it('reports missing configuration without attempting a claim', async () => {
     const { handler, claim } = buildHandler({
-      environment: { TASKS_WEB_PUSH_VAPID_PRIVATE_KEY: null },
+      environment: {
+        TASKS_WEB_PUSH_VAPID_PRIVATE_KEY: null,
+        TASKS_WIDGET_APNS_PRIVATE_KEY: null,
+      },
     });
     const response = await handler(new Request('https://example.test', { method: 'POST' }));
     expect(response.status).toBe(503);
@@ -169,6 +195,54 @@ describe('task reminder dispatcher handler', () => {
       claimed: 2,
       receipt_errors: 0,
     })]);
+  });
+
+  it('dispatches application APNs reminders and records permanent token failures', async () => {
+    const nativeDelivery: NativePushDelivery = {
+      delivery_id: '30000000-0000-4000-8000-000000000001',
+      occurrence_id: '30000000-0000-4000-8000-000000000002',
+      owner_id: '30000000-0000-4000-8000-000000000003',
+      task_id: '30000000-0000-4000-8000-000000000004',
+      title: 'Call home',
+      resolved_at: '2026-07-20T12:00:00.000Z',
+      attempt_count: 1,
+      platform: 'ios',
+      environment: 'development',
+      topic: 'garden.bath.tasks',
+      device_token: 'ab'.repeat(32),
+    };
+    const recordNative = vi.fn(async () => ({ error: null }));
+    const { handler } = buildHandler({
+      claimNative: vi.fn(async () => ({
+        data: { outcome: 'accepted', items: [nativeDelivery] },
+        error: null,
+      })),
+      recordNative,
+      sendNativePush: vi.fn(async () => ({
+        accepted: false,
+        permanent: true,
+        reason: 'Unregistered',
+        providerMessageId: 'apns-id',
+      })),
+    });
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: { 'x-tasks-dispatch-secret': dispatchSecret },
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      claimed: 1,
+      accepted: 0,
+      failed: 1,
+      revoked: 1,
+    });
+    expect(recordNative).toHaveBeenCalledWith({
+      deliveryId: nativeDelivery.delivery_id,
+      outcome: 'failed',
+      providerMessageId: 'apns-id',
+      errorCode: 'Unregistered',
+      targetRevoked: true,
+    });
   });
 
   it('revokes an untrusted endpoint without issuing a provider request', async () => {

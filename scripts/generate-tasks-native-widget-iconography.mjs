@@ -29,7 +29,9 @@ function renderSVG(lucideName) {
   if (!component) {
     throw new Error(`Unknown Lucide icon: ${lucideName}`);
   }
-  return `${renderToStaticMarkup(React.createElement(component))
+  const strokeWidth = roles.find(([, value]) => value.lucide === lucideName)?.[1]
+    .strokeWidth;
+  return `${renderToStaticMarkup(React.createElement(component, { strokeWidth }))
     .replace('stroke="currentColor"', 'stroke="#000000"')
     .replace(/ class="[^"]*"/, '')
     .replace(' aria-hidden="true"', '')}\n`;

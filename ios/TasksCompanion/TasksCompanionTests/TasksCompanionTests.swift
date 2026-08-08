@@ -1016,10 +1016,15 @@ final class TasksCompanionTests: XCTestCase {
     }
 
     func testLargeWidgetAlwaysCapsVisibleTasksAtTen() {
+        XCTAssertEqual(TaskWidgetPresentationPolicy.mediumWidgetTaskLimit, 4)
         XCTAssertEqual(
             TaskWidgetPresentationPolicy.largeWidgetTaskLimit,
             10
         )
+        XCTAssertEqual(TaskWidgetPresentationPolicy.extraLargeWidgetTaskLimit, 16)
+        XCTAssertEqual(TaskWidgetPresentationPolicy.taskLimit(for: .systemMedium), 4)
+        XCTAssertEqual(TaskWidgetPresentationPolicy.taskLimit(for: .systemLarge), 10)
+        XCTAssertEqual(TaskWidgetPresentationPolicy.taskLimit(for: .systemExtraLarge), 16)
         XCTAssertEqual(
             TaskWidgetPresentationPolicy.largeWidgetTaskRowMinimumHeight,
             29

@@ -211,6 +211,7 @@ export function TaskKeyboardHelpDialog({
         ['Cycle Actionability', '⌃F', '⌥⇧F'],
         ['Set Start to Someday', '⌃G', '⌥⇧G'],
         ['Add or Focus Link', '⌃H', '⌥⇧H'],
+        ['Go to Primary Link', '⌃J', '⌥⇧J'],
         ['Toggle Done', '⌃X', '⌥⇧X'],
         ['Add or Focus Checklist', '⌃C', '⌥⇧C'],
         ['Cycle Area', '⌃V', '⌥⇧V'],

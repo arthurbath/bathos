@@ -9,13 +9,16 @@ import {
   getTaskPrimaryLinkKind,
   taskPrimaryLinkOpensBrowserTab,
 } from '@/modules/tasks/domain/taskPrimaryLink';
+import type { MouseEvent } from 'react';
 
 export function TaskSourceIndicator({
   task,
   compact = false,
+  onOrdinaryActivate,
 }: {
   task: TaskTodo;
   compact?: boolean;
+  onOrdinaryActivate?: () => void;
 }) {
   const primaryLinkKind = getTaskPrimaryLinkKind(task.primary_link);
   const primaryLinkIconKind = getTaskPrimaryLinkIconKind(task.primary_link);
@@ -32,7 +35,18 @@ export function TaskSourceIndicator({
         rel={opensBrowserTab ? 'noopener noreferrer' : undefined}
         aria-label={label}
         title={task.primary_link?.trim() || label}
+        data-task-primary-link-task-id={task.id}
         className={`${className} text-info`}
+        onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+          if (
+            event.button !== 0
+            || event.metaKey
+            || event.ctrlKey
+            || event.shiftKey
+            || event.altKey
+          ) return;
+          onOrdinaryActivate?.();
+        }}
       >
         <Icon className="h-4 w-4" aria-hidden="true" />
       </a>

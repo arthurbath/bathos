@@ -197,7 +197,7 @@ export function TaskMetadataDrawerFields({
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 px-2 sm:px-3.5',
+        'flex flex-col gap-3 px-3.5',
         checklistEndsDrawer ? 'pb-2' : 'pb-3',
         className,
       )}

@@ -11,6 +11,26 @@ final class TasksCompanionApplicationDelegate: NSObject, UIApplicationDelegate {
         TaskWatchConnectivityCoordinator.shared.activate()
         return true
     }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        Task { @MainActor in
+            TaskNativeNotificationCoordinator.shared
+                .didRegisterForRemoteNotifications(deviceToken: deviceToken)
+        }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        Task { @MainActor in
+            TaskNativeNotificationCoordinator.shared
+                .didFailToRegisterForRemoteNotifications()
+        }
+    }
 }
 
 @main

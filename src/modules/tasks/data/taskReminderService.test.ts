@@ -188,9 +188,11 @@ describe('TaskReminderService', () => {
         endpointKey: 'browser:20000000-0000-4000-8000-000000000002',
         label: 'This Browser',
       },
+      '2026-07-20T15:59:00Z',
     );
 
-    expect(rpc).toHaveBeenCalledWith('tasks_claim_due_reminders_v2', {
+    expect(rpc).toHaveBeenCalledWith('tasks_claim_due_reminders_v3', {
+      _not_before: '2026-07-20T15:59:00Z',
       _through_at: '2026-07-20T16:00:00Z',
       _request_id: '10000000-0000-4000-8000-000000000001',
       _surface_key: 'browser:20000000-0000-4000-8000-000000000002',
@@ -198,23 +200,14 @@ describe('TaskReminderService', () => {
     });
   });
 
-  it('falls back to the compatible account claim until the v2 RPC is deployed', async () => {
-    const rpc = vi.fn()
-      .mockResolvedValueOnce({
-        data: null,
-        error: {
-          code: 'PGRST202',
-          message: 'Could not find the function public.tasks_claim_due_reminders_v2',
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          outcome: 'accepted',
-          through_at: '2026-07-20T16:00:00Z',
-          items: [],
-        },
-        error: null,
-      });
+  it('does not broaden a session-scoped claim through a legacy RPC', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: 'PGRST202',
+        message: 'Could not find the function public.tasks_claim_due_reminders_v3',
+      },
+    });
     const service = new TaskReminderService({ rpc } as never);
 
     await expect(service.claimDue(
@@ -225,12 +218,8 @@ describe('TaskReminderService', () => {
         endpointKey: 'browser:20000000-0000-4000-8000-000000000002',
         label: 'This Browser',
       },
-    )).resolves.toMatchObject({ outcome: 'accepted', items: [] });
-
-    expect(rpc).toHaveBeenNthCalledWith(2, 'tasks_claim_due_reminders', {
-      _through_at: '2026-07-20T16:00:00Z',
-      _request_id: '10000000-0000-4000-8000-000000000001',
-    });
+    )).rejects.toMatchObject({ code: 'PGRST202' });
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it('bounds a stalled due-reminder claim and aborts the request', async () => {
@@ -331,5 +320,43 @@ describe('TaskReminderService', () => {
     expect(isSecurePushEndpoint('https://push.example.test/subscription-a')).toBe(true);
     expect(isSecurePushEndpoint('not a URL')).toBe(false);
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('registers and revokes the current native APNs installation', async () => {
+    const target = {
+      id: 'target-native', owner_id: 'owner-a', channel: 'native_push',
+      endpoint_key: 'installation:30000000-0000-4000-8000-000000000001',
+      label: 'This iPhone or iPad', capability_status: 'active',
+      configuration: { platform: 'ios' }, last_error_code: null,
+      last_seen_at: '2026-07-20T16:00:00Z', created_at: '2026-07-20T16:00:00Z',
+      updated_at: '2026-07-20T16:00:00Z',
+    };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: { outcome: 'accepted', target }, error: null })
+      .mockResolvedValueOnce({ data: { outcome: 'accepted', target }, error: null });
+    const service = new TaskReminderService({ rpc } as never);
+    const registration = {
+      installationId: '30000000-0000-4000-8000-000000000001',
+      platform: 'ios' as const,
+      environment: 'development' as const,
+      topic: 'garden.bath.tasks' as const,
+      deviceToken: 'ab'.repeat(32),
+      label: 'This iPhone or iPad',
+    };
+
+    await expect(service.registerNativePush(registration)).resolves.toMatchObject({
+      outcome: 'accepted', target: { channel: 'native_push' },
+    });
+    expect(rpc).toHaveBeenNthCalledWith(1, 'tasks_register_native_push_target', {
+      _installation_id: registration.installationId,
+      _platform: 'ios',
+      _environment: 'development',
+      _topic: 'garden.bath.tasks',
+      _device_token: registration.deviceToken,
+      _label: registration.label,
+    });
+    await expect(service.revokeNativePush(registration.installationId)).resolves.toEqual({
+      outcome: 'accepted',
+    });
   });
 });

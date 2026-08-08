@@ -72,6 +72,15 @@ export type TaskWebPushRegistrationResult = {
   target: TaskDeliveryTarget;
 };
 
+export type TaskNativePushRegistrationInput = {
+  installationId: string;
+  platform: 'ios' | 'macos';
+  environment: 'development' | 'production';
+  topic: 'garden.bath.tasks';
+  deviceToken: string;
+  label: string;
+};
+
 export class InvalidTaskReminderError extends Error {
   constructor(message: string) {
     super(message);
@@ -160,16 +169,22 @@ export class TaskReminderService {
     requestId = crypto.randomUUID(),
     timeoutMs = TASK_REMINDER_CLAIM_TIMEOUT_MS,
     surface?: TaskInAppReminderSurface,
+    notBefore = throughAt,
   ): Promise<TaskReminderClaimResult> {
-    if (Number.isNaN(new Date(throughAt).valueOf())) {
-      throw new InvalidTaskReminderError('A valid reminder claim time is required');
+    if (
+      Number.isNaN(new Date(throughAt).valueOf())
+      || Number.isNaN(new Date(notBefore).valueOf())
+      || new Date(notBefore) > new Date(throughAt)
+    ) {
+      throw new InvalidTaskReminderError('A valid reminder claim window is required');
     }
-    let controller = new AbortController();
+    const controller = new AbortController();
     if (surface && (!surface.endpointKey.trim() || !surface.label.trim())) {
       throw new InvalidTaskReminderError('A valid reminder surface is required');
     }
     const request = surface
-      ? this.client.rpc('tasks_claim_due_reminders_v2', {
+      ? this.client.rpc('tasks_claim_due_reminders_v3', {
+        _not_before: notBefore,
         _through_at: throughAt,
         _request_id: requestId,
         _surface_key: surface.endpointKey.trim(),
@@ -185,29 +200,11 @@ export class TaskReminderService {
     const boundedRequest = typeof abortableRequest.abortSignal === 'function'
       ? abortableRequest.abortSignal(controller.signal)
       : request;
-    let { data, error } = await settleReminderClaim(
+    const { data, error } = await settleReminderClaim(
       boundedRequest,
       controller,
       timeoutMs,
     );
-    if (surface && isMissingSurfaceClaimRpc(error)) {
-      controller = new AbortController();
-      const legacyRequest = this.client.rpc('tasks_claim_due_reminders', {
-        _through_at: throughAt,
-        _request_id: requestId,
-      });
-      const abortableLegacyRequest = legacyRequest as typeof legacyRequest & {
-        abortSignal?: (signal: AbortSignal) => typeof legacyRequest;
-      };
-      const boundedLegacyRequest = typeof abortableLegacyRequest.abortSignal === 'function'
-        ? abortableLegacyRequest.abortSignal(controller.signal)
-        : legacyRequest;
-      ({ data, error } = await settleReminderClaim(
-        boundedLegacyRequest,
-        controller,
-        timeoutMs,
-      ));
-    }
     if (error) throw error;
     const result = requireRecord(data, 'Reminder claim returned an invalid result');
     const items = requireArray(result.items, 'Reminder claim items are invalid')
@@ -311,6 +308,55 @@ export class TaskReminderService {
       ),
     };
   }
+
+  async registerNativePush(input: TaskNativePushRegistrationInput): Promise<{
+    outcome: 'accepted';
+    target: TaskDeliveryTarget;
+  }> {
+    if (
+      !input.installationId
+      || !/^[0-9a-f]{64,512}$/u.test(input.deviceToken)
+      || input.deviceToken.length % 2 !== 0
+      || !input.label.trim()
+    ) {
+      throw new InvalidTaskReminderError('A valid native push registration is required');
+    }
+    const { data, error } = await this.client.rpc('tasks_register_native_push_target', {
+      _installation_id: input.installationId,
+      _platform: input.platform,
+      _environment: input.environment,
+      _topic: input.topic,
+      _device_token: input.deviceToken,
+      _label: input.label.trim(),
+    });
+    if (error) throw error;
+    const result = requireRecord(data, 'Native push registration returned an invalid result');
+    return {
+      outcome: requireEnum(result.outcome, ['accepted'] as const, 'native push outcome'),
+      target: parseTaskDeliveryTarget(result.target),
+    };
+  }
+
+  async revokeNativePush(installationId: string): Promise<{
+    outcome: 'accepted' | 'not_registered';
+  }> {
+    if (!installationId) {
+      throw new InvalidTaskReminderError('A native push installation is required');
+    }
+    const { data, error } = await this.client.rpc('tasks_revoke_native_push_target', {
+      _installation_id: installationId,
+      _reason: 'authorization_disabled',
+    });
+    if (error) throw error;
+    const result = requireRecord(data, 'Native push revocation returned an invalid result');
+    return {
+      outcome: requireEnum(
+        result.outcome,
+        ['accepted', 'not_registered'] as const,
+        'native push revocation outcome',
+      ),
+    };
+  }
 }
 
 function isPendingRootPlanningError(error: unknown): boolean {
@@ -319,14 +365,6 @@ function isPendingRootPlanningError(error: unknown): boolean {
   return record.code === '22023'
     && typeof record.message === 'string'
     && record.message.startsWith('A reminder requires');
-}
-
-function isMissingSurfaceClaimRpc(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const record = error as { code?: unknown; message?: unknown };
-  return record.code === 'PGRST202'
-    && typeof record.message === 'string'
-    && record.message.includes('tasks_claim_due_reminders_v2');
 }
 
 function normalizeReminderServiceError(error: unknown, fallback: string): Error {

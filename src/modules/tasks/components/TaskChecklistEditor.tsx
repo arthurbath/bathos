@@ -93,8 +93,10 @@ export type TaskChecklistEditorController = {
 function isEligibleHorizontalBoundaryGesture(
   event: Pick<KeyboardEvent<HTMLInputElement>, 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
 ) {
-  if (event.metaKey || event.ctrlKey || event.shiftKey) return false;
-  return !event.altKey || isMacLikePlatform(globalThis.navigator?.platform ?? '');
+  if (event.ctrlKey || event.shiftKey) return false;
+  const macLike = isMacLikePlatform(globalThis.navigator?.platform ?? '');
+  if (!macLike) return !event.metaKey && !event.altKey;
+  return !(event.metaKey && event.altKey);
 }
 
 export function TaskChecklistEditor({
@@ -104,7 +106,7 @@ export function TaskChecklistEditor({
   emptyActionLayout = 'standalone',
   onContentPresenceChange,
   onRegisterFlush,
-  showDragHandles = false,
+  showDragHandles = true,
 }: {
   ownerId: string;
   taskId: string;
@@ -133,7 +135,7 @@ export function TaskChecklistEditorSurface({
   emptyActionLayout = 'standalone',
   onContentPresenceChange,
   onRegisterFlush,
-  showDragHandles = false,
+  showDragHandles = true,
 }: {
   controller: TaskChecklistEditorController;
   focusRequestTaskId: string;
@@ -155,11 +157,6 @@ export function TaskChecklistEditorSurface({
   const dropIndexRef = useRef<number | null>(null);
   const dropCommitInFlightRef = useRef(false);
   const suppressPostDragClickRef = useRef(false);
-  const checklistInputPressRef = useRef<{
-    input: HTMLInputElement;
-    x: number;
-    y: number;
-  } | null>(null);
   const inputRefs = useRef(new Map<string, HTMLInputElement>());
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const editingTitlesRef = useRef<Record<string, string>>({});
@@ -797,23 +794,6 @@ export function TaskChecklistEditorSurface({
     setSelectionAnchorId(next.anchorId);
   };
 
-  const handleChecklistInputMouseDown = (
-    event: ReactMouseEvent<HTMLInputElement>,
-  ) => {
-    if (
-      event.button !== 0
-      || event.metaKey
-      || event.ctrlKey
-      || event.altKey
-      || event.shiftKey
-    ) return;
-    checklistInputPressRef.current = {
-      input: event.currentTarget,
-      x: event.clientX,
-      y: event.clientY,
-    };
-  };
-
   const toggleSelectionFromControl = (itemId: string) => {
     const nextSelectedIds = new Set(selectedItemIds);
     if (nextSelectedIds.has(itemId)) nextSelectedIds.delete(itemId);
@@ -926,7 +906,6 @@ export function TaskChecklistEditorSurface({
   useEffect(() => {
     const handleMouseDown = (event: globalThis.MouseEvent) => {
       suppressPostDragClickRef.current = false;
-      checklistInputPressRef.current = null;
       const target = event.target;
       if (!(target instanceof Element)) {
         clearSelection();
@@ -947,17 +926,6 @@ export function TaskChecklistEditorSurface({
         ) return;
       }
       clearSelection();
-    };
-    const handleMouseMove = (event: globalThis.MouseEvent) => {
-      const press = checklistInputPressRef.current;
-      if (press === null) return;
-      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < 4) return;
-      suppressPostDragClickRef.current = true;
-      checklistInputPressRef.current = null;
-      press.input.blur();
-    };
-    const handleMouseUp = () => {
-      checklistInputPressRef.current = null;
     };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (selectedItemIds.size === 0) return;
@@ -998,13 +966,9 @@ export function TaskChecklistEditorSurface({
       );
     };
     document.addEventListener('mousedown', handleMouseDown, true);
-    document.addEventListener('mousemove', handleMouseMove, true);
-    document.addEventListener('mouseup', handleMouseUp, true);
     document.addEventListener('keydown', handleKeyDown, true);
     return () => {
       document.removeEventListener('mousedown', handleMouseDown, true);
-      document.removeEventListener('mousemove', handleMouseMove, true);
-      document.removeEventListener('mouseup', handleMouseUp, true);
       document.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [clearSelection, deleteSelectedItems, selectedItemIds]);
@@ -1135,7 +1099,7 @@ export function TaskChecklistEditorSurface({
       onFocus={() => {
         focusedItemIdRef.current = DRAFT_ID;
       }}
-      onInputMouseDown={handleChecklistInputMouseDown}
+      onInputMouseDown={() => undefined}
       onClickCapture={(event) => {
         if (!suppressPostDragClickRef.current) return;
         event.preventDefault();
@@ -1143,6 +1107,7 @@ export function TaskChecklistEditorSurface({
       }}
       onDragStart={() => {
         suppressPostDragClickRef.current = true;
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         updateDraggedIds([DRAFT_ID]);
       }}
       onDragEnd={clearDragState}
@@ -1210,7 +1175,7 @@ export function TaskChecklistEditorSurface({
             onFocus={() => {
               focusedItemIdRef.current = item.id;
             }}
-            onInputMouseDown={handleChecklistInputMouseDown}
+            onInputMouseDown={() => undefined}
             onSelectionMouseDown={(event) => handleSelectionMouseDown(event, item.id)}
             onSelectionClick={(event) => {
               if (suppressPostDragClickRef.current) {
@@ -1284,6 +1249,7 @@ export function TaskChecklistEditorSurface({
             onToggleSelection={() => toggleSelectionFromControl(item.id)}
             onDragStart={() => {
               suppressPostDragClickRef.current = true;
+              if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
               const movingIds = selectedItemIds.has(item.id)
                 ? checklist.items
                     .filter(({ id }) => selectedItemIds.has(id))
@@ -1553,32 +1519,11 @@ function ChecklistRow({
       ref={setRowRef}
       data-checklist-item-id={item.id}
       data-selected={selected ? 'true' : undefined}
-      draggable
       className={`relative flex min-w-0 items-center gap-1 rounded-md ${
         selected ? 'bg-info/20' : ''
       }`}
       onMouseDownCapture={onSelectionMouseDown}
       onClickCapture={onSelectionClick}
-      onDragStart={(event) => {
-        event.stopPropagation();
-        const activeElement = document.activeElement;
-        if (
-          activeElement instanceof HTMLElement
-          && event.currentTarget.contains(activeElement)
-        ) {
-          activeElement.blur();
-        }
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData(
-          'application/x-bathos-checklist-item',
-          item.id,
-        );
-        onDragStart();
-      }}
-      onDragEnd={(event) => {
-        event.stopPropagation();
-        onDragEnd();
-      }}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
@@ -1611,7 +1556,7 @@ function ChecklistRow({
           role="checkbox"
           aria-checked={item.completed}
           aria-label={`${item.completed ? 'Reopen' : 'Complete'} ${item.title}`}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="-ml-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => {
             consumeChecklistMutation(
               onComplete(!item.completed),
@@ -1629,7 +1574,6 @@ function ChecklistRow({
       <Input
         ref={inputRef}
         value={title}
-        draggable
         aria-label="Checklist Item"
         placeholder="Item"
         data-bathos-field-return-owned="true"
@@ -1651,6 +1595,17 @@ function ChecklistRow({
           onStart={onDragStart}
           onDrop={onImmediateDrop}
           onCancel={onImmediateCancel}
+          nativeDraggable
+          onNativeDragStart={(event) => {
+            event.stopPropagation();
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-bathos-checklist-item', item.id);
+            onDragStart();
+          }}
+          onNativeDragEnd={(event) => {
+            event.stopPropagation();
+            onDragEnd();
+          }}
         />
       ) : null}
     </div>
@@ -1844,29 +1799,8 @@ function DraftChecklistRow({
     <div
       ref={setRowRef}
       data-checklist-item-id={DRAFT_ID}
-      draggable
       className="relative flex min-w-0 items-center gap-1"
       onClickCapture={onClickCapture}
-      onDragStart={(event) => {
-        event.stopPropagation();
-        onDragStart();
-        const activeElement = document.activeElement;
-        if (
-          activeElement instanceof HTMLElement
-          && event.currentTarget.contains(activeElement)
-        ) {
-          activeElement.blur();
-        }
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData(
-          'application/x-bathos-checklist-item',
-          DRAFT_ID,
-        );
-      }}
-      onDragEnd={(event) => {
-        event.stopPropagation();
-        onDragEnd();
-      }}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
@@ -1877,13 +1811,12 @@ function DraftChecklistRow({
           aria-hidden="true"
         />
       ) : null}
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground">
+      <span className="-ml-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground">
         <TASK_ICONS.OpenTask className="h-4 w-4" aria-hidden="true" />
       </span>
       <Input
         ref={inputRef}
         value={title}
-        draggable
         aria-label="New Checklist Item"
         placeholder="Item"
         data-bathos-field-return-owned="true"
@@ -1903,6 +1836,17 @@ function DraftChecklistRow({
           onStart={onDragStart}
           onDrop={onImmediateDrop}
           onCancel={onImmediateCancel}
+          nativeDraggable
+          onNativeDragStart={(event) => {
+            event.stopPropagation();
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-bathos-checklist-item', 'draft');
+            onDragStart();
+          }}
+          onNativeDragEnd={(event) => {
+            event.stopPropagation();
+            onDragEnd();
+          }}
         />
       ) : null}
     </div>

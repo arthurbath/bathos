@@ -146,8 +146,6 @@ import { useTaskNativeWidgetBridge } from '@/modules/tasks/hooks/useTaskNativeWi
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
 import { useTaskQuickFilterPreference } from '@/modules/tasks/hooks/useTaskQuickFilterPreference';
 import { useTaskAutomaticListSorting } from '@/modules/tasks/hooks/useTaskAutomaticListSorting';
-import { useTaskDragHandleVisibility } from '@/modules/tasks/hooks/useTaskDragHandleVisibility';
-import { shouldShowTaskDragHandles } from '@/modules/tasks/domain/taskDragHandles';
 import {
   useTaskActionHistory,
   type TaskForwardMutationReservation,
@@ -161,6 +159,7 @@ import {
   useTaskNativeNotifications,
   type TaskNativeNotificationsModel,
 } from '@/modules/tasks/hooks/useTaskNativeNotifications';
+import { useTaskNativePushRegistration } from '@/modules/tasks/hooks/useTaskNativePushRegistration';
 import { useTaskRecurrences } from '@/modules/tasks/hooks/useTaskRecurrences';
 import type { TaskWebPushModel } from '@/modules/tasks/hooks/useTaskWebPush';
 import {
@@ -668,7 +667,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setFilter: setTaskQuickFilter,
   } = useTaskQuickFilterPreference(userId);
   const automaticListSorting = useTaskAutomaticListSorting(userId);
-  const dragHandleVisibility = useTaskDragHandleVisibility(userId);
   const [taskDropIndicator, setTaskDropIndicator] = useState<TaskDropIndicator | null>(null);
   const taskDropIndicatorRef = useRef<TaskDropIndicator | null>(null);
   // Safari may withhold dataTransfer payloads during dragover, so retain the
@@ -966,6 +964,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, []);
   const taskSearch = useTaskSearch(userId, quickFindOpen || view === 'search');
   const nativeNotifications = useTaskNativeNotifications();
+  useTaskNativePushRegistration({
+    mode,
+    status: nativeNotifications.status,
+    reminderService,
+  });
   const reminders = useTaskReminders(userId, {
     nativeNotificationsEnabled: nativeNotifications.enabled,
     nativeNotificationsChecking: nativeNotifications.available
@@ -1027,10 +1030,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     coarsePointer.addEventListener('change', syncTouchCapability);
     return () => coarsePointer.removeEventListener('change', syncTouchCapability);
   }, []);
-  const showDragHandles = shouldShowTaskDragHandles(
-    dragHandleVisibility.visibility,
-    touchQuickFindEnabled,
-  );
+  const showDragHandles = touchQuickFindEnabled;
   const resetTouchQuickFindPull = useCallback(() => {
     touchQuickFindStartYRef.current = null;
     touchListBoundaryRef.current = null;
@@ -1943,6 +1943,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const taskRow = target.closest<HTMLElement>('[data-task-row-id]');
       if (taskRow?.dataset.taskRowId === selectedTaskId) return;
 
+      // Let a real Primary Link complete its native activation before closing
+      // the editor. Its click callback requests the close without replacing the anchor.
+      if (target.closest('[data-task-primary-link-task-id]')) return;
+
       // Another title owns the direct replace interaction and flushes this editor itself.
       if (target.closest('[data-task-title-control]')) return;
 
@@ -1998,7 +2002,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   useEffect(() => {
     const previousVisibleIds = visibleTaskIdsRef.current;
     const nextVisibleIds = renderedPlanningTasks.map(({ id }) => id);
-    const focusableIds = new Set(nextVisibleIds);
+    const focusableIds = new Set([
+      ...nextVisibleIds,
+      ...selectableRowIds,
+    ]);
     const selectableIds = new Set(selectableRowIds);
     const remainingSelection = new Set(
       Array.from(bulkSelection).filter((taskId) => selectableIds.has(taskId)),
@@ -2630,6 +2637,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     window.setTimeout(() => requestTaskEditorFieldFocus(target.id, field), 0);
   }, [getTaskCommandTargets, setOpenTask]);
 
+  const openTaskCommandPrimaryLink = useCallback(() => {
+    const targets = getTaskCommandTargets();
+    if (targets.length !== 1) return;
+    const target = targets[0];
+    const control = Array.from(document.querySelectorAll<HTMLAnchorElement>(
+      'a[data-task-primary-link-task-id]',
+    )).find((candidate) => candidate.dataset.taskPrimaryLinkTaskId === target.id);
+    control?.click();
+  }, [getTaskCommandTargets]);
+
   const runToggleCompletionShortcut = useCallback(async () => {
     if (bulkMode && bulkSelection.size >= 1) {
       const targets = selectableTasks.filter((task) => bulkSelection.has(task.id));
@@ -3151,6 +3168,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         void focusTaskCommandContent('link');
         return;
       }
+      if (command === 'open-link') {
+        openTaskCommandPrimaryLink();
+        return;
+      }
       if (command === 'start-selection') {
         if (bulkMode || !bulkEligible) return;
         const target = getTaskCommandTargets()[0];
@@ -3213,6 +3234,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     macLikePlatform,
     navigate,
     openTaskCommandField,
+    openTaskCommandPrimaryLink,
     openRelativeTask,
     planningDate,
     runDuplicateShortcut,
@@ -3728,7 +3750,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         } : undefined}
         hierarchy={hierarchy}
-        showAreaMetadata={searchRow ? searchRow.route !== 'anytime' : view !== 'anytime'}
+        showAreaMetadata={searchRow
+          ? searchRow.route !== 'anytime' && searchRow.route !== 'someday'
+          : view !== 'anytime' && view !== 'someday'}
         selected={searchRow ? false : selectedTaskId === task.id}
         focused={searchRow ? searchRow.focused : focusedTaskId === task.id}
         macControlClickSelection={!searchRow
@@ -3743,6 +3767,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onTouchSwipeSelect={() => {
           if (searchRow) return;
           void enterTaskSelectionFromTouchSwipe(task.id);
+        }}
+        onPrimaryLinkActivate={() => {
+          if (searchRow) return;
+          void setOpenTask(null);
         }}
         onActivate={searchRow?.onActivate ?? (() => toggleTaskFromKeyboard(task.id))}
         onCloseEditor={closeOpenTaskToFocus}
@@ -4322,6 +4350,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     );
   };
 
+  const applyBulkHorizon = async (horizon: TodayTaskSection) => {
+    await applyBulkEditablePatch(
+      { today_section: horizon },
+      'Selected Tasks Could Not Be Updated',
+    );
+  };
+
   const bulkCommandTargets = bulkCommandMode === null ? [] : getTaskCommandTargets();
   const bulkStartFirst = bulkCommandTargets[0];
   const bulkStartHasOneIntent = bulkStartFirst !== undefined
@@ -4389,8 +4424,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     )
     ? bulkActionabilityFirst
     : null;
+  const bulkHorizonFirst = selectedBulkTasks[0]?.today_section ?? null;
+  const bulkHorizonValue = bulkHorizonFirst !== null
+    && selectedBulkTasks.every(({ today_section: horizon }) => horizon === bulkHorizonFirst)
+    ? bulkHorizonFirst
+    : null;
+  const bulkHorizonEditsAvailable = view === 'today' && bulkActiveEditsAvailable;
   const bulkEditAvailable = bulkOrganizationEditsAvailable
     || bulkTemporalEditsAvailable
+    || bulkHorizonEditsAvailable
     || bulkDeleteAvailable
     || bulkTerminalEditsAvailable;
 
@@ -4619,7 +4661,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   onSignOut={handleSignOut}
                   hierarchy={hierarchy}
                   automaticListSorting={automaticListSorting}
-                  dragHandleVisibility={dragHandleVisibility}
                   nativeNotifications={nativeNotifications}
                   webPush={reminders.webPush}
                   connected={reminders.mode === 'connected'}
@@ -4834,6 +4875,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       showDragHandles={showDragHandles}
                       onImmediateDrop={() => void commitActiveTaskDrop()}
                       onPrototypeSelect={handleRecurrencePrototypePointerSelection}
+                      focusedTaskId={focusedTaskId}
+                      onFocusTaskRow={(rowId) => focusTaskRow(rowId)}
+                      onMoveTaskRowFocus={(rowId, direction) => {
+                        moveTaskRowFocus(rowId, direction, true);
+                      }}
+                      onActivateRecurrence={(definitionId) => {
+                        void setOpenRecurrencePrototype(definitionId);
+                      }}
                       renderTask={renderActiveTask}
                     />
                     {waitingRecurrences.length > 0 ? (
@@ -4872,6 +4921,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                                   && searchTarget.definitionId === definition.id}
                                 onFocusFulfilled={() => {
                                   handleRecurrenceFocusFulfilled(definition.id);
+                                }}
+                                focused={focusedTaskId === recurrenceSelectionId(definition.id)}
+                                onFocusRow={() => focusTaskRow(
+                                  recurrenceSelectionId(definition.id),
+                                )}
+                                onMoveFocus={(direction) => moveTaskRowFocus(
+                                  recurrenceSelectionId(definition.id),
+                                  direction,
+                                  true,
+                                )}
+                                onActivate={() => {
+                                  void setOpenRecurrencePrototype(definition.id);
                                 }}
                                 onGoToInstance={() => {
                                   const targetView = occurrence.start_date
@@ -5021,10 +5082,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           editAvailable={bulkEditAvailable}
           organizationEditsAvailable={bulkOrganizationEditsAvailable}
           temporalEditsAvailable={bulkTemporalEditsAvailable}
+          horizonEditsAvailable={bulkHorizonEditsAvailable}
           deleteAvailable={bulkDeleteAvailable}
           reopenAvailable={bulkTerminalEditsAvailable}
           areas={hierarchy.areas}
           actionability={bulkActionabilityValue}
+          horizon={bulkHorizonValue}
           onSelectAll={() => {
             const ids = selectableRowIds;
             focusedTaskIdRef.current = null;
@@ -5036,6 +5099,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           onDeadline={() => setBulkCommandMode('deadline')}
           onArea={(areaId) => void applyBulkOrganization(areaId)}
           onActionability={(actionability) => void applyBulkActionability(actionability)}
+          onHorizon={(horizon) => void applyBulkHorizon(horizon)}
           onDelete={() => void runDeleteShortcut()}
           onReopen={() => void runBulkReopen()}
           onCancel={clearTaskSelection}
@@ -5196,15 +5260,18 @@ function TaskBulkToolbar({
   editAvailable,
   organizationEditsAvailable,
   temporalEditsAvailable,
+  horizonEditsAvailable,
   deleteAvailable,
   reopenAvailable,
   areas,
   actionability,
+  horizon,
   onSelectAll,
   onStart,
   onDeadline,
   onArea,
   onActionability,
+  onHorizon,
   onDelete,
   onReopen,
   onCancel,
@@ -5215,15 +5282,18 @@ function TaskBulkToolbar({
   editAvailable: boolean;
   organizationEditsAvailable: boolean;
   temporalEditsAvailable: boolean;
+  horizonEditsAvailable: boolean;
   deleteAvailable: boolean;
   reopenAvailable: boolean;
   areas: TaskHierarchyModel['areas'];
   actionability: TaskTodo['actionability'] | null;
+  horizon: TodayTaskSection | null;
   onSelectAll: () => void;
   onStart: () => void;
   onDeadline: () => void;
   onArea: (areaId: string | null) => void;
   onActionability: (actionability: TaskTodo['actionability']) => void;
+  onHorizon: (horizon: TodayTaskSection) => void;
   onDelete: () => void;
   onReopen: () => void;
   onCancel: () => void;
@@ -5271,6 +5341,31 @@ function TaskBulkToolbar({
                 Deadline...
               </DropdownMenuItem>
             </>
+          ) : null}
+          {horizonEditsAvailable ? (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                Horizon
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent data-task-bulk-selection-surface>
+                {todayTaskSectionDefinitions.map((presentation) => {
+                  const HorizonIcon = presentation.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={presentation.id}
+                      disabled={horizon === presentation.id}
+                      onSelect={() => onHorizon(presentation.id)}
+                    >
+                      <HorizonIcon
+                        className={cn('mr-2 h-4 w-4', presentation.colorClass)}
+                        aria-hidden="true"
+                      />
+                      {presentation.label}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           ) : null}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={!organizationEditsAvailable}>
@@ -5447,7 +5542,6 @@ function TaskConfigView({
   onSignOut,
   hierarchy,
   automaticListSorting,
-  dragHandleVisibility,
   nativeNotifications,
   webPush,
   connected,
@@ -5462,7 +5556,6 @@ function TaskConfigView({
   onSignOut: () => Promise<void> | void;
   hierarchy: TaskHierarchyModel;
   automaticListSorting: ReturnType<typeof useTaskAutomaticListSorting>;
-  dragHandleVisibility: ReturnType<typeof useTaskDragHandleVisibility>;
   nativeNotifications: TaskNativeNotificationsModel;
   webPush: TaskWebPushModel | null;
   connected: boolean;
@@ -5512,31 +5605,6 @@ function TaskConfigView({
                 });
               }}
             />
-          </TaskFeatureRow>
-          <TaskFeatureRow
-            title="Drag Handles"
-            description="Controls when dedicated task and checklist reorder handles are visible."
-          >
-            <Select
-              value={dragHandleVisibility.visibility}
-              disabled={dragHandleVisibility.loading || dragHandleVisibility.pending}
-              onValueChange={(visibility) => {
-                void dragHandleVisibility.setVisibility(
-                  visibility as typeof dragHandleVisibility.visibility,
-                ).catch((updateError) => {
-                  showTaskError('Drag Handles Could Not Be Updated', updateError);
-                });
-              }}
-            >
-              <SelectTrigger className="w-44" aria-label="Drag Handles">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hidden">Hidden</SelectItem>
-                <SelectItem value="always">Always</SelectItem>
-                <SelectItem value="touch_only">Touch Devices Only</SelectItem>
-              </SelectContent>
-            </Select>
           </TaskFeatureRow>
           {macNative ? (
             <TaskFeatureRow
@@ -5597,7 +5665,7 @@ function TaskFeatureRow({
         <h4 className="text-sm font-semibold text-foreground">{title}</h4>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className="flex w-28 max-w-28 shrink-0 justify-end text-right">{children}</div>
     </div>
   );
 }
@@ -5770,12 +5838,16 @@ function TaskNativeNotificationCapability({
     return <span className="text-xs text-muted-foreground">Checking...</span>;
   }
   if (model.status === 'enabled') {
-    return <span className="text-xs text-muted-foreground">Enabled</span>;
+    return (
+      <Button type="button" variant="outline" size="sm" onClick={() => model.enable()}>
+        Edit
+      </Button>
+    );
   }
   if (model.status === 'not-determined' || model.status === 'denied') {
     return (
-      <div className="flex flex-col items-end gap-1">
-        <span className="max-w-32 text-right text-xs text-muted-foreground">
+      <div className="flex items-center gap-2">
+        <span aria-live="polite" className="max-w-32 text-right text-xs text-muted-foreground">
           {model.status === 'denied' ? 'Blocked in System Settings' : 'Not Enabled'}
         </span>
         <Button type="button" variant="outline" size="sm" onClick={() => model.enable()}>
@@ -6368,6 +6440,10 @@ function UpcomingTaskSections({
   showDragHandles,
   onImmediateDrop,
   onPrototypeSelect,
+  focusedTaskId,
+  onFocusTaskRow,
+  onMoveTaskRowFocus,
+  onActivateRecurrence,
   renderTask,
 }: {
   tasks: TaskTodo[];
@@ -6420,6 +6496,10 @@ function UpcomingTaskSections({
     definitionId: string,
     source?: 'activation' | 'selection-control',
   ) => void;
+  focusedTaskId: string | null;
+  onFocusTaskRow: (rowId: string) => void;
+  onMoveTaskRowFocus: (rowId: string, direction: -1 | 1) => void;
+  onActivateRecurrence: (definitionId: string) => void;
   renderTask: (
     task: TaskTodo,
     sectionTasks: TaskTodo[],
@@ -6575,6 +6655,17 @@ function UpcomingTaskSections({
                     onFocusFulfilled={() => {
                       onRecurrenceFocused(row.prototype.definition.id);
                     }}
+                    focused={focusedTaskId === recurrenceSelectionId(
+                      row.prototype.definition.id,
+                    )}
+                    onFocusRow={() => onFocusTaskRow(recurrenceSelectionId(
+                      row.prototype.definition.id,
+                    ))}
+                    onMoveFocus={(direction) => onMoveTaskRowFocus(
+                      recurrenceSelectionId(row.prototype.definition.id),
+                      direction,
+                    )}
+                    onActivate={() => onActivateRecurrence(row.prototype.definition.id)}
                     dragPlacement={dropIndicator?.targetRecurrenceId
                       === row.prototype.definition.id
                       ? dropIndicator.placement
@@ -6804,6 +6895,7 @@ function TaskRow({
   macControlClickSelection,
   onSelect,
   onTouchSwipeSelect,
+  onPrimaryLinkActivate = () => undefined,
   onActivate,
   onCloseEditor,
   onCancelEditor,
@@ -6853,6 +6945,7 @@ function TaskRow({
   macControlClickSelection: boolean;
   onSelect: (event: MouseEvent<HTMLElement>) => void;
   onTouchSwipeSelect: () => void;
+  onPrimaryLinkActivate?: () => void;
   onActivate: () => void;
   onCloseEditor: () => Promise<boolean>;
   onCancelEditor: () => Promise<boolean>;
@@ -7813,7 +7906,11 @@ function TaskRow({
           <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
             {!bulkSelection ? (
               <>
-                <TaskSourceIndicator task={task} compact />
+                <TaskSourceIndicator
+                  task={task}
+                  compact
+                  onOrdinaryActivate={onPrimaryLinkActivate}
+                />
                 <DropdownMenu
                   modal={false}
                   open={actionMenuOpen}
@@ -7990,7 +8087,7 @@ function TaskRow({
               onRegisterAutosave={onRegisterAutosave}
               onTitleChange={setVisibleTitle}
               showTemporalFields
-              showDragHandles={showDragHandle}
+              showDragHandles
               mobileTouchTemporalPickers={mobileTouchTemporalPickers}
             />
             <button

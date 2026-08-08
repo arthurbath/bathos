@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
@@ -42,6 +43,9 @@ export function TaskImmediateDragHandle({
   onStart,
   onDrop,
   onCancel,
+  nativeDraggable = false,
+  onNativeDragStart,
+  onNativeDragEnd,
 }: {
   label: string;
   scope: string;
@@ -49,6 +53,9 @@ export function TaskImmediateDragHandle({
   onStart: () => void;
   onDrop: () => void;
   onCancel: () => void;
+  nativeDraggable?: boolean;
+  onNativeDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
+  onNativeDragEnd?: (event: ReactDragEvent<HTMLButtonElement>) => void;
 }) {
   const gestureRef = useRef<{
     pointerId: number;
@@ -126,6 +133,7 @@ export function TaskImmediateDragHandle({
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (nativeDraggable && event.pointerType === 'mouse') return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -168,6 +176,7 @@ export function TaskImmediateDragHandle({
       size="icon"
       aria-label={label}
       data-task-drag-handle-control
+      draggable={nativeDraggable}
       className="h-8 w-8 shrink-0 cursor-grab touch-none select-none text-muted-foreground active:cursor-grabbing"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -176,6 +185,8 @@ export function TaskImmediateDragHandle({
       onLostPointerCapture={(event) => {
         if (gestureRef.current?.pointerId === event.pointerId) finishGesture(event, true);
       }}
+      onDragStart={onNativeDragStart}
+      onDragEnd={onNativeDragEnd}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();

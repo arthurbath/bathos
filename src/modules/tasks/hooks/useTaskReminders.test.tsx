@@ -79,6 +79,7 @@ describe('useTaskReminders', () => {
         endpointKey: expect.stringMatching(/^browser:/),
         label: 'This Browser',
       }),
+      expect.any(String),
     );
     expect(result.current.dueItems).toEqual([dueReminder]);
     expect(result.current.byRootId.get('task-a')).toEqual(taskReminderFixture());
@@ -242,6 +243,7 @@ describe('useTaskReminders', () => {
       undefined,
       undefined,
       expect.objectContaining({ endpointKey: expect.stringMatching(/^browser:/) }),
+      expect.any(String),
     );
   });
 

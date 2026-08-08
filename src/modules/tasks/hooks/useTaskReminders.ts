@@ -32,6 +32,7 @@ export function useTaskReminders(
   const [dueItems, setDueItems] = useState<TaskDueReminder[]>([]);
   const [claimError, setClaimError] = useState<Error | null>(null);
   const [inAppSurface] = useState(() => getTaskInAppReminderSurface());
+  const sessionStartedAt = useRef(new Date().toISOString());
   const claiming = useRef(false);
   const inAppFallbackEnabled = !nativeNotificationsEnabled
     && !nativeNotificationsChecking
@@ -84,7 +85,13 @@ export function useTaskReminders(
     ) return;
     claiming.current = true;
     try {
-      const result = await reminderService.claimDue(undefined, undefined, undefined, inAppSurface);
+      const result = await reminderService.claimDue(
+        undefined,
+        undefined,
+        undefined,
+        inAppSurface,
+        sessionStartedAt.current,
+      );
       if (result.items.length > 0) {
         setDueItems((current) => {
           const rows = new Map(current.map((item) => [item.delivery_id, item]));

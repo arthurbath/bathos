@@ -2334,6 +2334,41 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bathos_admin_list_module_access: {
+        Args: never
+        Returns: {
+          display_name: string
+          has_access: boolean
+          has_explicit_access: boolean
+          is_admin: boolean
+          is_restricted: boolean
+          module_id: string
+          module_name: string
+          user_email: string
+          user_id: string
+        }[]
+      }
+      bathos_admin_set_module_restricted: {
+        Args: { _is_restricted: boolean; _module_id: string }
+        Returns: undefined
+      }
+      bathos_admin_set_module_user_access: {
+        Args: { _has_access: boolean; _module_id: string; _user_id: string }
+        Returns: undefined
+      }
+      bathos_can_access_module: {
+        Args: { _module_id: string; _user_id?: string }
+        Returns: boolean
+      }
+      bathos_read_current_module_access: {
+        Args: never
+        Returns: {
+          has_access: boolean
+          has_explicit_access: boolean
+          is_restricted: boolean
+          module_id: string
+        }[]
+      }
       budget_create_household_for_current_user: { Args: never; Returns: Json }
       budget_delete_household: {
         Args: { _household_id: string }
@@ -2573,6 +2608,20 @@ export type Database = {
         }
         Returns: Json
       }
+      tasks_claim_due_reminders_v3: {
+        Args: {
+          _not_before: string
+          _request_id: string
+          _surface_key: string
+          _surface_label: string
+          _through_at: string
+        }
+        Returns: Json
+      }
+      tasks_claim_native_push_deliveries: {
+        Args: { _limit?: number; _through_at: string }
+        Returns: Json
+      }
       tasks_claim_web_push_deliveries: {
         Args: { _limit?: number; _through_at: string }
         Returns: Json
@@ -2781,6 +2830,27 @@ export type Database = {
         }
         Returns: Json
       }
+      tasks_record_native_push_delivery_result: {
+        Args: {
+          _delivery_id: string
+          _error_code?: string
+          _outcome: string
+          _provider_message_id?: string
+          _target_revoked?: boolean
+        }
+        Returns: Json
+      }
+      tasks_register_native_push_target: {
+        Args: {
+          _device_token: string
+          _environment: string
+          _installation_id: string
+          _label?: string
+          _platform: string
+          _topic: string
+        }
+        Returns: Json
+      }
       tasks_register_web_push_target: {
         Args: {
           _auth_secret: string
@@ -2789,6 +2859,10 @@ export type Database = {
           _p256dh: string
           _reactivate_revoked?: boolean
         }
+        Returns: Json
+      }
+      tasks_revoke_native_push_target: {
+        Args: { _installation_id: string; _reason?: string }
         Returns: Json
       }
       tasks_replace_restore_v14: {

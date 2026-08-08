@@ -183,6 +183,7 @@ struct TasksNativeQuickEntryCredentialStore {
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: Self.service,
             kSecAttrAccount: Self.account,
+            kSecUseDataProtectionKeychain: true,
         ]
     }
 }

@@ -1,8 +1,28 @@
 import AppKit
 import SwiftUI
 
+final class TasksMacApplicationDelegate: NSObject, NSApplicationDelegate {
+    func application(
+        _ application: NSApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        TaskNativeNotificationCoordinator.shared
+            .didRegisterForRemoteNotifications(deviceToken: deviceToken)
+    }
+
+    func application(
+        _ application: NSApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        TaskNativeNotificationCoordinator.shared
+            .didFailToRegisterForRemoteNotifications()
+    }
+}
+
 @main
 struct TasksMacApp: App {
+    @NSApplicationDelegateAdaptor(TasksMacApplicationDelegate.self)
+    private var applicationDelegate
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var browserModel = TasksBrowserModel()
     @StateObject private var keyboardController = TasksMacKeyboardController()

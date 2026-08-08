@@ -10,6 +10,20 @@ export type PushDelivery = {
   };
 };
 
+export type NativePushDelivery = {
+  delivery_id: string;
+  occurrence_id: string;
+  owner_id: string;
+  task_id: string;
+  title: string;
+  resolved_at: string;
+  attempt_count: number;
+  platform: 'ios' | 'macos';
+  environment: 'development' | 'production';
+  topic: 'garden.bath.tasks';
+  device_token: string;
+};
+
 type DeliveryClaim = {
   outcome: 'accepted';
   through_at: string;
@@ -23,9 +37,23 @@ type DeliveryResult = {
   targetRevoked: boolean;
 };
 
+export type NativePushResult = {
+  accepted: boolean;
+  permanent: boolean;
+  reason: string | null;
+  providerMessageId: string | null;
+};
+
 export type ReminderDispatchClient = {
   claim: (throughAt: string, limit: number) => Promise<{ data: unknown; error: unknown | null }>;
   record: (result: DeliveryResult) => Promise<{ error: unknown | null }>;
+  claimNative?: (
+    throughAt: string,
+    limit: number,
+  ) => Promise<{ data: unknown; error: unknown | null }>;
+  recordNative?: (
+    result: DeliveryResult & { providerMessageId: string | null },
+  ) => Promise<{ error: unknown | null }>;
 };
 
 export type PushConfiguration = {
@@ -34,10 +62,20 @@ export type PushConfiguration = {
   subject: string;
 };
 
+export type APNsConfiguration = {
+  teamId: string;
+  keyId: string;
+  privateKey: string;
+};
+
 type HandlerDependencies = {
   getEnvironment: (name: string) => string | null;
   createClient: (supabaseUrl: string, serviceKey: string) => ReminderDispatchClient;
   sendPush: (delivery: PushDelivery, configuration: PushConfiguration) => Promise<void>;
+  sendNativePush?: (
+    delivery: NativePushDelivery,
+    configuration: APNsConfiguration,
+  ) => Promise<NativePushResult>;
   now?: () => Date;
   logError?: (message: string) => void;
   logInfo?: (record: Record<string, unknown>) => void;
@@ -129,6 +167,18 @@ function requireClaim(value: unknown): DeliveryClaim {
   return claim as DeliveryClaim;
 }
 
+function requireNativeClaim(value: unknown): { items: NativePushDelivery[] } {
+  const claim = typeof value === 'string' ? JSON.parse(value) as unknown : value;
+  if (
+    typeof claim !== 'object'
+    || claim === null
+    || !Array.isArray((claim as { items?: unknown }).items)
+  ) {
+    throw new Error('Invalid native delivery claim');
+  }
+  return claim as { items: NativePushDelivery[] };
+}
+
 export function providerFailure(error: unknown): { code: string; revoked: boolean } {
   const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
     ? Number((error as { statusCode?: unknown }).statusCode)
@@ -175,14 +225,21 @@ export function createReminderDispatchHandler(dependencies: HandlerDependencies)
     const publicKey = dependencies.getEnvironment('TASKS_WEB_PUSH_VAPID_PUBLIC_KEY');
     const privateKey = dependencies.getEnvironment('TASKS_WEB_PUSH_VAPID_PRIVATE_KEY');
     const subject = dependencies.getEnvironment('TASKS_WEB_PUSH_SUBJECT');
+    const pushConfiguration = publicKey && privateKey && subject
+      ? { publicKey, privateKey, subject }
+      : null;
+    const apnsTeamId = dependencies.getEnvironment('TASKS_WIDGET_APNS_TEAM_ID');
+    const apnsKeyId = dependencies.getEnvironment('TASKS_WIDGET_APNS_KEY_ID');
+    const apnsPrivateKey = dependencies.getEnvironment('TASKS_WIDGET_APNS_PRIVATE_KEY');
+    const apnsConfiguration = apnsTeamId && apnsKeyId && apnsPrivateKey
+      ? { teamId: apnsTeamId, keyId: apnsKeyId, privateKey: apnsPrivateKey }
+      : null;
     if (
       !supabaseUrl
       || !serviceKey
       || !dispatchSecret
       || new TextEncoder().encode(dispatchSecret).byteLength < 32
-      || !publicKey
-      || !privateKey
-      || !subject
+      || (!pushConfiguration && !apnsConfiguration)
     ) {
       return response(503, { error: 'Reminder delivery is not configured' });
     }
@@ -199,20 +256,31 @@ export function createReminderDispatchHandler(dependencies: HandlerDependencies)
     }
     const throughAt = now().toISOString();
     let claimResult: Awaited<ReturnType<ReminderDispatchClient['claim']>>;
+    let nativeClaimResult: { data: unknown; error: unknown | null } = {
+      data: { outcome: 'accepted', items: [] },
+      error: null,
+    };
     try {
-      claimResult = await client.claim(throughAt, 50);
+      claimResult = pushConfiguration
+        ? await client.claim(throughAt, 50)
+        : { data: { outcome: 'accepted', through_at: throughAt, items: [] }, error: null };
+      if (apnsConfiguration && client.claimNative && dependencies.sendNativePush) {
+        nativeClaimResult = await client.claimNative(throughAt, 50);
+      }
     } catch {
       logError('Task reminder claim failed');
       return response(500, { error: 'Reminder claim failed' });
     }
-    if (claimResult.error) {
+    if (claimResult.error || nativeClaimResult.error) {
       logError('Task reminder claim failed');
       return response(500, { error: 'Reminder claim failed' });
     }
 
     let claim: DeliveryClaim;
+    let nativeClaim: { items: NativePushDelivery[] };
     try {
       claim = requireClaim(claimResult.data);
+      nativeClaim = requireNativeClaim(nativeClaimResult.data);
     } catch {
       logError('Task reminder claim was invalid');
       return response(500, { error: 'Reminder claim was invalid' });
@@ -222,14 +290,13 @@ export function createReminderDispatchHandler(dependencies: HandlerDependencies)
     let failed = 0;
     let revoked = 0;
     let receiptErrors = 0;
-    const pushConfiguration = { publicKey, privateKey, subject };
     await runInBatches(claim.items, 10, async (delivery) => {
       let failure: { code: string; revoked: boolean } | null = null;
       if (!isTrustedWebPushEndpoint(delivery.subscription?.endpoint)) {
         failure = { code: 'push_endpoint_untrusted', revoked: true };
       } else {
         try {
-          await dependencies.sendPush(delivery, pushConfiguration);
+          await dependencies.sendPush(delivery, pushConfiguration!);
         } catch (deliveryError) {
           failure = providerFailure(deliveryError);
         }
@@ -262,9 +329,47 @@ export function createReminderDispatchHandler(dependencies: HandlerDependencies)
       }
     });
 
+    if (apnsConfiguration && dependencies.sendNativePush && client.recordNative) {
+      await runInBatches(nativeClaim.items, 10, async (delivery) => {
+        let result: NativePushResult;
+        try {
+          result = await dependencies.sendNativePush!(delivery, apnsConfiguration);
+        } catch {
+          result = {
+            accepted: false,
+            permanent: false,
+            reason: 'apns_transport_error',
+            providerMessageId: null,
+          };
+        }
+        let receiptError = false;
+        try {
+          const receipt = await client.recordNative!({
+            deliveryId: delivery.delivery_id,
+            outcome: result.accepted ? 'provider_accepted' : 'failed',
+            providerMessageId: result.providerMessageId,
+            errorCode: result.accepted ? null : (result.reason ?? 'apns_provider_error'),
+            targetRevoked: result.permanent,
+          });
+          receiptError = Boolean(receipt.error);
+        } catch {
+          receiptError = true;
+        }
+        if (receiptError) {
+          receiptErrors += 1;
+          logError('Task native reminder delivery receipt could not be recorded');
+        } else if (result.accepted) {
+          accepted += 1;
+        } else {
+          failed += 1;
+          if (result.permanent) revoked += 1;
+        }
+      });
+    }
+
     const summary = {
       event: 'tasks_reminder_dispatch',
-      claimed: claim.items.length,
+      claimed: claim.items.length + nativeClaim.items.length,
       accepted,
       failed,
       revoked,

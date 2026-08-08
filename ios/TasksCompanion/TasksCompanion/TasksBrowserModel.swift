@@ -26,6 +26,8 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         "request-notification-status"
     static let configureNotificationsMessageType =
         "configure-notifications"
+    static let nativePushRegistrationStateMessageType =
+        "native-push-registration-state"
     static let syncRemindersMessageType = "sync-reminders"
     static let newTaskSummaryInputIdentifier = "task-title-task-draft:new"
     static let newTaskSummaryFocusJavaScript = """
@@ -553,6 +555,22 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
             return
         }
+        if envelope.type == Self.nativePushRegistrationStateMessageType {
+            guard let request = try? JSONDecoder().decode(
+                TaskNativePushRegistrationStateBridgeMessage.self,
+                from: data
+            ) else {
+                Self.recordBridgeDiagnostic("Rejected: invalid native push registration state")
+                return
+            }
+            TaskNativeNotificationCoordinator.shared.setRemotePushRegistrationActive(
+                request.active
+            )
+            Self.recordBridgeDiagnostic(
+                "Accepted: \(envelope.type); active=\(request.active)"
+            )
+            return
+        }
         if envelope.type == Self.syncRemindersMessageType {
             guard let reminderProjection = try? JSONDecoder().decode(
                 TaskNativeReminderProjection.self,
@@ -714,11 +732,43 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         })();
         """)
     }
+
+    func sendNativePushToken(
+        _ token: String,
+        platform: String,
+        environment: String,
+        topic: String
+    ) {
+        webView?.evaluateJavaScript("""
+        (() => {
+          const detail = {
+            deviceToken: "\(token)",
+            platform: "\(platform)",
+            environment: "\(environment)",
+            topic: "\(topic)"
+          };
+          if (window.__bathosTasksNative) {
+            window.__bathosTasksNative.nativePushToken = detail.deviceToken;
+            window.__bathosTasksNative.nativePushPlatform = detail.platform;
+            window.__bathosTasksNative.nativePushEnvironment = detail.environment;
+            window.__bathosTasksNative.nativePushTopic = detail.topic;
+          }
+          window.dispatchEvent(new CustomEvent(
+            "bathos:tasks-native-push-token",
+            { detail }
+          ));
+        })();
+        """)
+    }
 }
 
 private struct TaskBridgeEnvelope: Decodable {
     let type: String
     let schemaVersion: Int
+}
+
+private struct TaskNativePushRegistrationStateBridgeMessage: Decodable {
+    let active: Bool
 }
 
 private struct TaskCredentialBridgeMessage: Decodable {
@@ -847,11 +897,24 @@ final class TaskNativeNotificationCoordinator: NSObject,
     static let shared = TaskNativeNotificationCoordinator()
     nonisolated static let maximumScheduledReminders = 60
     nonisolated static let identifierPrefix = "garden.bath.tasks.reminder."
+    nonisolated static let nativePushTopic = "garden.bath.tasks"
+#if os(iOS)
+    nonisolated static let nativePushPlatform = "ios"
+#else
+    nonisolated static let nativePushPlatform = "macos"
+#endif
+#if DEBUG
+    nonisolated static let nativePushEnvironment = "development"
+#else
+    nonisolated static let nativePushEnvironment = "production"
+#endif
 
     private let center = UNUserNotificationCenter.current()
     private weak var browserModel: TasksBrowserModel?
     private var latestProjection: TaskNativeReminderProjection?
     private var latestSnapshot: TaskWidgetSnapshot?
+    private var nativePushToken: String?
+    private var remotePushRegistrationActive = false
 
     private override init() {
         super.init()
@@ -866,6 +929,7 @@ final class TaskNativeNotificationCoordinator: NSObject,
            let snapshot = try? store.load() {
             latestSnapshot = snapshot
         }
+        publishNativePushToken()
     }
 
     func refreshAuthorization() {
@@ -880,8 +944,11 @@ final class TaskNativeNotificationCoordinator: NSObject,
                 )
                 self.browserModel?.sendNativeNotificationStatus(status)
                 self.applyBadge(using: settings)
-                if status == .enabled, let projection = self.latestProjection {
-                    self.reconcile(projection)
+                if status == .enabled {
+                    self.registerForRemoteNotifications()
+                    if let projection = self.latestProjection {
+                        self.reconcileOrUseRemotePush(projection)
+                    }
                 }
             }
         }
@@ -906,8 +973,10 @@ final class TaskNativeNotificationCoordinator: NSObject,
                 case .enabled:
                     self.browserModel?.sendNativeNotificationStatus(.enabled)
                     self.applyBadge(using: settings)
+                    self.registerForRemoteNotifications()
+                    self.openSystemNotificationSettings()
                     if let projection = self.latestProjection {
-                        self.reconcile(projection)
+                        self.reconcileOrUseRemotePush(projection)
                     }
                 case .checking, .unavailable, .error:
                     self.browserModel?.sendNativeNotificationStatus(.unavailable)
@@ -930,7 +999,8 @@ final class TaskNativeNotificationCoordinator: NSObject,
                 self.browserModel?.sendNativeNotificationStatus(status)
                 self.applyBadge(using: settings)
                 if status == .enabled {
-                    self.reconcile(projection)
+                    self.registerForRemoteNotifications()
+                    self.reconcileOrUseRemotePush(projection)
                 } else {
                     self.removeAppOwnedRequests()
                 }
@@ -966,6 +1036,56 @@ final class TaskNativeNotificationCoordinator: NSObject,
                     self.refreshAuthorization()
                 }
             }
+        }
+    }
+
+    func didRegisterForRemoteNotifications(deviceToken: Data) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        if nativePushToken != token {
+            remotePushRegistrationActive = false
+        }
+        nativePushToken = token
+        publishNativePushToken()
+    }
+
+    func didFailToRegisterForRemoteNotifications() {
+        nativePushToken = nil
+        remotePushRegistrationActive = false
+        if let projection = latestProjection {
+            reconcile(projection)
+        }
+    }
+
+    func setRemotePushRegistrationActive(_ active: Bool) {
+        remotePushRegistrationActive = active && nativePushToken != nil
+        guard let projection = latestProjection else { return }
+        reconcileOrUseRemotePush(projection)
+    }
+
+    private func publishNativePushToken() {
+        guard let nativePushToken else { return }
+        browserModel?.sendNativePushToken(
+            nativePushToken,
+            platform: Self.nativePushPlatform,
+            environment: Self.nativePushEnvironment,
+            topic: Self.nativePushTopic
+        )
+    }
+
+    private func registerForRemoteNotifications() {
+#if os(iOS)
+        UIApplication.shared.registerForRemoteNotifications()
+#elseif os(macOS)
+        NSApplication.shared.registerForRemoteNotifications()
+#endif
+    }
+
+    private func reconcileOrUseRemotePush(_ projection: TaskNativeReminderProjection) {
+        if !remotePushRegistrationActive {
+            reconcile(projection)
+        } else {
+            removeAppOwnedRequests()
+            publishNativePushToken()
         }
     }
 

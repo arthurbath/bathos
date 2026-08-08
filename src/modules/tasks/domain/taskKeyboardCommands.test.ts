@@ -111,6 +111,7 @@ describe('getTaskKeyboardCommand', () => {
       f: 'cycle-actionability',
       g: 'set-someday',
       h: 'focus-link',
+      j: 'open-link',
       x: 'toggle-completion',
       c: 'open-checklist',
       v: 'cycle-area',
@@ -149,7 +150,7 @@ describe('getTaskKeyboardCommand', () => {
   });
 
   it('leaves former Windows Control+Shift task chords unbound', () => {
-    for (const key of ['q', 'w', 'e', 'r', 't', 'y', 'a', 's', 'd', 'f', 'g', 'n', 'x', 'c', 'v', 'b']) {
+    for (const key of ['q', 'w', 'e', 'r', 't', 'y', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'n', 'x', 'c', 'v', 'b']) {
       expect(getTaskKeyboardCommand(
         gesture({ key, ctrlKey: true, shiftKey: true }),
         false,
@@ -207,6 +208,7 @@ describe('isTaskNativeQuickEntryMetadataCommand', () => {
       'undo',
       'toggle-completion',
       'start-selection',
+      'open-link',
       'view-today',
       'view-upcoming',
       'view-anytime',

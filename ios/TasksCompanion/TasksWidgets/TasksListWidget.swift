@@ -339,6 +339,8 @@ private struct TaskListLockScreenWidgetView: View {
 #endif
 
 private struct TaskListWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+
     let entry: TaskListWidgetEntry
 
     var body: some View {
@@ -391,39 +393,17 @@ private struct TaskListWidgetView: View {
                 emptyState("No tasks")
             } else {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(list.tasks.prefix(TaskWidgetPresentationPolicy.largeWidgetTaskLimit)) { task in
-                        HStack(spacing: 9) {
-                            if task.isRecurrenceProjection == true
-                                && entry.listID == .upcoming {
-                                TaskWidgetLucideIconView(icon: .recurrence)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 14, height: 14)
-                                    .frame(width: 28, height: 28)
-                                    .accessibilityLabel("Repeating Schedule")
-                            } else if task.terminalState == nil {
-                                Toggle(
-                                    isOn: false,
-                                    intent: CompleteTaskIntent(
-                                        taskID: task.id.uuidString.lowercased()
-                                    )
-                                ) {
-                                    EmptyView()
-                                }
-                                .toggleStyle(TaskWidgetCompletionToggleStyle(
-                                    someday: entry.listID == .someday
-                                ))
-                                .accessibilityLabel("Complete \(task.summary)")
-                            } else {
-                                TaskWidgetLucideIconView(icon: taskIcon(task))
-                                    .foregroundStyle(taskColor(task))
-                                    .frame(width: 14, height: 14)
-                                    .frame(width: 28, height: 28)
+                    ForEach(list.tasks.prefix(TaskWidgetPresentationPolicy.taskLimit(for: family))) { task in
+                        HStack(spacing: 0) {
+                            HStack(spacing: 2) {
+                                leadingControl(for: task)
+                                TaskWidgetListContext(
+                                    listID: entry.listID,
+                                    task: task,
+                                    planningDate: entry.snapshot?.planningDate
+                                )
                             }
-                            TaskWidgetListContext(
-                                listID: entry.listID,
-                                task: task,
-                                planningDate: entry.snapshot?.planningDate
-                            )
+                            .padding(.trailing, 9)
                             Link(
                                 destination: TaskNativeRoute.task(
                                     task.id,
@@ -436,7 +416,7 @@ private struct TaskListWidgetView: View {
                                     .privacySensitive()
                             }
                             .buttonStyle(.plain)
-                            Spacer(minLength: 0)
+                            Spacer(minLength: 2)
                             if let primaryLink = task.primaryLink,
                                let destination = primaryLink.url {
                                 Link(destination: destination) {
@@ -457,13 +437,40 @@ private struct TaskListWidgetView: View {
                 }
             }
         } else {
-            emptyState("Open BathOS Tasks")
+            emptyState("Open Tasks")
+        }
+    }
+
+    @ViewBuilder
+    private func leadingControl(for task: TaskWidgetTask) -> some View {
+        if task.isRecurrenceProjection == true && entry.listID == .upcoming {
+            TaskWidgetLucideIconView(icon: .recurrence)
+                .foregroundStyle(.secondary)
+                .frame(width: 14, height: 14)
+                .frame(width: 28, height: 28)
+                .accessibilityLabel("Repeating Schedule")
+        } else if task.terminalState == nil {
+            Toggle(
+                isOn: false,
+                intent: CompleteTaskIntent(taskID: task.id.uuidString.lowercased())
+            ) {
+                EmptyView()
+            }
+            .toggleStyle(TaskWidgetCompletionToggleStyle(
+                someday: entry.listID == .someday
+            ))
+            .accessibilityLabel("Complete \(task.summary)")
+        } else {
+            TaskWidgetLucideIconView(icon: taskIcon(task))
+                .foregroundStyle(taskColor(task))
+                .frame(width: 14, height: 14)
+                .frame(width: 28, height: 28)
         }
     }
 
     private func primaryLinkLabel(_ primaryLink: TaskWidgetPrimaryLink) -> some View {
         TaskWidgetLucideIconView(icon: primaryLinkIcon(primaryLink))
-        .frame(width: 13, height: 13)
+        .frame(width: 15, height: 15)
         .foregroundStyle(.blue)
         .frame(width: 28, height: 28)
         .contentShape(Rectangle())

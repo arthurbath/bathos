@@ -437,6 +437,43 @@ final class TasksMacTests: XCTestCase {
         XCTAssertEqual(policy.dragRegionHeight, 44)
     }
 
+    func testGlobalQuickEntryCentersOnTheScreenContainingThePointer() {
+        let first = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let second = NSRect(x: 1440, y: 120, width: 1920, height: 1080)
+
+        let target = TasksMacQuickEntryPanelPolicy.targetScreenFrame(
+            pointerLocation: NSPoint(x: 1800, y: 600),
+            screenFrames: [first, second]
+        )
+
+        XCTAssertEqual(target, second)
+        XCTAssertEqual(
+            TasksMacQuickEntryPanelPolicy.centeredOrigin(
+                panelSize: TasksMacQuickEntryPanelPolicy.contentSize,
+                in: second
+            ),
+            NSPoint(x: 2140, y: 380)
+        )
+    }
+
+    func testGlobalQuickEntryFallsBackToTheFirstAvailableScreen() {
+        let first = NSRect(x: 0, y: 0, width: 1440, height: 900)
+
+        XCTAssertEqual(
+            TasksMacQuickEntryPanelPolicy.targetScreenFrame(
+                pointerLocation: NSPoint(x: -500, y: -500),
+                screenFrames: [first]
+            ),
+            first
+        )
+        XCTAssertNil(
+            TasksMacQuickEntryPanelPolicy.targetScreenFrame(
+                pointerLocation: .zero,
+                screenFrames: []
+            )
+        )
+    }
+
     func testGlobalQuickEntryPanelCannotCollapseToIntrinsicSize() {
         let panel = TasksMacQuickEntryPanel(
             contentRect: NSRect(x: 0, y: 0, width: 40, height: 80),
@@ -914,9 +951,14 @@ final class TasksMacTests: XCTestCase {
         )
     }
 
-    func testMacWidgetSupportsOnlyTheLargeFamily() {
-        XCTAssertEqual(TaskWidgetPlatformPolicy.supportedFamilies, [.systemLarge])
+    func testMacWidgetSupportsAdaptiveListFamilies() {
+        XCTAssertEqual(
+            TaskWidgetPlatformPolicy.supportedFamilies,
+            [.systemMedium, .systemLarge, .systemExtraLarge]
+        )
+        XCTAssertEqual(TaskWidgetPresentationPolicy.mediumWidgetTaskLimit, 4)
         XCTAssertEqual(TaskWidgetPresentationPolicy.largeWidgetTaskLimit, 10)
+        XCTAssertEqual(TaskWidgetPresentationPolicy.extraLargeWidgetTaskLimit, 16)
         XCTAssertEqual(
             TaskWidgetListID.widgetConfigurationCases,
             [.today, .upcoming, .anytime, .someday]

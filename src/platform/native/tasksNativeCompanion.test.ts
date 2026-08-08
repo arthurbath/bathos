@@ -3,8 +3,10 @@ import {
   getTasksNativeNotificationAuthorizationStatus,
   getTasksNativeMessageHandler,
   getTasksNativeNotificationsEnabled,
+  getTasksNativePushRegistration,
   isTasksNativeCompanion,
   requestTasksNativeNotificationStatus,
+  setTasksNativePushRegistrationActive,
   TASKS_NATIVE_BRIDGE_HANDLER,
 } from './tasksNativeCompanion';
 
@@ -71,10 +73,35 @@ describe('tasksNativeCompanion', () => {
     expect(getTasksNativeNotificationAuthorizationStatus(target)).toBe('denied');
     expect(requestTasksNativeNotificationStatus(target)).toBe(true);
     expect(configureTasksNativeNotifications(target)).toBe(true);
+    expect(setTasksNativePushRegistrationActive(true, target)).toBe(true);
     expect(messages).toEqual([
       { type: 'request-notification-status', schemaVersion: 2 },
       { type: 'configure-notifications', schemaVersion: 2 },
+      { type: 'native-push-registration-state', schemaVersion: 2, active: true },
     ]);
     expect(requestTasksNativeNotificationStatus(nativeCompanionWindow(vi.fn()))).toBe(false);
+  });
+
+  it('reads only a complete, valid native APNs registration', () => {
+    const target = nativeCompanionWindow(vi.fn()) as Window & {
+      __bathosTasksNative?: Record<string, unknown>;
+    };
+    target.__bathosTasksNative = {
+      schemaVersion: 2,
+      installationId: '30000000-0000-4000-8000-000000000001',
+      nativePushPlatform: 'ios',
+      nativePushEnvironment: 'development',
+      nativePushTopic: 'garden.bath.tasks',
+      nativePushToken: 'ab'.repeat(32),
+    };
+    expect(getTasksNativePushRegistration(target)).toEqual({
+      installationId: '30000000-0000-4000-8000-000000000001',
+      platform: 'ios',
+      environment: 'development',
+      topic: 'garden.bath.tasks',
+      deviceToken: 'ab'.repeat(32),
+    });
+    target.__bathosTasksNative.nativePushTopic = 'wrong.topic';
+    expect(getTasksNativePushRegistration(target)).toBeNull();
   });
 });

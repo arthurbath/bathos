@@ -672,6 +672,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TASKS_APP_APNS_ENVIRONMENT = development;
 			};
 			name = Debug;
 		};
@@ -695,6 +696,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TASKS_APP_APNS_ENVIRONMENT = production;
 			};
 			name = Release;
 		};

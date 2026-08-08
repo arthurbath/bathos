@@ -42,7 +42,20 @@ enum TaskWidgetListID: String, Codable, CaseIterable {
 }
 
 enum TaskWidgetPresentationPolicy {
+    static let mediumWidgetTaskLimit = 4
     static let largeWidgetTaskLimit = 10
+    static let extraLargeWidgetTaskLimit = 16
+
+    static func taskLimit(for family: WidgetFamily) -> Int {
+        switch family {
+        case .systemMedium:
+            mediumWidgetTaskLimit
+        case .systemExtraLarge:
+            extraLargeWidgetTaskLimit
+        default:
+            largeWidgetTaskLimit
+        }
+    }
     static var largeWidgetTaskRowMinimumHeight: CGFloat {
 #if os(macOS)
         28
@@ -113,9 +126,9 @@ enum TaskWidgetPresentationPolicy {
 enum TaskWidgetPlatformPolicy {
     static var supportedFamilies: [WidgetFamily] {
 #if os(iOS)
-        [.systemLarge, .accessoryRectangular]
+        [.systemMedium, .systemLarge, .systemExtraLarge, .accessoryRectangular]
 #elseif os(macOS)
-        [.systemLarge]
+        [.systemMedium, .systemLarge, .systemExtraLarge]
 #else
         [.systemLarge]
 #endif

@@ -361,11 +361,13 @@ function RecurrencePrototypeRow({
         )}
         data-task-waiting-recurrence={waiting ? 'true' : undefined}
         data-task-recurrence-prototype={definition.id}
-        data-task-row-id={waiting ? undefined : `recurrence:${definition.id}`}
+        data-task-row-id={`recurrence:${definition.id}`}
         data-task-recurrence-scheduled-date={scheduledDate ?? undefined}
         data-drag-placement={dragPlacement ?? undefined}
-        tabIndex={focused ? 0 : -1}
-        data-task-row-focus-target={navigationHref ? true : undefined}
+        tabIndex={0}
+        aria-current={focused ? 'true' : undefined}
+        aria-keyshortcuts="Enter Space Shift+Space ArrowUp ArrowDown"
+        data-task-row-focus-target
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget) return;
           if (event.key === 'Escape' && editorOpen) {
@@ -378,12 +380,22 @@ function RecurrencePrototypeRow({
             onMoveFocus?.(event.key === 'ArrowUp' ? -1 : 1);
             return;
           }
+          if (event.key === ' ' && !bulkSelection) {
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+            event.preventDefault();
+            if (event.repeat) return;
+            if (!focused) {
+              onFocusRow?.();
+              return;
+            }
+            onMoveFocus?.(event.shiftKey ? -1 : 1);
+            return;
+          }
           if (event.key === 'Enter' && focused) {
             event.preventDefault();
             onActivate?.();
           }
         }}
-        onFocus={onFocusRow}
         onDragOver={draggable ? (event) => {
           event.preventDefault();
           event.dataTransfer.dropEffect = 'move';
@@ -952,7 +964,7 @@ function SharedRecurrencePrototypeEditor({
             onRegisterFlush={(nextFlush) => {
               checklistFlushRef.current = nextFlush;
             }}
-            showDragHandles={showDragHandles}
+            showDragHandles
           />
         )}
         focusRequestId={`recurrence:${definition.id}`}

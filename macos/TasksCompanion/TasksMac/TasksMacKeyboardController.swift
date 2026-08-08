@@ -501,10 +501,12 @@ final class TasksMacQuickEntryPanelController: NSObject {
                 ofKind: TaskCompanionConstants.widgetKind
             )
             self.onFinish(true)
+            self.restorePreviouslyActiveApplication()
         }
     )
     private var cancellationPending = false
     private var nativeBootstrapTask: Task<Void, Never>?
+    private var previouslyActiveApplication: NSRunningApplication?
 
     init(onFinish: @escaping (Bool) -> Void) {
         self.onFinish = onFinish
@@ -521,6 +523,10 @@ final class TasksMacQuickEntryPanelController: NSObject {
 
     func show() {
         cancellationPending = false
+        previouslyActiveApplication = TasksMacQuickEntryPanelPolicy.applicationToRestore(
+            frontmostApplication: NSWorkspace.shared.frontmostApplication,
+            currentApplication: NSRunningApplication.current
+        )
         nativeBootstrapTask?.cancel()
         nativeViewModel.reset(using: nativeService.cachedBootstrap())
         nativeViewModel.beginBootstrapRefresh()
@@ -536,7 +542,11 @@ final class TasksMacQuickEntryPanelController: NSObject {
             }
         }
         TasksMacQuickEntryPanelPolicy.apply(to: panel)
-        panel.center()
+        TasksMacQuickEntryPanelPolicy.place(
+            panel,
+            pointerLocation: NSEvent.mouseLocation,
+            screens: NSScreen.screens
+        )
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
     }
@@ -597,6 +607,18 @@ final class TasksMacQuickEntryPanelController: NSObject {
         panel.orderOut(nil)
         cancellationPending = false
         onFinish(false)
+        restorePreviouslyActiveApplication()
+    }
+
+    private func restorePreviouslyActiveApplication() {
+        let application = previouslyActiveApplication
+        previouslyActiveApplication = nil
+        guard let application, !application.isTerminated else {
+            return
+        }
+        DispatchQueue.main.async {
+            application.activate(options: [])
+        }
     }
 }
 
@@ -696,6 +718,46 @@ enum TasksMacQuickEntryPanelPolicy {
         layer.borderWidth = borderWidth
         layer.borderColor = borderColor.cgColor
         layer.masksToBounds = true
+    }
+
+    static func place(
+        _ panel: NSPanel,
+        pointerLocation: NSPoint,
+        screens: [NSScreen]
+    ) {
+        guard let frame = targetScreenFrame(
+            pointerLocation: pointerLocation,
+            screenFrames: screens.map(\.visibleFrame)
+        ) else {
+            panel.center()
+            return
+        }
+        panel.setFrameOrigin(centeredOrigin(panelSize: panel.frame.size, in: frame))
+    }
+
+    static func targetScreenFrame(
+        pointerLocation: NSPoint,
+        screenFrames: [NSRect]
+    ) -> NSRect? {
+        screenFrames.first(where: { $0.contains(pointerLocation) })
+            ?? screenFrames.first
+    }
+
+    static func centeredOrigin(panelSize: NSSize, in screenFrame: NSRect) -> NSPoint {
+        NSPoint(
+            x: screenFrame.midX - panelSize.width / 2,
+            y: screenFrame.midY - panelSize.height / 2
+        )
+    }
+
+    static func applicationToRestore(
+        frontmostApplication: NSRunningApplication?,
+        currentApplication: NSRunningApplication
+    ) -> NSRunningApplication? {
+        guard frontmostApplication?.processIdentifier != currentApplication.processIdentifier else {
+            return nil
+        }
+        return frontmostApplication
     }
 
 }
