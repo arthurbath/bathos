@@ -12,7 +12,7 @@
     "@journeyapps/wa-sqlite": "1.7.2",
     "@powersync/react": "1.10.0",
     "@powersync/web": "1.39.0",
-    "@supabase/supabase-js": "2.110.7",
+    "@supabase/supabase-js": "2.112.2",
     "fractional-indexing": "4.0.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"

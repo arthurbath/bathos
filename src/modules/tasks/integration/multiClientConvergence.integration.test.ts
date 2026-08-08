@@ -10,7 +10,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import type { Database } from '@/integrations/supabase/types';
 import { createTaskData } from '@/lib/mcp/tools/tasks-create';
-import { updateTaskData } from '@/lib/mcp/tools/tasks-mutate';
+import { moveTaskData, updateTaskData } from '@/lib/mcp/tools/tasks-mutate';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import { bindTasksDatabaseOwner } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
@@ -211,10 +211,11 @@ describe.skipIf(!integrationEnabled)('Tasks multi-client convergence integration
     expect(countError).toBeNull();
     expect(count).toBe(1);
 
-    const horizonUpdate = await updateTaskData({
+    const horizonUpdate = await moveTaskData({
       task_id: taskId,
       expected_revision: 4,
       client_mutation_id: crypto.randomUUID(),
+      destination: 'anytime',
       today_section: 'now',
     }, auth);
     expect(horizonUpdate).toMatchObject({
@@ -230,6 +231,7 @@ describe.skipIf(!integrationEnabled)('Tasks multi-client convergence integration
     const externalInsert = await createTaskData({
       idempotency_key: crypto.randomUUID(),
       title: 'Inserted While Native Client Remains Open',
+      notes: '',
       destination: 'anytime',
       today_section: 'inbox',
       entry_channel: 'mcp',

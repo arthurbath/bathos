@@ -3,9 +3,7 @@
 ## Purpose
 
 Define the supported, security-patched build-toolchain and development-server exposure contract for BathOS.
-
 ## Requirements
-
 ### Requirement: Supported root build toolchain
 The BathOS root application SHALL resolve its development and production build commands through one supported security-patched Vite release that is compatible with the repository's Node runtime and installed Vite peer packages.
 
@@ -39,3 +37,14 @@ The supported toolchain SHALL preserve BathOS development diagnostics and genera
 #### Scenario: Run production output
 - **WHEN** BathOS is built or previewed in production mode
 - **THEN** development-only tagging and local diagnostic endpoints are not added to production behavior
+
+### Requirement: Supported Node runtime policy
+BathOS SHALL declare a Node.js runtime floor supported by its direct Supabase client and SHALL provide a local project pin for the current active LTS Node release.
+
+#### Scenario: Install the root dependency graph
+- **WHEN** a developer or automated environment installs BathOS dependencies
+- **THEN** the manifest requires Node.js 22 or newer and the local runtime pin selects Node.js 24 LTS
+
+#### Scenario: Use an unsupported Node release
+- **WHEN** dependency installation runs under a Node release below the declared floor
+- **THEN** the package manager reports that the environment is unsupported before the repository is treated as validated

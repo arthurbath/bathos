@@ -30,6 +30,7 @@ import {
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
+import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import { bindTasksDatabaseOwner } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
 import { tasksPowerSyncSchema } from '@/modules/tasks/sync/schema';
@@ -225,7 +226,7 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      nextStartDate: planningDate,
+      nextStartDate: addTaskCalendarDays(planningDate, 1),
       dateBasis: 'start',
       ruleConfig: {},
       endMode: 'never',

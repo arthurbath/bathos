@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 const repositoryRoot = process.cwd();
 const functionsRoot = join(repositoryRoot, 'supabase/functions');
-const approvedSupabaseVersion = '2.112.0';
+const approvedSupabaseVersion = '2.112.2';
 const mappedFunctions = [
   'admin-delete-users',
   'check-auth-rate-limit',

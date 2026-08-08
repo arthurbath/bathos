@@ -4,6 +4,8 @@ This isolated harness proves restart persistence and later reconciliation for th
 
 Its owner stream and publication mirror the canonical secret-free package under `deploy/tasks-powersync/`. A regression test derives the expected set from the browser client schema and fails if either harness drifts.
 
+The local setup also installs a test-only signup trigger that grants the restricted Tasks module to disposable users created while the harness is active. Cleanup removes that trigger and its function. Production access policy is unchanged.
+
 ## Start
 
 From the repository root, start local Supabase, apply every migration, and install the disposable logical-replication publication:

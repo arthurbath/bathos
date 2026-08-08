@@ -3,9 +3,7 @@
 ## Purpose
 
 Define the aligned browser Supabase client, retry, mutation-replay, and authentication coordination contract.
-
 ## Requirements
-
 ### Requirement: Exact aligned browser clients
 BathOS SHALL resolve its direct browser Supabase and Auth clients to one exact stable 2.x release, and clean installation SHALL preserve that alignment without floating direct ranges.
 
@@ -47,8 +45,13 @@ BathOS SHALL preserve persistent browser sessions, token refresh, session restor
 - **THEN** BathOS does not override Supabase's ordinary browser lock and session coordination
 
 ### Requirement: Keep Edge clients isolated
-The browser-client upgrade SHALL NOT alter or deploy any Supabase Edge Function dependency source during this phase.
+Browser and Edge Supabase clients SHALL retain independent exact dependency evidence, and a coordinated source maintenance phase MUST NOT implicitly deploy any Edge Function or mutate any remote Supabase resource.
+
+#### Scenario: Coordinate browser and Edge client maintenance
+- **WHEN** an approved dependency phase updates browser and Edge Supabase clients to the same exact release
+- **THEN** browser npm locks, function-local dependency maps, applicable Edge locks, and generated source each record that release independently
+- **AND** no function is deployed and no remote database, secret, configuration, or production data is changed
 
 #### Scenario: Build tooling regenerates MCP output
-- **WHEN** local build tooling produces an Edge-source dependency change from the upgraded browser package graph
-- **THEN** the change is inspected and deferred to the Edge dependency phase without deployment
+- **WHEN** local build tooling regenerates MCP Edge source from an updated exact browser dependency input
+- **THEN** the generated source change is inspected, determinism is verified, and production deployment remains a separate explicitly authorized action

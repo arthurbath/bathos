@@ -1,5 +1,27 @@
 DROP PUBLICATION IF EXISTS powersync;
 
+CREATE OR REPLACE FUNCTION public.tasks_test_grant_module_access_on_signup()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  INSERT INTO public.bathos_module_access_grants (
+    module_id, user_id, grant_source, granted_by
+  ) VALUES (
+    'tasks', NEW.id, 'manual', NULL
+  )
+  ON CONFLICT (module_id, user_id, grant_source) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tasks_test_grant_module_access_on_signup ON auth.users;
+CREATE TRIGGER tasks_test_grant_module_access_on_signup
+AFTER INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION public.tasks_test_grant_module_access_on_signup();
+
 CREATE PUBLICATION powersync FOR TABLE
   public.bathos_module_access_grants,
   public.tasks_areas,

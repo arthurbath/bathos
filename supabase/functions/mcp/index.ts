@@ -26,7 +26,7 @@ var whoami_default = defineTool({
 });
 
 // src/lib/mcp/supabase.ts
-import { createClient } from "npm:@supabase/supabase-js@2.112.0";
+import { createClient } from "npm:@supabase/supabase-js@2.112.2";
 function supabaseForUser(ctx) {
   return createClient(
     process.env.SUPABASE_URL,

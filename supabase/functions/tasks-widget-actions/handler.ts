@@ -446,7 +446,7 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
         || typeof topic !== 'string'
         || typeof deviceToken !== 'string'
         || typeof enabled !== 'boolean'
-        || !Object.hasOwn(widgetPushTopics, platform)
+        || !Object.prototype.hasOwnProperty.call(widgetPushTopics, platform)
         || widgetPushTopics[platform] !== topic
         || !['development', 'production'].includes(environment)
         || !widgetPushTokenPattern.test(deviceToken)

@@ -3,9 +3,7 @@
 ## Purpose
 
 Define exact, function-isolated, reproducible dependency ownership for deployable BathOS Edge Functions.
-
 ## Requirements
-
 ### Requirement: Exact external Edge dependencies
 BathOS SHALL identify every external Edge Function dependency by an exact approved version and MUST NOT use floating ranges, distribution tags, or unversioned CDN imports in deployable Edge source or function-local dependency maps.
 
@@ -22,7 +20,7 @@ Every BathOS Edge Function that uses Supabase JS SHALL resolve the single exact 
 
 #### Scenario: Bundle any Supabase-backed function
 - **WHEN** an Edge Function imports or maps `@supabase/supabase-js`
-- **THEN** it resolves exact version 2.112.0 without a second direct Supabase JS version
+- **THEN** it resolves exact version 2.112.2 without a second direct Supabase JS version
 
 ### Requirement: Function-isolated reproducibility
 Hand-maintained Edge Functions SHALL own their dependency configuration within the function boundary, and applicable lockfiles SHALL preserve reviewed resolution and integrity data.

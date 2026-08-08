@@ -33,7 +33,11 @@ function setup(claims: unknown = [claim()]) {
     finish: vi.fn(async () => ({ error: null })),
     retire: vi.fn(async () => ({ error: null })),
   };
-  const send = vi.fn(async () => ({ accepted: true, permanent: false }));
+  const send = vi.fn(async (): Promise<{
+    accepted: boolean;
+    permanent: boolean;
+    reason?: string;
+  }> => ({ accepted: true, permanent: false }));
   const handler = createWidgetPushDispatchHandler({
     getEnvironment: (name) => ({
       SUPABASE_URL: 'https://example.supabase.co',

@@ -172,12 +172,16 @@ function streamTables(contents: string): string[] {
 }
 
 function publicationTables(contents: string): string[] {
-  return uniqueMatches(contents, /public\.((?:bathos_module_access_grants|tasks_[a-z_]+))/g);
+  const publication =
+    contents.match(
+      /(?:CREATE PUBLICATION powersync FOR TABLE|ALTER PUBLICATION powersync SET TABLE)([\s\S]+?);/i,
+    )?.[1] ?? '';
+  return tableReferences(publication);
 }
 
 function grantedTables(contents: string): string[] {
   const grant = contents.match(/GRANT SELECT ON TABLE([\s\S]+?)TO tasks_powersync_role;/)?.[1] ?? '';
-  return publicationTables(grant);
+  return tableReferences(grant);
 }
 
 function verifiedTables(contents: string): string[] {
@@ -187,4 +191,8 @@ function verifiedTables(contents: string): string[] {
 
 function uniqueMatches(contents: string, pattern: RegExp): string[] {
   return Array.from(contents.matchAll(pattern), (match) => match[1]).sort();
+}
+
+function tableReferences(contents: string): string[] {
+  return uniqueMatches(contents, /public\.((?:bathos_module_access_grants|tasks_[a-z_]+))/g);
 }
