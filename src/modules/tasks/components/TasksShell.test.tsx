@@ -8034,7 +8034,7 @@ describe('TasksShell', () => {
     const native = renderShell('/tasks/config');
 
     try {
-      expect(native.container.textContent).toContain('Blocked in System Settings');
+      expect(native.container.textContent).not.toContain('Blocked in System Settings');
       expect(native.container.querySelector('[role="switch"][aria-label="Notifications"]'))
         .toBeNull();
       const enable = Array.from(native.container.querySelectorAll<HTMLButtonElement>('button'))

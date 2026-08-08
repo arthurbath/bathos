@@ -5847,9 +5847,11 @@ function TaskNativeNotificationCapability({
   if (model.status === 'not-determined' || model.status === 'denied') {
     return (
       <div className="flex items-center gap-2">
-        <span aria-live="polite" className="max-w-32 text-right text-xs text-muted-foreground">
-          {model.status === 'denied' ? 'Blocked in System Settings' : 'Not Enabled'}
-        </span>
+        {model.status === 'not-determined' ? (
+          <span aria-live="polite" className="max-w-32 text-right text-xs text-muted-foreground">
+            Not Enabled
+          </span>
+        ) : null}
         <Button type="button" variant="outline" size="sm" onClick={() => model.enable()}>
           Enable
         </Button>
